@@ -1,0 +1,33 @@
+:root {
+  color: #17202a;
+  background: #f6f7fb;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+a { color: inherit; text-decoration: none; }
+.shell { min-height: 100vh; overflow: hidden; background: radial-gradient(circle at 82% 18%, #eae6ff 0, transparent 30%), #f6f7fb; }
+.nav { height: 78px; padding: 0 clamp(24px, 5vw, 76px); display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(23, 32, 42, .08); }
+.brand { display: flex; align-items: center; gap: 11px; font-size: 19px; font-weight: 680; letter-spacing: -.02em; }
+.brand-mark { display: grid; place-items: center; width: 32px; height: 32px; color: white; font-family: Georgia, serif; font-style: italic; border-radius: 10px; background: #6d5dfc; box-shadow: 0 8px 24px rgba(109, 93, 252, .28); }
+.status { color: #667085; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.status i { width: 7px; height: 7px; background: #33b679; border-radius: 50%; box-shadow: 0 0 0 4px rgba(51, 182, 121, .1); }
+.hero { padding: clamp(76px, 11vw, 150px) clamp(24px, 10vw, 160px) 120px; max-width: 1100px; }
+.eyebrow, .section-heading > span { font-size: 12px; font-weight: 700; letter-spacing: .18em; color: #6d5dfc; }
+h1 { margin: 22px 0; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(64px, 9vw, 128px); line-height: .87; letter-spacing: -.065em; font-weight: 500; }
+h1 em { color: #6d5dfc; font-weight: 400; }
+.lede { max-width: 630px; color: #667085; font-size: clamp(17px, 2vw, 21px); line-height: 1.65; margin: 34px 0 28px; }
+.note { display: inline-block; margin-left: 14px; color: #98a2b3; font-size: 12px; }
+.foundation { padding: 90px clamp(24px, 5vw, 76px); background: #17202a; color: white; }
+.section-heading { display: grid; grid-template-columns: 1fr 2fr; align-items: start; gap: 40px; margin-bottom: 66px; }
+.section-heading h2 { margin: 0; font: 400 clamp(36px, 5vw, 66px)/1.06 Georgia, serif; letter-spacing: -.04em; }
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: rgba(255,255,255,.13); border: 1px solid rgba(255,255,255,.13); }
+.card { min-height: 260px; padding: 32px; background: #17202a; }
+.card > span { color: #8f83ff; font: italic 17px Georgia, serif; }
+.card h3 { margin: 76px 0 12px; font-size: 20px; }
+.card p { color: #aab2bd; line-height: 1.65; margin: 0; }
+@media (max-width: 720px) { .status { display: none; } .hero { padding-top: 72px; } .note { display: block; margin: 14px 0; } .section-heading, .cards { grid-template-columns: 1fr; } .section-heading { gap: 20px; } }
+

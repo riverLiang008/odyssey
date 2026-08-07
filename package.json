@@ -1,0 +1,17 @@
+{
+  "name": "odyssey",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @odyssey/web dev",
+    "build": "pnpm --filter @odyssey/web build",
+    "lint": "pnpm --filter @odyssey/web lint",
+    "test": "pnpm --filter @odyssey/web test",
+    "typecheck": "pnpm --filter @odyssey/web typecheck",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  }
+}
