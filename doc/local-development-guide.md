@@ -39,7 +39,33 @@ Set-Location ../..
 
 这些命令通常只需在首次克隆、锁文件发生变化或虚拟环境被删除后执行。
 
-## 3. 启动 PostgreSQL 和 MinIO
+## 3. 一条命令启动全部服务（推荐）
+
+首次依赖安装完成后，在仓库根目录执行：
+
+```powershell
+pnpm dev:all
+```
+
+该命令会依次：
+
+1. 启动 PostgreSQL 和 MinIO，并等待健康检查通过。
+2. 执行 `alembic upgrade head`。
+3. 并行启动 FastAPI 和 Vite 开发服务器。
+
+如果存在 `infrastructure/compose.local.yaml`，命令会自动使用该覆盖文件，并通过 `55432` 连接 PostgreSQL；否则使用标准的 `5432` 端口。
+
+按 `Ctrl+C` 会停止 Web 和 API。PostgreSQL 与 MinIO 会继续运行，方便下一次快速启动。
+
+需要停止并删除基础设施容器和网络时执行：
+
+```powershell
+pnpm dev:down
+```
+
+命名数据卷会被保留，本地数据库和 MinIO 数据不会被删除。
+
+## 4. 手动启动 PostgreSQL 和 MinIO
 
 仓库的 Compose 文件位于 `infrastructure/compose.yaml`，因此需要显式指定文件：
 
@@ -78,7 +104,7 @@ $env:ODYSSEY_DATABASE_URL = "postgresql+asyncpg://odyssey:odyssey@127.0.0.1:5543
 
 该环境变量只对当前 PowerShell 会话有效。
 
-## 4. 执行数据库迁移
+## 5. 手动执行数据库迁移
 
 确保 PostgreSQL 已健康运行，然后执行：
 
@@ -91,7 +117,7 @@ Set-Location ../..
 
 `alembic current` 应显示当前 revision，并标记为 `head`。
 
-## 5. 启动 API
+## 6. 手动启动 API
 
 打开一个 PowerShell 窗口：
 
@@ -109,7 +135,7 @@ API 地址：
 
 停止 API：在其终端中按 `Ctrl+C`。
 
-## 6. 启动 Web
+## 7. 手动启动 Web
 
 再打开一个 PowerShell 窗口，在仓库根目录执行：
 
@@ -121,7 +147,7 @@ Web 地址：<http://localhost:5173>
 
 停止 Web：在其终端中按 `Ctrl+C`。
 
-## 7. 运行全部检查
+## 8. 运行全部检查
 
 前端检查包含 lint、类型检查、测试和生产构建：
 
@@ -139,7 +165,7 @@ uv run pytest
 Set-Location ../..
 ```
 
-## 8. 停止基础设施
+## 9. 手动停止基础设施
 
 停止并删除容器和网络，但保留 PostgreSQL、MinIO 数据卷：
 
@@ -170,7 +196,7 @@ docker compose -f infrastructure/compose.yaml start
 
 > 不要日常使用 `down -v`。`-v` 会删除数据库和对象存储数据卷，导致本地数据丢失。
 
-## 9. 推荐的日常启停顺序
+## 10. 手动启停顺序
 
 启动：
 
@@ -187,7 +213,7 @@ docker compose -f infrastructure/compose.yaml start
 2. 在 API 终端按 `Ctrl+C`。
 3. 执行 Compose `stop`；如果希望删除容器和网络，则执行 `down`。
 
-## 10. 本机 PostgreSQL 与 Docker PostgreSQL
+## 11. 本机 PostgreSQL 与 Docker PostgreSQL
 
 Odyssey 只需要 Docker 中的 PostgreSQL，本机安装的 PostgreSQL 不是项目依赖。
 

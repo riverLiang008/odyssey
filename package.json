@@ -8,6 +8,8 @@
   },
   "scripts": {
     "dev": "pnpm --filter @odyssey/web dev",
+    "dev:all": "node scripts/dev-all.mjs",
+    "dev:down": "node scripts/dev-all.mjs down",
     "build": "pnpm --filter @odyssey/web build",
     "lint": "pnpm --filter @odyssey/web lint",
     "test": "pnpm --filter @odyssey/web test",
