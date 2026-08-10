@@ -219,7 +219,7 @@ A Task contains a linear sequence of configured tool instances. Tools are not in
 
 Primary responsibilities:
 
-- Group Knowledge Spaces by the single workspace/category tag.
+- Group Knowledge Spaces by their single Knowledge Space Category (UI label: Category); this is not a Workspace type.
 - Search and filter by category, graph status, and recent update.
 - Create a Knowledge Space.
 - Show summary cards with name, description, health/status, counts, and update information.

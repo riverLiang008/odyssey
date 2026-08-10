@@ -9,8 +9,8 @@ A Knowledge Space (KS) behaves like a lightweight Google Drive folder:
 - Users create folders, upload files, and maintain the directory structure.
 - Subfolders are meaningful only to the user. Odyssey does not infer semantic meaning from folder placement.
 - Odyssey reads all supported files beneath the KS root and manages them as one knowledge graph.
-- A KS belongs to exactly one workspace category for list-level organization.
-- Documents may have multiple knowledge tags. These tags organize graph regions and Knowledge Families; they are distinct from the workspace category.
+- A KS belongs to exactly one Knowledge Space Category for list-level organization.
+- Documents may have multiple knowledge tags. These tags organize graph regions and Knowledge Families; they are distinct from the Knowledge Space Category.
 
 Two OdyJourneys maintain the graph:
 
@@ -24,14 +24,14 @@ The module contains two primary views:
 1. **Knowledge Space List — User Scope**
 2. **Knowledge Space Detail — Per Knowledge Space**
 
-The List view organizes a user's Knowledge Spaces by workspace category. The Detail view exposes both the user-maintained folder hierarchy and the Odyssey-maintained knowledge graph.
+The List view organizes a user's Knowledge Spaces by Knowledge Space Category. The Detail view exposes both the user-maintained folder hierarchy and the Odyssey-maintained knowledge graph.
 
 ## 3. Terminology
 
 | Term | Definition |
 | --- | --- |
 | Knowledge Space | A root folder and all documents beneath it, managed as one semantic graph. |
-| Workspace Category | A single user-assigned category used to organize Knowledge Spaces in the List view. UI label: **Category**. |
+| Knowledge Space Category | A category scoped to one Workspace and used only to organize Knowledge Spaces in the List view. UI label: **Category**. |
 | Knowledge Tag | A document-level semantic label inferred or edited within a KS. A document may have multiple knowledge tags. |
 | Knowledge Family | A semantically related graph region presented as a visual group. A family may contain one or more documents. |
 | Document Node | A graph node representing one indexed document. |
@@ -48,7 +48,7 @@ Provide a visual overview of all Knowledge Spaces owned by the current user with
 
 Use a **categorized card view**:
 
-- Each workspace category is displayed as a labeled section.
+- Each Knowledge Space Category is displayed as a labeled section.
 - A colored divider visually anchors each category.
 - Knowledge Space cards are arranged in a responsive grid within the section.
 - Category sections may be collapsed.
@@ -360,7 +360,7 @@ interface KnowledgeSpace {
   ownerId: ID;
   name: string;
   description?: string;
-  categoryId: ID;
+  knowledgeSpaceCategoryId: ID;
   rootFolderId: ID;
 
   lifecycleStatus: KnowledgeSpaceLifecycleStatus;
@@ -379,7 +379,7 @@ interface KnowledgeSpace {
   archivedAt?: ISODateTime;
 }
 
-interface WorkspaceCategory {
+interface KnowledgeSpaceCategory {
   id: ID;
   ownerId: ID;
   name: string;
@@ -535,7 +535,7 @@ They should be derived from document, family, issue, and run records rather than
 
 ### 7.2 Important constraints
 
-- A Knowledge Space has exactly one active workspace category.
+- A Knowledge Space has exactly one active Knowledge Space Category.
 - A Knowledge Space has exactly one root folder.
 - A document belongs to exactly one folder and one Knowledge Space.
 - A document may have zero or more knowledge tags.
@@ -624,7 +624,7 @@ const sampleKnowledgeSpaces: KnowledgeSpace[] = [
     ownerId: "user_001",
     name: "Coffee Knowledge Base",
     description: "A practical knowledge space for coffee beans, brewing methods, espresso extraction, and troubleshooting.",
-    categoryId: "category_personal",
+    knowledgeSpaceCategoryId: "category_personal",
     rootFolderId: "folder_coffee_root",
     lifecycleStatus: KnowledgeSpaceLifecycleStatus.READY,
     graphStatus: KnowledgeGraphStatus.HEALTHY,
@@ -642,7 +642,7 @@ const sampleKnowledgeSpaces: KnowledgeSpace[] = [
     ownerId: "user_001",
     name: "SSTM Research",
     description: "Research notes on the dynamic relationship between self, structure, and power.",
-    categoryId: "category_research",
+    knowledgeSpaceCategoryId: "category_research",
     rootFolderId: "folder_sstm_root",
     lifecycleStatus: KnowledgeSpaceLifecycleStatus.READY,
     graphStatus: KnowledgeGraphStatus.HEALTHY,
@@ -659,7 +659,7 @@ const sampleKnowledgeSpaces: KnowledgeSpace[] = [
     ownerId: "user_001",
     name: "Shadow AI Thesis",
     description: "Research materials for the study of unauthorized generative AI use and knowledge leakage.",
-    categoryId: "category_research",
+    knowledgeSpaceCategoryId: "category_research",
     rootFolderId: "folder_shadow_ai_root",
     lifecycleStatus: KnowledgeSpaceLifecycleStatus.READY,
     graphStatus: KnowledgeGraphStatus.NEEDS_REVIEW,

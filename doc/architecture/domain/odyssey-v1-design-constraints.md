@@ -55,6 +55,10 @@ V1 supports built-in templates and user-created templates.
 
 - Built-in templates are provided by Odyssey.
 - User-created templates are produced through `Save as Template`.
+- User-created Pattern, Agent, and Tool Templates retain their owner Workspace.
+- A Template may be `private` or `public`.
+- A public/published Template may appear in a future Community library and may be forked by another Workspace.
+- Forking creates an independent Template and records its source Template ID; it does not create live synchronization.
 - A `templateKey` records the source or provenance of an instance.
 - A `templateKey` does not participate in execution semantics.
 - An instance remains valid and editable even if its source template later changes or is unavailable.
@@ -201,7 +205,6 @@ Deleting a Journey Agent may delete its owned Workflow configuration, Variables,
 Saving an Agent as a template creates a complete independent snapshot containing:
 
 - Agent identity and metadata;
-- Agent goal and supported Agent-level configuration;
 - WorkflowGraph;
 - CanvasLayout;
 - Variables and their definitions;
@@ -217,7 +220,9 @@ An Agent Template must not:
 - retain IDs that would collide with future instances;
 - maintain a live link to the source Journey Agent.
 
-When instantiated, all Agent-owned entity IDs and all Workflow Node/Edge IDs must be remapped consistently. Independent asset references such as Knowledge Space IDs remain references and are not deep-copied.
+When a private Template is instantiated in its owner Workspace, all Agent-owned entity IDs and all Workflow Node/Edge IDs must be remapped consistently. Independent asset references such as Knowledge Space IDs remain references and are not deep-copied.
+
+A public Template must not expose author-owned private asset IDs, names, files, or secrets. Before publication, Knowledge Space references are converted into dependency slots. A consuming Workspace maps those slots to its own assets before instantiation.
 
 ## 7. Current Configuration and Versioning
 
@@ -381,4 +386,3 @@ UI-only state must not become an independent backend entity. Only durable editor
 - cross-AgentWorkflow AgentReusableTools;
 - secrets embedded in reusable template JSON;
 - multi-user collaboration and permissions.
-

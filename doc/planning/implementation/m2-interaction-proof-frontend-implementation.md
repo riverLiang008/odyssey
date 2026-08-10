@@ -4,7 +4,7 @@
 > Scope: `v1-implementation-plan.md` 中 M2 Interaction Proof 的前端技术验证  
 > Target stack: Vue 3、TypeScript、Vite、Pinia、Vue Router、Naive UI、Vue Flow  
 > Figma source: [Odyssey Design](https://www.figma.com/design/P3EF9io2DhyhwkNYBVqB5Z/Odyssey-Design?node-id=1-2)
-> Frontend guideline: [`Odyssey 前端工程规范`](../frontend-engineering-guidelines.md)
+> Frontend guideline: [`Odyssey 前端工程规范`](../../frontend-engineering-guidelines.md)
 
 ## 1. 目标
 
@@ -27,9 +27,9 @@ Vue Flow event → Editor Command → Domain mutation → Graph/Layout update
 
 实施时按以下顺序解决资料冲突：
 
-1. `doc/detail-design/odyssey-v1-design-constraints.md` 中已接受的 V1 约束。
-2. `doc/data-structure/canonical-json-contracts.md`；若其内容尚未冻结，则使用 `doc/dev-init/canonical-json-contracts-draft.md` 并记录差异。
-3. `doc/detail-design/odyssey-figma-information-architecture.md` 的页面、路由和 UI-state 边界。
+1. [`doc/architecture/domain/odyssey-v1-design-constraints.md`](../../architecture/domain/odyssey-v1-design-constraints.md) 中已接受的 V1 约束。
+2. [`doc/architecture/data/contracts/canonical-json-contracts-draft.md`](../../architecture/data/contracts/canonical-json-contracts-draft.md)；当前为 Canonical JSON 的 working baseline，冻结后再移除文件名中的 `draft`。
+3. [`doc/product/information-architecture/odyssey-figma-information-architecture.md`](../../product/information-architecture/odyssey-figma-information-architecture.md) 的页面、路由和 UI-state 边界。
 4. 其他 detail design 文档中的具体交互规则。
 5. 精确 Figma frame 的视觉和状态参考。
 6. `v1-implementation-plan.md` 中仍未同步的旧描述。
@@ -297,62 +297,440 @@ M2 的资源部分只需用 fixture 证明隔离、合法 zone 高亮、非法�
 - 桌面以 1440×900 为验证基准；较窄桌面允许 library/panel collapse，不能让 panel 覆盖关键 canvas interaction。
 - Figma SVG/icon 若进入正式代码，下载并提交精确 asset；M2 如使用临时占位，必须在文档/代码中标为非视觉验收项。
 
-## 10. 实施顺序
+## 10. 子任务拆分与实施顺序
 
-### M2.0 — Contract and fixtures
+### 10.1 为什么不一次性实现
 
-- 对齐 `packages/schemas` 中 Pattern、Agent、WorkflowGraph、CanvasLayout 与 revision 类型。
-- 建立稳定 UUID fixtures 和四种 Pattern template fixtures。
-- 建立 repository port 与 in-memory 实现。
+不建议在一个任务或一次代码生成中同时完成整个 M2。一次性生成容易出现：
 
-完成标准：fixture 可以 load → command edit → save → reload，无 domain 数据损失。
+- 为了让 UI 快速可见，直接把 Vue Flow node/edge 当成 domain contract；
+- domain command、Pinia action 和 component event 混在一起；
+- graph、layout、selection、panel 和 drag state 形成多个事实来源；
+- happy path 可以演示，但 invalid drop、cycle、stale save response 等失败路径没有定义；
+- 后续任务无法判断现有代码是应保留的架构，还是仅用于 spike 的临时代码。
 
-### M2.1 — Shell and state boundary
+M2 拆为 9 个子任务。每个子任务应当独立实现、独立 review、独立验收。默认一个子任务对应一个小 PR 或至少一个清晰 commit；不要把两个未验收的子任务合并后再一起排错。
 
-- 建立两级路由、AppShell、Journey/Workflow page shell。
-- 建立两个 Pinia store，明确 persisted、route、UI-only state。
-- 建立语义 design tokens。
+```text
+M2.1 Contracts / Fixtures / Repository
+  ├─→ M2.2 Shell / Router / Store Boundaries
+  ├─→ M2.3 Pattern Domain Strategies
+  │     └─→ M2.4 System Canvas / Agent Slot DnD
+  │             └─→ M2.5 Workflow Preview / Nested Navigation
+  └─→ M2.6 Workflow Domain / Validation
+          └─→ M2.7 Vue Flow Adapter / Editor Core
+                  └─→ M2.8 Modes / Loop / Resource DnD Arbitration
+                          └─→ M2.9 Autosave Races / E2E / ADR
+```
 
-完成标准：直接访问、刷新和 browser back 能进入正确页面；临时 panel/mode 不被误建成路由或实体。
+M2.3 与 M2.6 在 M2.1 完成后可以并行，但同一工作区内并行修改共享 schema 时必须先约定文件所有权。其余任务按依赖顺序执行。
 
-### M2.2 — Pattern strategy and System Canvas
+### 10.2 每个子任务的执行协议
 
-- 实现四种 strategy、derived layout 与 template instantiate。
-- 实现 slot render、select、context menu 与纯函数 drop evaluation。
-- 实现 template drop、move/exchange、linear reorder、duplicate/unassign。
+每个子任务开始前必须：
 
-完成标准：所有操作只通过 store command 改变 PatternConfig；坐标与 Figma layer 不进入 contract。
+1. 完整阅读 `doc/frontend-engineering-guidelines.md`。
+2. 阅读本计划中该子任务、依赖任务的验收记录和相关 domain/Figma 文档。
+3. 检查当前代码和测试，不假设前一任务完全按计划命名。
+4. 先列出本任务将修改的 contract、command、adapter、component 和 test 文件。
+5. 不在未说明的情况下修改下一个子任务的职责范围。
 
-### M2.3 — Preview and nested navigation
+每个子任务结束时必须交付：
 
-- 实现 read-only workflow adapter/preview。
-- 实现单 preview 状态和 Open canvas route。
+```text
+实现文件
+对应自动化测试
+本任务验收结果
+未解决问题/已知限制
+对下一任务暴露的稳定接口
+lint / typecheck / test / build 结果
+```
 
-完成标准：选择 slot 不导航；Open canvas 才导航；preview 无编辑入口且不产生后端实体。
+如某个子任务的核心 gate 未通过，应停止进入依赖任务。不得通过 UI mock、类型断言、直接 mutation 或复制状态绕过 gate。
 
-### M2.4 — Workflow canvas adapter
+### M2.1 — Contracts、Fixtures 与 Repository Boundary
 
-- 建立 domain ↔ Vue Flow adapter。
-- 实现 node create/move/delete、edge create/delete、viewport round trip。
-- 实现 Start/End 保护、cycle detection 和基础 validation reason code。
+**目标**
 
-完成标准：Vue Flow 类型不越过 adapter；graph/layout/viewport reload 后等价恢复。
+冻结 M2 前端需要的数据形状、identity 和持久化边界，使后续 UI 不需要自行发明 contract。
 
-### M2.5 — Modes, nested Loop and DnD arbitration
+**前置依赖**
 
-- 实现 Flow/Configure、Focus Mode。
-- 验证 Loop body nested canvas adapter。
-- 用 fixture resource 验证 node/resource drag 隔离。
+- 无。
+- 以 accepted V1 constraints 和 canonical contract 为准。
 
-完成标准：所有交互组合不串扰；退出 mode/focus/loop 后编辑状态仍一致。
+**实施内容**
 
-### M2.6 — Hardening and decision record
+- 对齐 `packages/schemas` 中的 `PatternConfig`、`PatternSlot`、`PatternRoute`、Agent summary、`WorkflowGraph`、`CanvasLayout`、viewport 和 `revision`。
+- 将已经稳定的 node config 从长期 `Record<string, unknown>` 迁移为 discriminated union；未冻结字段需明确标记边界，不能由 Vue component 决定。
+- 定义 `JourneyEditorDocument`、`AgentWorkflowEditorDocument` 和 save input/result。
+- 建立 deterministic UUID factory/test factory；生产代码仍使用真实 UUID。
+- 建立四种 Pattern templates、Agent templates、最小 `Start → End` workflow 和复杂 workflow fixture。
+- 定义 `EditorRepository` port 和 in-memory implementation。
+- in-memory repository 支持 load、save、revision 增长、延迟、失败和 conflict 注入。
+- 在 repository boundary 对 fixture/response 做 runtime validation；不使用无依据的双重类型断言。
 
-- 完成单元、组件和关键集成测试。
-- 运行 lint、typecheck、test、production build。
-- 记录 Vue Flow/HTML5 DnD 的已知限制、性能观测和 M3/M5 接入点。
+**明确不做**
 
-完成标准：满足第 12 节验收条件，并形成 go/no-go 结论。
+- 不创建页面、Pinia store 或 Vue Flow adapter。
+- 不加入真实 HTTP API。
+- 不实现 Pattern/Workflow mutation 规则。
+
+**测试**
+
+- schema/runtime validation 成功与失败用例。
+- fixture ID 唯一、引用完整。
+- load → save → reload 数据等价。
+- revision mismatch 返回稳定 `REVISION_CONFLICT`。
+- repository payload 不含 selection、panel、focus 或 Vue Flow 字段。
+
+**完成 gate**
+
+- 后续任务只依赖共享 contract 和 repository interface 即可加载、保存编辑文档。
+- `packages/schemas` 不依赖 Vue、Pinia、DOM 或 Vue Flow。
+
+### M2.2 — App Shell、Router 与 Store State Boundaries
+
+**目标**
+
+建立 Journey Editor 和 Agent Workflow Editor 的页面壳，并证明 route state、persisted document、editor session 和 persistence state 被正确分离。
+
+**前置依赖**
+
+- M2.1 完成。
+
+**实施内容**
+
+- 建立 `/journeys/:journeyId` 与 `/journeys/:journeyId/agents/:agentId`。
+- 建立 `AppShell`、global navigation、product header、page loading/error/not-found boundary。
+- 建立 `journeyEditor` 与 `workflowEditor` Pinia store。
+- store 明确拆分 `document`、`session`、`persistence`。
+- 建立 route parameter runtime validation 和 repository load orchestration。
+- Journey tab 可以使用 query parameter；preview、panel、mode、focus 不创建独立 route。
+- 添加 M2 所需的基础语义 design tokens，不追求完整视觉还原。
+
+**明确不做**
+
+- 页面内暂不实现真实 Pattern 或 Vue Flow Canvas。
+- 不实现 autosave debounce，只保留 persistence state interface。
+- 不在 store 中提前实现 Pattern/Workflow 领域规则。
+
+**测试**
+
+- 两级 route 解析、direct navigation、back navigation。
+- invalid ID、load failure 和 not-found。
+- store serialization/save selector 只输出 persisted document。
+- mode、selection、panel 等 session state 不进入 repository input。
+
+**完成 gate**
+
+- 两个页面可从 in-memory repository 加载 fixture。
+- 刷新/导航不会把 UI snapshot 误当成 route 或 domain entity。
+
+### M2.3 — Pattern Domain Strategies 与 Commands
+
+**目标**
+
+在没有 Vue component 和 drag event 的情况下，完成四种 built-in Pattern 的纯领域规则。
+
+**前置依赖**
+
+- M2.1 完成。
+
+**实施内容**
+
+- 为 `solo_component`、`linear_sequence`、`hub_and_spoke`、`diamond_loop` 实现 strategy registry。
+- 实现 template instantiation、slot validation、route derivation 和 presentation layout derivation。
+- 实现 `assignAgentTemplate`、`moveAgent`、`exchangeAgents`、`reorderSlot`、`unassignAgent`、`duplicateAgent` command。
+- 为所有失败返回稳定 domain error code。
+- 明确 Agent exchange 与 slot reorder 是不同 command。
+- duplicate/template instantiation 完整 remap owned IDs。
+- command 返回新状态，不修改输入对象。
+
+**明确不做**
+
+- 不实现 HTML5 DnD、slot component 或 Pinia orchestration。
+- 不保存 System Canvas 自由坐标。
+- 不允许用户自由创建 Pattern route。
+
+**测试**
+
+- 四种 template 的固定实例化案例。
+- linear add/remove/reorder 后 route/layout 重算。
+- hub/diamond topology role 在 Agent exchange 后保持不变。
+- 一个 Agent 不能占用多个 slot。
+- duplicate 的 owned ID 全部不同、external reference 保持。
+- command immutability。
+- 推荐加入随机操作序列的 invariant/property test。
+
+**完成 gate**
+
+- 所有 Pattern 交互都能表达为纯 command；UI 不需要自行计算 route 或 topology。
+- slot ID、route reference、Agent cardinality invariant 全部由测试保护。
+
+### M2.4 — System Canvas、Agent Slot 与 Typed DnD
+
+**目标**
+
+将 M2.3 的纯领域能力连接到 Journey Editor，验证 Pattern/Agent 拖拽和固定 System Canvas 技术路径。
+
+**前置依赖**
+
+- M2.2、M2.3 完成。
+
+**实施内容**
+
+- 实现 Pattern template library、Agent template library、`SystemCanvas`、`AgentSlot` 和 context menu。
+- System Canvas 使用 strategy 派生 view model，不使用 Vue Flow。
+- 定义统一 `OdysseyDragPayload` serialization/parser 和 `InteractionState`。
+- 实现 `evaluateDrop(payload, target, state)` 纯函数。
+- 支持 Pattern template instantiate、Agent template assignment、Agent move/exchange、linear reorder。
+- 支持 select、replace、unassign 和 explicit duplicate。
+- 展示 valid、invalid、occupied、duplicate，并提供非颜色的可访问反馈。
+- component 只 emit intent；store action 调用 M2.3 command。
+
+**明确不做**
+
+- 不实现 Workflow Preview 和 Agent Workflow route 内容。
+- 不在 dragover 时修改 domain state。
+- 不实现 Pattern replacement 的完整 destructive backend transaction；可保留确认 UI contract。
+
+**测试**
+
+- typed payload parse failure。
+- 每种 drag kind 只被匹配 target 接受。
+- valid/invalid/occupied/duplicate 视觉与 reason code。
+- move 与 exchange、reorder 与 exchange 不混淆。
+- cancel/invalid drop 后 domain state 未改变。
+- keyboard/click 替代入口至少具备可扩展 API。
+
+**完成 gate**
+
+- 通过正常 UI 操作可以完成四种 Pattern 实例化和核心 slot 操作。
+- component 没有直接修改 `PatternConfig`，System Canvas 坐标不进入 repository。
+
+### M2.5 — Read-only Workflow Preview 与嵌套导航
+
+**目标**
+
+完成 configured slot → 单一只读 preview → Agent Workflow Editor 的 progressive disclosure。
+
+**前置依赖**
+
+- M2.2、M2.4 完成。
+- 可以先使用不依赖 Vue Flow 的简化 SVG/HTML topology preview；若复用 M2.7 adapter，则本任务顺延到 M2.7 后。
+
+**实施内容**
+
+- configured slot click 只更新 `selectedSlotId` 和 preview session。
+- 同时最多一个 preview；切换 slot 替换内容；关闭行为显式。
+- preview 读取 Agent 当前 graph，不维护副本。
+- preview 使用 fit-to-bounds，保留 topology，简化 label。
+- read-only 由 adapter/config 强制，不只是隐藏按钮。
+- `Open canvas` 导航到对应 Agent Workflow Editor；slot select 本身不导航。
+- Back 返回 owning Journey。
+
+**明确不做**
+
+- preview 不可拖动节点、连线、删除或打开配置 panel。
+- preview 不创建 route、backend entity 或单独保存数据。
+
+**测试**
+
+- 单 preview invariant。
+- 切换 slot 内容替换。
+- slot select 不导航，Open canvas 才导航。
+- read-only handler/keyboard mutation 均禁用。
+- preview state 不进入 save payload。
+
+**完成 gate**
+
+- Journey/Agent 两层信息架构符合 Figma IA。
+- preview 与完整 editor 共享 domain graph 事实来源但不共享可编辑 session。
+
+### M2.6 — Workflow Domain Commands 与 Graph Validation
+
+**目标**
+
+在接入 Vue Flow 前完成 WorkflowGraph 的节点、边和基础校验规则。
+
+**前置依赖**
+
+- M2.1 完成。
+
+**实施内容**
+
+- 实现最小 Agent graph factory：Start、End 和默认 edge。
+- 实现 `addNode`、`removeNode`、`updateNodeConfig`、`connectNodes`、`removeEdge`。
+- 实现 Start/End identity 和 delete protection。
+- 实现 missing endpoint、self-edge、duplicate edge、handle compatibility 和 cycle detection。
+- Loop 重复语义由 Loop node 表达，任意 graph back-edge 仍被拒绝。
+- command 在候选新状态上验证，成功后一次提交，不先 mutation 再回滚。
+- graph command 与 layout command 分离。
+
+**明确不做**
+
+- 不导入 Vue Flow 类型。
+- 不实现 node position、viewport、selection 或 panel。
+- Branch/Loop 的完整 M4 规则只预留扩展点，M2 只实现技术验证需要的 invariant。
+
+**测试**
+
+- Start/End 自动存在且删除被拒绝。
+- node/edge ID 和 endpoint 完整性。
+- self/duplicate/cyclic edge 被稳定 error code 拒绝。
+- rejected command 保持原 graph 不变。
+- graph mutation 不改变 layout。
+- 随机合法连接序列始终保持 DAG invariant。
+
+**完成 gate**
+
+- Canvas UI 只需发出 typed connection/node intent，无需自行维护 graph invariant。
+- graph domain 文件不存在 Vue、DOM、Pinia 或 Vue Flow import。
+
+### M2.7 — Vue Flow Adapter 与 Workflow Editor Core
+
+**目标**
+
+证明 `WorkflowGraph + CanvasLayout ↔ Vue Flow` 的技术路径，并完成基础可编辑 Canvas。
+
+**前置依赖**
+
+- M2.2、M2.6 完成。
+
+**实施内容**
+
+- 实现 `toCanvasNodes`、`toCanvasEdges`、viewport mapper、connection intent mapper 和 screen-to-flow placement mapper。
+- 实现 Node Palette、Workflow Canvas、基础 node renderer 和 SidePanelHost。
+- 支持 palette create、node move、edge create/delete、node select。
+- node create 通过一个 store action 原子创建 semantic node 与 placement。
+- node move 只更新 `CanvasLayout`；config panel 只更新 `WorkflowGraph`。
+- viewport 可 load、change、save、reload。
+- Vue Flow event handler 只转换 intent，不直接修改 domain document。
+
+**明确不做**
+
+- 不实现 Loop nested canvas、resource drop 或完整配置表单。
+- 不把 Vue Flow view model 缓存为第二份可持久化事实来源。
+- 不以 `as unknown as` 绕过 adapter 类型问题。
+
+**测试**
+
+- adapter round-trip。
+- node move 只改变 layout。
+- config edit 只改变 graph。
+- viewport round-trip。
+- invalid connection 不改变 graph。
+- Vue Flow transient fields 不进入 repository payload。
+- 基础 browser smoke：drop、move、pan、zoom、connect。
+
+**完成 gate**
+
+- save/reload 后 graph、layout、viewport 等价恢复。
+- `@vue-flow/*` import 只存在于 canvas adapter/UI boundary，不进入 schemas、domain 或 repository。
+
+### M2.8 — Modes、Nested Loop 与 Resource DnD Arbitration
+
+**目标**
+
+验证最容易产生交互串扰的组合：Flow/Configure、Focus Mode、Loop 子画布以及 node/resource drag。
+
+**前置依赖**
+
+- M2.4、M2.7 完成。
+
+**实施内容**
+
+- 实现 Flow/Configure mode，二者共享同一 graph/layout。
+- 实现 Focus Mode，隐藏 shell 后保持 viewport、selection 和 panel session。
+- 建立 Loop body 的独立 graph/layout/viewport/selection adapter context。
+- nested Loop 返回稳定禁止错误。
+- 使用 Tool/Knowledge Space fixture 建立最小 Agent Action resource zones。
+- 将 `resource` drag 纳入 M2.4 的中央 `InteractionState` 与 typed payload。
+- 合法 resource zone 高亮；非法类型和 duplicate 被 preflight 拒绝。
+- nested drop zone 正确消费 resource drop，Canvas pane 不创建 workflow node。
+
+**明确不做**
+
+- 不实现完整 resource browser 搜索、过滤、分页和配置表单。
+- 不实现 Loop 的完整产品规则和复杂布局编辑。
+- 不为 Canvas、side panel 和 resource zone 维护多份 node config。
+
+**测试**
+
+- Flow/Configure 前后 graph/layout identity 不变。
+- Focus Mode 前后 viewport、selection、panel 恢复。
+- parent/Loop child viewport 和 selection 不串扰。
+- workflow-node/resource/agent payload 的交叉矩阵。
+- resource drop 不创建 node，node drop 不绑定 resource。
+- duplicate/invalid drop 后 domain state 不变。
+- Esc 取消 active interaction。
+
+**完成 gate**
+
+- 所有 M2 交互组合不串扰。
+- Loop 技术路径可继续演进，且没有污染 parent canvas contract。
+
+### M2.9 — Autosave Race、E2E Hardening 与 ADR
+
+**目标**
+
+把前八个任务连接为可重复验证的 M2 proof，并对是否进入 M3/M4/M5 给出证据化结论。
+
+**前置依赖**
+
+- M2.1–M2.8 全部完成并通过各自 gate。
+
+**实施内容**
+
+- 实现 debounce autosave orchestration，使用 M2.1 repository。
+- 建模 `clean | dirty | saving | failed | conflict`。
+- 跟踪 `localMutationSeq`、`saveRequestSeq`、`snapshotSeq` 和 server revision。
+- stale response 只能被忽略或安全吸收，不能覆盖新 document。
+- 完成第 15 节垂直演示对应的 browser E2E。
+- 完成交互组合回归、keyboard/focus 基础检查和 1440×900 视觉 smoke。
+- 检查 bundle、graph validation 和高频 node move 的基本性能。
+- 建立 M2 ADR/结论，区分 retained architecture 与 throwaway spike。
+
+**明确不做**
+
+- 不接真实后端 API。
+- 不扩展到 M4 完整 node configuration 或 M5 resource CRUD。
+- 不以关闭测试或弱化类型作为完成手段。
+
+**测试**
+
+- saving 中继续编辑。
+- 多次 debounce 合并。
+- 较早请求晚于较新请求返回。
+- route leave 时 pending save 的 abort/stale handling。
+- failure 后继续编辑和重试。
+- revision conflict 后阻止静默覆盖。
+- 完整 Journey → Slot → Preview → Workflow Canvas → reload E2E。
+
+**完成 gate**
+
+- 第 12 节 M2 验收标准全部满足。
+- lint、typecheck、test、production build 全部通过。
+- ADR 明确回答 Vue Flow adapter、Loop、DnD 技术选型以及 M3/M4/M5 接入点。
+
+### 10.3 建议的任务大小与生成方式
+
+每次实现只提交一个上述子任务。单个任务仍然过大时，允许按以下方式切成两个 commit，但不能打破 gate：
+
+```text
+A. Domain / adapter / state machine + tests
+B. Store orchestration / components + integration tests
+```
+
+推荐生成顺序：
+
+1. 先让实现者只完成 domain、types 和 tests。
+2. review invariant、错误码和 dependency boundary。
+3. 通过后再连接 Pinia/component/Vue Flow。
+4. 最后添加 browser-level interaction test。
+
+不推荐把“实现功能并补测试”作为一句宽泛指令。每次任务应直接引用本节对应子任务，并要求在最终结果中逐条报告完成 gate。
 
 ## 11. 测试计划
 

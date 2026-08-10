@@ -2,7 +2,7 @@
 
 > Status: **Discussion draft — not an accepted schema**  
 > Purpose: define the JSON boundaries for current Journey state, reusable templates, and portable ZIP packages before finalizing the database schema  
-> Related constraint: `doc/detail-design/odyssey-v1-design-constraints.md`
+> Related constraint: [`doc/architecture/domain/odyssey-v1-design-constraints.md`](../../domain/odyssey-v1-design-constraints.md)
 
 ## 如何评审本文档
 
@@ -18,7 +18,7 @@
 Accepted review decisions are incorporated into the relevant section and summarized here:
 
 - A Journey package exports only the instantiated current configuration. It does not include the user's reusable template library by default.
-- V1 supports Publish as a lifecycle/availability state, but Publish does not create a version or immutable release. Canvas edits continue to save the current configuration immediately.
+- Journey Publish/Release selection is out of V1 scope; Canvas edits save the single current configuration directly.
 - A package uses one JSON file per Agent aggregate. Workflow, CanvasLayout, Variables, and AgentReusableTools are nested fields in that Agent file.
 - Agent goal, Knowledge Space bindings, and Tool bindings belong to Agent Action Nodes, not to Agent-level metadata.
 - All persisted and nested domain objects use UUID strings. Human-readable names and local sequence numbers are not used as identity.
@@ -228,7 +228,7 @@ This file contains Journey identity and module references. It does not embed com
   "id": "0195f076-b6e6-7ef0-98db-d721990f8800",
   "name": "Research System",
   "description": "Researches and reviews a requested topic.",
-  "status": "published",
+  "status": "draft",
   "tags": ["research"],
   "patternPath": "pattern/config.json",
   "agentAssignments": [
@@ -245,32 +245,21 @@ This file contains Journey identity and module references. It does not embed com
 
 In persistence APIs, `patternPath` and `agentPath` do not exist. The database/API representation uses IDs and separate endpoints.
 
-### 5.2 Journey lifecycle and Publish
+### 5.2 Journey lifecycle
 
 V1 retains a Journey lifecycle status:
 
 ```text
 draft
-published
 archived
 ```
 
 Semantics:
 
-- `draft`: the Journey is editable but not exposed as a published Journey.
-- `published`: the current Journey configuration is exposed as published/current.
+- `draft`: the Journey is the current editable configuration.
 - `archived`: the Journey is retained but removed from normal active use.
 
-Publish in V1 is an availability state, not a versioning operation:
-
-- publishing does not create an immutable snapshot;
-- publishing does not create a WorkflowVersion or JourneyRelease;
-- there is only one current configuration;
-- Canvas and form edits continue to save the current configuration immediately;
-- editing a published Journey therefore changes the published/current configuration after the save succeeds;
-- optimistic concurrency through `revision` still applies.
-
-The UI must not imply that Publish protects a historical version. If Odyssey later needs stable runtime deployments, rollback, approval, or reproducibility, a separate immutable JourneyRelease model must be introduced.
+Journey Publish/Release selection is out of V1 scope. There is only one current configuration, Canvas and form edits save it directly, and optimistic concurrency through `revision` applies. If Odyssey later needs runtime availability, stable deployments, rollback, approval, or reproducibility, a separate immutable JourneyRelease model must be introduced.
 
 ## 6. Pattern Contract
 
@@ -1308,12 +1297,18 @@ Proposed top-level shape:
   "name": "Research Agent",
   "description": "Reusable research workflow.",
   "source": "user",
+  "ownerWorkspaceId": "0195f076-b6e6-7ef0-98db-d721990f8000",
+  "sourceTemplateId": null,
+  "visibility": "private",
+  "publicationStatus": "draft",
+  "dependencies": [],
   "snapshot": {
     "workflow": {},
     "layout": {},
     "variables": [],
     "reusableTools": []
   },
+  "publishedAt": null,
   "createdAt": "2026-08-09T09:15:00Z",
   "updatedAt": "2026-08-09T09:15:00Z"
 }
@@ -1322,6 +1317,42 @@ Proposed top-level shape:
 Instantiation deep-copies owned content and remaps all owned IDs. Knowledge Space IDs remain external references and may require mapping.
 
 An Agent Template can be exported independently as a small `.odyssey.zip`. Its manifest uses a distinct package format such as `odyssey_agent_template_package` and points to one Agent Template entrypoint. It follows the same checksum, schema validation, ID remapping, and Knowledge Space mapping rules as a Journey package.
+
+### 13.1 Template ownership and visibility
+
+Pattern, Agent, and Tool Templates share these semantics:
+
+```text
+source              built_in | user
+visibility          private | public
+publicationStatus   draft | published
+```
+
+- Built-in Templates have no owner Workspace and are public/published.
+- User Templates retain `ownerWorkspaceId` even when public.
+- A public Template is readable by other Workspaces but is editable only by its owner.
+- Using or forking a public Template creates an independent copy and records `sourceTemplateId`.
+- A fork does not stay synchronized with its source.
+
+### 13.2 Public Template dependencies
+
+A private Template may directly reference assets in its owner Workspace. A public Template must not expose the author's private Knowledge Space UUID, name, document metadata, files, or secrets.
+
+Before publication, external references are converted to dependency slots:
+
+```json
+{
+  "id": "0195f076-b6e6-7ef0-98db-d721990f8d01",
+  "kind": "knowledge_space",
+  "key": "research_knowledge",
+  "label": "Research Knowledge",
+  "required": true
+}
+```
+
+The public Snapshot references the dependency UUID instead of an author-owned Knowledge Space UUID. A consumer maps every required dependency to an asset in the consumer's Workspace before instantiation.
+
+Community listing metadata such as ratings, downloads, moderation, and comments is outside the Template contract and may be added through separate Community entities later.
 
 ## 14. Import ID Remapping
 
@@ -1392,7 +1423,7 @@ agent_workflow_knowledge_space_reference
 ## 16. Remaining Decisions Checklist
 
 - [x] 所有嵌套领域对象统一使用 UUID。
-- [x] Retain Journey `status` as `draft | published | archived`; Publish does not create a version.
+- [x] Journey `status` is `draft | archived`; Journey Publish/Release selection is out of V1 scope.
 - [x] Pattern 编辑后保留 `kind`；Slot 使用 `label` 和按 Pattern 需要提供的可选 `topologyRole`。
 - [x] Store Goal, Knowledge Space bindings, and Tool bindings on Agent Action Nodes, not Agent-level metadata.
 - [x] Loop Start/End 为显式、不可删除节点，并持久化其位置。

@@ -79,4 +79,4 @@ uv run pytest
 - PostgreSQL stores knowledge metadata; object storage stores binary content.
 - Demo journeys must be created through normal product APIs before export to `seed/`.
 
-See [`doc/odyssey-project-initialization-v2.md`](doc/odyssey-project-initialization-v2.md) for the initialization plan.
+See [`doc/planning/project/odyssey-project-initialization-v2.md`](doc/planning/project/odyssey-project-initialization-v2.md) for the initialization plan.
