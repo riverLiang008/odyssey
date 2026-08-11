@@ -8,5 +8,6 @@ describe('HomeView', () => {
     expect(wrapper.text()).toContain('Your ideas,')
     expect(wrapper.text()).toContain('in motion.')
     expect(wrapper.text()).toContain('Journey canvas')
+    expect(wrapper.get('.brand img').attributes('src')).toContain('odyssey-logo.png')
   })
 })

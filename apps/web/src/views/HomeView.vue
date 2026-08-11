@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { NButton, NIcon } from 'naive-ui'
+import odysseyLogoUrl from '../../../../doc/assets/brand/odyssey-logo.png'
 
 const foundations = [
   { mark: '01', title: 'Journey canvas', detail: 'Compose capabilities without coupling domain logic to a renderer.' },
@@ -12,7 +13,9 @@ const foundations = [
   <main class="shell">
     <nav class="nav">
       <a class="brand" href="/" aria-label="Odyssey home">
-        <span class="brand-mark">O</span>
+        <span class="brand-mark" aria-hidden="true">
+          <img :src="odysseyLogoUrl" alt="" />
+        </span>
         <span>odyssey</span>
       </a>
       <span class="status"><i /> Foundation preview</span>

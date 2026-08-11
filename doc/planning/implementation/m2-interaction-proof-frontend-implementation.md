@@ -350,6 +350,8 @@ lint / typecheck / test / build 结果
 
 ### M2.1 — Contracts、Fixtures 与 Repository Boundary
 
+专项计划：[`M2.1 Contracts、Fixtures 与 Repository Boundary Implementation Plan`](./m2.1-contracts-fixtures-repository-implementation-plan.md)
+
 **目标**
 
 冻结 M2 前端需要的数据形状、identity 和持久化边界，使后续 UI 不需要自行发明 contract。
@@ -401,6 +403,8 @@ lint / typecheck / test / build 结果
 
 **实施内容**
 
+- 保留现有 `/` 主界面作为 Landing / Workspace Entry，不用 Figma App Shell 覆盖或重写该页面。
+- 将主界面的 `Open workspace` 作为进入 singleton Workspace 的导航入口，目标为 `/journeys`；它不是 Workspace create action。
 - 建立 `/journeys/:journeyId` 与 `/journeys/:journeyId/agents/:agentId`。
 - 建立 `AppShell`、global navigation、product header、page loading/error/not-found boundary。
 - 建立 `journeyEditor` 与 `workflowEditor` Pinia store。

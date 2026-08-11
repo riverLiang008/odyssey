@@ -38,6 +38,7 @@ The key implementation distinction is:
 
 ```text
 Odyssey
+├── Landing / Workspace Entry
 ├── Community [coming soon]
 ├── OdyJourney
 │   └── Journey List
@@ -52,12 +53,29 @@ Odyssey
 
 This is the product hierarchy. It should not be inferred directly from the physical positions of frames on the Figma canvas.
 
+### Landing and Workspace entry decision
+
+The existing Odyssey landing page at `/` is retained as the product entry page. The Figma-designed application shell does not replace this landing page.
+
+The landing page's **Open workspace** action enters the single Odyssey Workspace and navigates to the Figma-designed product interface. For V1, the destination is the Journey List at `/journeys`; the user can then open a Journey Editor and nested Agent Workflow Editor through the canonical hierarchy below.
+
+```text
+Landing `/`
+→ Open workspace
+→ Journey List `/journeys`
+→ Journey Editor `/journeys/:journeyId`
+→ Agent Workflow Editor `/journeys/:journeyId/agents/:agentId`
+```
+
+V1 has one application Workspace and does not require a Workspace picker or Workspace CRUD screen. The **Open workspace** control is navigation into the existing singleton Workspace, not creation of a new Workspace record.
+
 ## 3. Route Map
 
 The exact frontend framework is not prescribed. The paths below are recommended semantic routes.
 
 | Product level | Recommended route | Figma frame | Responsibility |
 | --- | --- | --- | --- |
+| Landing / Workspace Entry | `/` | Existing implemented landing page; retained outside the Figma application shell | Product introduction and entry into the singleton Workspace |
 | Community | `/community` | Not designed; coming soon | Placeholder/disabled navigation item in v1 |
 | Journey List | `/journeys` | `OdyJourney — Journey List` (`247:33`) | Search, filter, create, and open OdyJourneys |
 | Journey Editor | `/journeys/:journeyId` | `OdyJourney · UI Draft` → `OdyJourney — Resource Library Open` (`59:2`) | Configure Pattern, Execution, Behavior, and Agents at system level |
@@ -71,6 +89,7 @@ The exact frontend framework is not prescribed. The paths below are recommended 
 
 ### Route behavior
 
+- Clicking **Open workspace** on the retained landing page navigates to `/journeys`.
 - Clicking a Journey card opens the Journey Editor.
 - Clicking a configured Agent slot selects it and displays that Agent's workflow in a floating preview window at the lower-right of the Journey Editor. This does **not** navigate away.
 - Clicking the preview window's upper-right **Open canvas / fullscreen** control navigates to the Agent Workflow Editor for that Agent.

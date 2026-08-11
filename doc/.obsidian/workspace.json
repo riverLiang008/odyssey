@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "README.md",
+                "file": "planning/implementation/m2.1-contracts-fixtures-repository-implementation-plan.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "README"
+              "title": "m2.1-contracts-fixtures-repository-implementation-plan"
             }
           }
         ]
@@ -187,20 +187,28 @@
   },
   "active": "9d865693fc99c6fc",
   "lastOpenFiles": [
-    "architecture/domain/odyssey-domain-model-draft.md",
-    "README.md",
-    "assets/diagrams/data-structure.png",
+    "planning/implementation/m2.1-completion-report.md",
     "engineering/development/local-development-guide.md",
+    "architecture/domain/odyssey-domain-model-draft.md",
+    "architecture/domain/odyssey-v1-design-constraints.md",
+    "architecture/execution/Canvas Execution Model.md",
     "planning/project/odyssey-project-initialization-v2.md",
-    "product/feature-specifications/knowledge-space/knowledge-space-specification.md",
+    "planning/implementation/v1-implementation-plan.md",
+    "architecture/data/contracts/v1-contract-source-mapping.md",
     "frontend-engineering-guidelines.md",
     "Odyssey Database Design.md",
+    "architecture/data/contracts/canonical-json-contracts-draft.md",
+    "planning/implementation/m2.1-contracts-fixtures-repository-implementation-plan.md",
+    "planning/implementation/m2-interaction-proof-frontend-implementation.md",
+    "architecture/data/database/reviews/v1-database-design-review-draft.md",
+    "architecture/data/database/reviews/v1-database-design-review-feedback.md",
+    "README.md",
+    "assets/diagrams/data-structure.png",
+    "product/feature-specifications/knowledge-space/knowledge-space-specification.md",
     "assets/brand/odyssey-logo.png",
     "assets/diagrams",
     "assets/brand",
     "assets",
-    "planning/implementation/v1-implementation-plan.md",
-    "planning/implementation/m2-interaction-proof-frontend-implementation.md",
     "planning/project",
     "planning/implementation",
     "planning",
@@ -214,16 +222,9 @@
     "product/feature-specifications/resources/Update Agent Action Resource Configuration UI.md",
     "product/feature-specifications/variables",
     "product/information-architecture/odyssey-figma-information-architecture.md",
-    "architecture/data/database/reviews/v1-database-design-review-feedback.md",
-    "architecture/data/database/reviews/v1-database-design-review-draft.md",
     "architecture/data/contracts/canonical-json-contracts.md",
     "architecture/data/database/Odyssey Database Design.md",
-    "architecture/data/contracts/canonical-json-contracts-draft.md",
     "architecture/data/storage/v1-object-storage-design.md",
-    "architecture/execution/Canvas Execution Model.md",
-    "architecture/domain/odyssey-v1-design-constraints.md",
-    "local-development-guide.md",
-    "odyssey-domain-model-draft.md",
     "logo/odyssey-logo.png"
   ]
 }

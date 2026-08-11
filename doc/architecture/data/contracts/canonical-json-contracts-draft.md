@@ -1,19 +1,17 @@
-# Odyssey V1 Canonical JSON Contracts — Review Draft
+# Odyssey V1 Canonical JSON Contracts
 
-> Status: **Discussion draft — not an accepted schema**  
-> Purpose: define the JSON boundaries for current Journey state, reusable templates, and portable ZIP packages before finalizing the database schema  
+> Status: **Accepted and frozen V1 JSON Schema `1.0.0` baseline**  
+> Frozen: **2026-08-11**  
+> Purpose: define the authoritative JSON boundaries for current Journey state, reusable templates, editor/API projections, and portable ZIP packages  
 > Related constraint: [`doc/architecture/domain/odyssey-v1-design-constraints.md`](../../domain/odyssey-v1-design-constraints.md)
 
-## 如何评审本文档
+The structures and semantics in this document are the accepted source of truth for Odyssey V1 JSON Schema `1.0.0`. Changes to frozen contract fields require an explicit contract review and coordinated schema, API, persistence, fixture, and frontend updates.
 
-请直接在 `待确认` 区块下面填写意见：
+The remaining package and single-file size limits are operational import/export limits, not unresolved JSON structure. They do not block implementation of the frozen persistence or editor contracts.
 
-```md
-> 产品回复：
-> 在这里填写意见。
-```
+## Contract change process
 
-尚未确认的问题会继续保留为 `待确认`。
+Future contract changes must be proposed explicitly, reviewed against the accepted domain and persistence boundaries, and recorded as a coordinated schema change. They must not be introduced indirectly from database rows, ORM models, Vue Flow objects, Figma layers, or component-local state.
 
 Accepted review decisions are incorporated into the relevant section and summarized here:
 
