@@ -1,6 +1,7 @@
 import {
   agentWorkflowEditorDocumentSchema,
   journeyEditorDocumentSchema,
+  uuidSchema,
   type AgentWorkflowEditorDocument,
   type JourneyEditorDocument,
 } from '@odyssey/schemas'
@@ -195,6 +196,28 @@ describe('InMemoryEditorRepository', () => {
     expect(loaded.ok && loaded.value.journey.revision).toBe(1)
   })
 
+  it('keeps both aggregates unchanged when an injected save response is invalid', async () => {
+    const { repository, controls } = createScenario()
+    const journey = createJourneyDocument()
+    const pattern = structuredClone(journey.pattern)
+    pattern.name = 'Rejected Journey update'
+    controls.failNext('RESPONSE_INVALID')
+    expect(await repository.saveJourney({ journeyId: journey.journey.id, expectedRevision: 1, pattern })).toEqual({ ok: false, error: { code: 'RESPONSE_INVALID' } })
+
+    const agent = createAgentDocument()
+    const layout = structuredClone(agent.layout)
+    layout.viewport.zoom = 1.5
+    controls.failNext('RESPONSE_INVALID')
+    expect(await repository.saveAgentWorkflow({ journeyId: agent.agent.journeyId, agentId: agent.agent.id, expectedRevision: 1, workflow: agent.workflow, layout, variables: agent.variables, reusableTools: agent.reusableTools })).toEqual({ ok: false, error: { code: 'RESPONSE_INVALID' } })
+
+    const loadedJourney = await repository.loadJourney(journey.journey.id)
+    const loadedAgent = await repository.loadAgentWorkflow(agent.agent.journeyId, agent.agent.id)
+    expect(loadedJourney.ok && loadedJourney.value.journey.revision).toBe(1)
+    expect(loadedJourney.ok && loadedJourney.value.pattern.name).toBe('Research pattern')
+    expect(loadedAgent.ok && loadedAgent.value.agent.revision).toBe(1)
+    expect(loadedAgent.ok && loadedAgent.value.layout.viewport.zoom).toBe(1)
+  })
+
   it('supports deterministic abort during injected latency', async () => {
     vi.useFakeTimers()
     const { repository } = createScenario(100)
@@ -258,5 +281,48 @@ describe('InMemoryEditorRepository', () => {
 
     const other = await second.loadJourney(document.journey.id)
     expect(other.ok && other.value.pattern.name).toBe('Research pattern')
+  })
+
+  it('uses the injected System Variable registry for Agent load and save validation', async () => {
+    const agent = createAgentDocument()
+    const systemVariableId = uuidSchema.parse('0195f076-b6e6-7ef0-98db-d721990f8998')
+    agent.workflow = {
+      ...agent.workflow,
+      nodes: [
+        agent.workflow.nodes[0]!,
+        {
+          id: uuidSchema.parse('0195f076-b6e6-7ef0-98db-d721990f8997'),
+          type: 'agent_action',
+          name: 'Use system context',
+          config: {
+            model: 'gpt-4o',
+            goal: { kind: 'variable', variableId: systemVariableId },
+            knowledgeSpaceIds: [],
+            reusableToolIds: [],
+          },
+        },
+        agent.workflow.nodes[1]!,
+      ],
+      edges: [],
+    }
+    agent.layout.nodePlacements = agent.workflow.nodes.map((node, index) => ({ nodeId: node.id, x: index * 100, y: 0 }))
+    const { repository } = createInMemoryEditorRepositoryScenario({
+      agentWorkflows: [agent],
+      systemVariableIds: [systemVariableId],
+      now: () => SAVED_TIME,
+    })
+    const loaded = await repository.loadAgentWorkflow(agent.agent.journeyId, agent.agent.id)
+    expect(loaded.ok).toBe(true)
+    if (!loaded.ok) return
+    const saved = await repository.saveAgentWorkflow({
+      journeyId: agent.agent.journeyId,
+      agentId: agent.agent.id,
+      expectedRevision: 1,
+      workflow: loaded.value.workflow,
+      layout: loaded.value.layout,
+      variables: loaded.value.variables,
+      reusableTools: loaded.value.reusableTools,
+    })
+    expect(saved.ok && saved.value.revision).toBe(2)
   })
 })

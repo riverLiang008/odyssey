@@ -20,8 +20,23 @@
               "icon": "lucide-file",
               "title": "m2.1-contracts-fixtures-repository-implementation-plan"
             }
+          },
+          {
+            "id": "cf1f489a032510d6",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "planning/implementation/m2-interaction-proof-frontend-implementation.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "m2-interaction-proof-frontend-implementation"
+            }
           }
-        ]
+        ],
+        "currentTab": 1
       }
     ],
     "direction": "vertical"
@@ -185,8 +200,35 @@
       "bases:新建数据库": false
     }
   },
-  "active": "9d865693fc99c6fc",
+  "active": "cf1f489a032510d6",
   "lastOpenFiles": [
+    "planning/implementation/m2.4-system-canvas-agent-slot-typed-dnd-implementation-plan.md",
+    "planning/implementation/m2.1-contracts-fixtures-repository-implementation-plan.md",
+    "planning/implementation/m2-interaction-proof-frontend-implementation.md",
+    "planning/implementation/m2.3-pattern-domain-strategies-commands-implementation-plan.md",
+    "temp/odyssey-mark-animation/kiki-v6-blue-corrected.png",
+    "temp/odyssey-mark-animation/fix_kiki_blue.py",
+    "temp/odyssey-mark-animation/kiki-source.png",
+    "planning/implementation/m2.2-app-shell-router-store-boundaries-implementation-plan.md",
+    "temp/odyssey-mark-animation/scene04-corrected-v6-check.png",
+    "temp/odyssey-mark-animation/scene06-wrong-source.png",
+    "temp/odyssey-mark-animation/scene05-wrong-source.png",
+    "temp/odyssey-mark-animation/v6-state-full.png",
+    "temp/odyssey-mark-animation/v6-state-green.png",
+    "temp/odyssey-mark-animation/v6-states-03-05.png",
+    "temp/odyssey-mark-animation/v6-original-mark.png",
+    "temp/odyssey-mark-animation/scene-06-local-mask-check.png",
+    "planning/implementation/m2.2-completion-report.md",
+    "temp/odyssey-mark-animation/odyssey-mark-animation-scenes-01-05-top-text-fixed-1920x1080-30fps.mp4",
+    "temp/odyssey-mark-animation/odyssey-mark-animation-scenes-01-05-no-subtitles-1920x1080-30fps.mp4",
+    "temp/advertise video.md",
+    "temp/odyssey-mark-animation/odyssey-mark-animation-scenes-01-04-full-red-gold-fix-1920x1080-30fps.mp4",
+    "temp/odyssey-mark-animation/odyssey-mark-animation-scenes-01-04-scene03-color-fix-1920x1080-30fps.mp4",
+    "temp/odyssey-mark-animation/odyssey-mark-animation-scenes-01-04-no-subtitles-1920x1080-30fps.mp4",
+    "temp/odyssey-mark-animation/scene-04-validation.mp4",
+    "temp/odyssey-mark-animation/odyssey-mark-animation-scenes-01-03-kinesin-head-fixed-1920x1080-30fps.mp4",
+    "temp/odyssey-mark-animation/odyssey-mark-animation-scenes-01-03-no-subtitles-1920x1080-30fps.mp4",
+    "temp/odyssey-mark-animation/odyssey-mark-animation-phase-01-no-subtitles-1920x1080-30fps.mp4",
     "planning/implementation/m2.1-completion-report.md",
     "engineering/development/local-development-guide.md",
     "architecture/domain/odyssey-domain-model-draft.md",
@@ -198,33 +240,13 @@
     "frontend-engineering-guidelines.md",
     "Odyssey Database Design.md",
     "architecture/data/contracts/canonical-json-contracts-draft.md",
-    "planning/implementation/m2.1-contracts-fixtures-repository-implementation-plan.md",
-    "planning/implementation/m2-interaction-proof-frontend-implementation.md",
     "architecture/data/database/reviews/v1-database-design-review-draft.md",
     "architecture/data/database/reviews/v1-database-design-review-feedback.md",
     "README.md",
-    "assets/diagrams/data-structure.png",
     "product/feature-specifications/knowledge-space/knowledge-space-specification.md",
-    "assets/brand/odyssey-logo.png",
-    "assets/diagrams",
-    "assets/brand",
-    "assets",
-    "planning/project",
-    "planning/implementation",
-    "planning",
     "engineering/guidelines/frontend-engineering-guidelines.md",
-    "engineering/guidelines",
-    "engineering/development",
-    "engineering",
     "product/feature-specifications/tools/Built-in Tool Configuration Specification (V1).md",
     "product/feature-specifications/tools/Built-in Tool Configuration Specification.md",
-    "product/feature-specifications/variables/odyssey-agent-variable-ui-spec.md",
-    "product/feature-specifications/resources/Update Agent Action Resource Configuration UI.md",
-    "product/feature-specifications/variables",
-    "product/information-architecture/odyssey-figma-information-architecture.md",
-    "architecture/data/contracts/canonical-json-contracts.md",
-    "architecture/data/database/Odyssey Database Design.md",
-    "architecture/data/storage/v1-object-storage-design.md",
-    "logo/odyssey-logo.png"
+    "product/feature-specifications/variables/odyssey-agent-variable-ui-spec.md"
   ]
 }

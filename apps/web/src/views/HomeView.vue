@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { NButton, NIcon } from 'naive-ui'
+import { useRouter } from 'vue-router'
 import odysseyLogoUrl from '../../../../doc/assets/brand/odyssey-logo.png'
+
+const router = useRouter()
 
 const foundations = [
   { mark: '01', title: 'Journey canvas', detail: 'Compose capabilities without coupling domain logic to a renderer.' },
@@ -27,11 +30,11 @@ const foundations = [
       <p class="lede">
         Odyssey is a visual environment for shaping agent journeys, knowledge, and tools into reusable capabilities.
       </p>
-      <NButton type="primary" size="large" round disabled>
+      <NButton type="primary" size="large" round @click="router.push('/journeys')">
         Open workspace
         <template #icon><NIcon><span>→</span></NIcon></template>
       </NButton>
-      <p class="note">Workspace creation arrives in the next milestone.</p>
+      <p class="note">Enter the Odyssey workspace.</p>
     </section>
 
     <section class="foundation" aria-labelledby="foundation-title">

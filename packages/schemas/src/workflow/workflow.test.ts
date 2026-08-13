@@ -255,6 +255,32 @@ describe('Workflow and Layout schemas', () => {
     expect(workflowGraphSchema.safeParse(workflow).success).toBe(false)
   })
 
+  it('requires sourceHandleId to belong to its source Branch', () => {
+    const caseId = '0195f076-b6e6-7ef0-98db-d721990f88b1'
+    const defaultId = '0195f076-b6e6-7ef0-98db-d721990f88b5'
+    const branchId = '0195f076-b6e6-7ef0-98db-d721990f88b0'
+    const branchGraph = {
+      schemaVersion: '1.0.0',
+      nodes: [
+        { id: IDS.start, type: 'start', name: 'Start', config: {} },
+        {
+          id: branchId,
+          type: 'branch',
+          name: 'Enough sources?',
+          config: {
+            cases: [{ id: caseId, label: 'Enough', match: 'all', conditions: [{ id: IDS.variable, left: { kind: 'literal', value: 3 }, operator: 'gte', right: { kind: 'literal', value: 2 } }] }],
+            defaultCase: { id: defaultId, label: 'Default' },
+          },
+        },
+        { id: IDS.end, type: 'end', name: 'End', config: {} },
+      ],
+      edges: [{ id: IDS.edgeOne, sourceNodeId: branchId, sourceHandleId: caseId, targetNodeId: IDS.end }],
+    }
+    expect(workflowGraphSchema.safeParse(branchGraph).success).toBe(true)
+    expect(workflowGraphSchema.safeParse({ ...branchGraph, edges: [{ ...branchGraph.edges[0], sourceHandleId: IDS.task }] }).success).toBe(false)
+    expect(workflowGraphSchema.safeParse({ ...branchGraph, edges: [{ ...branchGraph.edges[0], sourceNodeId: IDS.start }] }).success).toBe(false)
+  })
+
   it('rejects non-finite placements, duplicate placements, and legacy nodePositions', () => {
     const layout = {
       schemaVersion: '1.0.0',

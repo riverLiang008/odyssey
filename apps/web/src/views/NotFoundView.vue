@@ -1,0 +1,1 @@
+<template><main class="route-boundary" role="status"><span class="route-boundary__symbol" aria-hidden="true">404</span><h1>Page not found</h1><p>The address does not match an Odyssey page.</p><div class="route-boundary__actions"><RouterLink to="/journeys">Return to Journeys</RouterLink></div></main></template>

@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
 
-import { PATTERN_KINDS } from '@odyssey/schemas'
+import { PATTERN_KINDS, createAgentWorkflowEditorDocumentSchema, uuidSchema } from '@odyssey/schemas'
 import { describe, expect, it } from 'vitest'
 
 import { createInMemoryEditorRepositoryScenario } from '../repositories'
@@ -142,5 +142,78 @@ describe('M2.1 boundary audit', () => {
       expect(persisted).not.toContain(`"${forbiddenField}"`)
     }
     expect(agent.agent.journeyId).toBe(FIXTURE_IDS.journey)
+  })
+})
+
+describe('M2.1 aggregate reference validation', () => {
+  it('recursively rejects missing reusable Tools in Loop body Agent Actions', () => {
+    const document = createAgentWorkflowEditorDocumentFixture('loop')
+    const loop = document.workflow.nodes.find((node) => node.type === 'loop')
+    expect(loop?.type).toBe('loop')
+    if (loop?.type !== 'loop') return
+    const action = loop.config.body.graph.nodes.find((node) => node.type === 'agent_action')
+    expect(action?.type).toBe('agent_action')
+    if (action?.type !== 'agent_action') return
+    action.config.reusableToolIds = [uuidSchema.parse('0195f076-b6e6-7ef0-98db-d721990f8999')]
+    expect(createAgentWorkflowEditorDocumentSchema().safeParse(document).success).toBe(false)
+  })
+
+  it('rejects out-of-scope Task Variables and accepts explicitly registered System Variables', () => {
+    const document = createAgentWorkflowEditorDocumentFixture('research')
+    const task = document.workflow.nodes.find((node) => node.type === 'task')
+    expect(task?.type).toBe('task')
+    if (task?.type !== 'task') return
+    const systemVariableId = uuidSchema.parse('0195f076-b6e6-7ef0-98db-d721990f8998')
+    task.config.steps = [
+      {
+        id: uuidSchema.parse('0195f076-b6e6-7ef0-98db-d721990f8997'),
+        kind: 'llm_call',
+        label: null,
+        configuration: { model: 'gpt-4o', prompt: { kind: 'variable', variableId: systemVariableId } },
+        outputMapping: { sourceKey: 'response.text', targetVariableId: document.variables[0]!.id },
+        failureBehavior: { kind: 'fail_task' },
+      },
+    ]
+    expect(createAgentWorkflowEditorDocumentSchema().safeParse(document).success).toBe(false)
+    expect(
+      createAgentWorkflowEditorDocumentSchema({ systemVariableIds: [systemVariableId] }).safeParse(document).success,
+    ).toBe(true)
+  })
+
+  it('rejects read-only write targets and aggregate-wide duplicate Variable IDs', () => {
+    const document = createAgentWorkflowEditorDocumentFixture('research')
+    document.variables[0]!.readOnly = true
+    const task = document.workflow.nodes.find((node) => node.type === 'task')
+    expect(task?.type).toBe('task')
+    if (task?.type !== 'task') return
+    task.config.localVariables = [
+      { id: document.variables[0]!.id, key: 'duplicate', dataType: 'json', defaultValue: null },
+    ]
+    task.config.steps = [
+      {
+        id: uuidSchema.parse('0195f076-b6e6-7ef0-98db-d721990f8996'),
+        kind: 'set_variable',
+        label: null,
+        configuration: { targetVariableId: document.variables[0]!.id, operation: 'assign', value: { kind: 'literal', value: 1 } },
+        outputMapping: null,
+        failureBehavior: { kind: 'fail_task' },
+      },
+    ]
+    expect(createAgentWorkflowEditorDocumentSchema().safeParse(document).success).toBe(false)
+  })
+
+  it('validates reusable Tool Variable inputs and writable outputs', () => {
+    const document = createAgentWorkflowEditorDocumentFixture('minimal')
+    const missingVariableId = uuidSchema.parse('0195f076-b6e6-7ef0-98db-d721990f8995')
+    document.reusableTools[0]!.inputBindings = [{ kind: 'variable', variableId: missingVariableId }]
+    expect(createAgentWorkflowEditorDocumentSchema().safeParse(document).success).toBe(false)
+
+    document.reusableTools[0]!.inputBindings = []
+    document.variables[0]!.readOnly = true
+    document.reusableTools[0]!.outputBinding = {
+      sourceKey: 'retrieved_documents',
+      targetVariableId: document.variables[0]!.id,
+    }
+    expect(createAgentWorkflowEditorDocumentSchema().safeParse(document).success).toBe(false)
   })
 })

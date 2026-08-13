@@ -474,6 +474,8 @@ lint / typecheck / test / build 结果
 
 ### M2.4 — System Canvas、Agent Slot 与 Typed DnD
 
+> Detailed plan: [`m2.4-system-canvas-agent-slot-typed-dnd-implementation-plan.md`](./m2.4-system-canvas-agent-slot-typed-dnd-implementation-plan.md)
+
 **目标**
 
 将 M2.3 的纯领域能力连接到 Journey Editor，验证 Pattern/Agent 拖拽和固定 System Canvas 技术路径。

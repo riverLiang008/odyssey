@@ -148,7 +148,10 @@ export const workflowEdgeSchema = z.strictObject({
 })
 
 function addGraphReferenceIssues(
-  graph: { nodes: Array<{ id: string }>; edges: Array<{ id: string; sourceNodeId: string; targetNodeId: string }> },
+  graph: {
+    nodes: Array<{ id: string; type: string; config: object }>
+    edges: Array<z.infer<typeof workflowEdgeSchema>>
+  },
   context: z.RefinementCtx,
 ) {
   const nodeIds = new Set<string>()
@@ -170,6 +173,23 @@ function addGraphReferenceIssues(
     }
     if (!nodeIds.has(edge.targetNodeId)) {
       context.addIssue({ code: 'custom', message: 'Edge target must reference an existing node', path: ['edges', index, 'targetNodeId'] })
+    }
+
+    const sourceNode = graph.nodes.find((node) => node.id === edge.sourceNodeId)
+    if (edge.sourceHandleId !== undefined) {
+      if (sourceNode?.type !== 'branch') {
+        context.addIssue({ code: 'custom', message: 'Only a Branch edge may reference a source handle', path: ['edges', index, 'sourceHandleId'] })
+      } else {
+        const parsedBranch = branchNodeSchema.safeParse(sourceNode)
+        if (!parsedBranch.success) return
+        const handleIds = new Set([
+          parsedBranch.data.config.defaultCase.id,
+          ...parsedBranch.data.config.cases.map((branchCase) => branchCase.id),
+        ])
+        if (!handleIds.has(edge.sourceHandleId)) {
+          context.addIssue({ code: 'custom', message: 'Branch edge source handle must belong to its source Branch', path: ['edges', index, 'sourceHandleId'] })
+        }
+      }
     }
   })
 }
