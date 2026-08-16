@@ -24,21 +24,23 @@ export function derivePatternPresentation(pattern: PatternConfig): PatternPresen
   } else if (pattern.kind === 'hub_and_spoke') {
     const hub = pattern.slots.find((slot) => slot.topologyRole === 'hub')
     const spokes = pattern.slots.filter((slot) => slot.topologyRole === 'spoke')
+    const columns = Math.ceil(spokes.length / 2)
     slots = [
-      ...(hub ? [{ slotId: hub.id, x: CENTER_X, y: CENTER_Y }] : []),
+      ...(hub ? [{ slotId: hub.id, x: 120, y: CENTER_Y }] : []),
       ...spokes.map((slot, index) => {
-        const angle = -Math.PI / 2 + index * 2 * Math.PI / spokes.length
-        return { slotId: slot.id, x: CENTER_X + Math.cos(angle) * 150, y: CENTER_Y + Math.sin(angle) * 130 }
+        if (spokes.length === 1) return { slotId: slot.id, x: 500, y: CENTER_Y }
+        const column = index % columns
+        const row = Math.floor(index / columns)
+        const x = columns === 1 ? 500 : 330 + column * (320 / (columns - 1))
+        return { slotId: slot.id, x, y: row === 0 ? 95 : 305 }
       }),
     ]
   } else {
-    const positions: Record<string, { x: number; y: number }> = {
-      entry: { x: 160, y: CENTER_Y },
-      upper_branch: { x: CENTER_X, y: 80 },
-      exit: { x: 560, y: CENTER_Y },
-      lower_branch: { x: CENTER_X, y: 340 },
-    }
-    slots = pattern.slots.map((slot) => ({ slotId: slot.id, ...(positions[slot.topologyRole ?? ''] ?? { x: CENTER_X, y: CENTER_Y }) }))
+    const ordered = [...pattern.slots].sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
+    slots = ordered.map((slot, index) => {
+      const angle = Math.PI + index * 2 * Math.PI / ordered.length
+      return { slotId: slot.id, x: CENTER_X + Math.cos(angle) * 190, y: CENTER_Y + Math.sin(angle) * 130 }
+    })
   }
 
   return {
@@ -50,4 +52,3 @@ export function derivePatternPresentation(pattern: PatternConfig): PatternPresen
     })),
   }
 }
-

@@ -37,15 +37,14 @@ describe('built-in Pattern strategies', () => {
     expect(pattern.routes.every((route) => route.sourceSlotId === hub.id && route.target.type === 'slot')).toBe(true)
   })
 
-  it('creates the accepted four-stage Diamond cycle', () => {
+  it('creates the accepted four-stage Circular Loop with one entry', () => {
     const pattern = instantiatePattern('diamond_loop', deterministicIdFactory())
-    const byRole = new Map(pattern.slots.map((slot) => [slot.topologyRole, slot.id]))
-    expect(pattern.routes.map(routeEndpointKey)).toEqual([
-      `${byRole.get('entry')}->slot:${byRole.get('upper_branch')}`,
-      `${byRole.get('upper_branch')}->slot:${byRole.get('exit')}`,
-      `${byRole.get('exit')}->slot:${byRole.get('lower_branch')}`,
-      `${byRole.get('lower_branch')}->slot:${byRole.get('entry')}`,
-    ])
+    const ordered = [...pattern.slots].sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
+    expect(pattern.name).toBe('Circular loop')
+    expect(ordered.map((slot) => slot.topologyRole)).toEqual(['entry', 'loop', 'loop', 'loop'])
+    expect(pattern.routes.map(routeEndpointKey)).toEqual(ordered.map((slot, index) =>
+      `${slot.id}->slot:${ordered[(index + 1) % ordered.length]!.id}`,
+    ))
   })
 
   it('creates a four-stage Linear sequence ending at journey_end', () => {
@@ -145,6 +144,16 @@ describe('Pattern topology validation', () => {
     const positions = derivePatternPresentation(pattern).slots
     expect(positions.every(({ x, y }) => Number.isFinite(x) && Number.isFinite(y))).toBe(true)
     expect(new Set(positions.map(({ x, y }) => `${x}:${y}`)).size).toBe(2)
+  })
+
+  it('accepts a minimum two-Slot Circular Loop', () => {
+    const pattern = instantiatePattern('diamond_loop', deterministicIdFactory())
+    pattern.slots = pattern.slots.slice(0, 2)
+    pattern.routes = [
+      { ...pattern.routes[0]!, sourceSlotId: pattern.slots[0]!.id, target: { type: 'slot', slotId: pattern.slots[1]!.id } },
+      { ...pattern.routes[1]!, sourceSlotId: pattern.slots[1]!.id, target: { type: 'slot', slotId: pattern.slots[0]!.id } },
+    ]
+    expect(validatePatternConfig(pattern).ok).toBe(true)
   })
 
   it.each([

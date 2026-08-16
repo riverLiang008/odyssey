@@ -46,6 +46,7 @@ export function parseAgentWorkflowRoute(
 
 export const routeLocations = {
   journeys: () => ({ name: 'journeys' as const }),
+  newJourney: () => ({ name: 'journey-create' as const }),
   journey: (journeyId: UUID, tab: JourneyTab = 'pattern') => ({
     name: 'journey-editor' as const,
     params: { journeyId },

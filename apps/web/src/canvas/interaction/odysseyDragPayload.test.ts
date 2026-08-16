@@ -7,7 +7,6 @@ const ID = uuidSchema.parse('0195f076-b6e6-7ef0-98db-111111111111')
 
 describe('Odyssey drag payload boundary', () => {
   it.each<OdysseyDragPayloadV1>([
-    { version: 1, kind: 'pattern-template', templateKey: 'linear_sequence' },
     { version: 1, kind: 'agent-template', templateId: ID },
     { version: 1, kind: 'assigned-agent', agentId: ID, sourceSlotId: ID },
     { version: 1, kind: 'pattern-slot', slotId: ID },

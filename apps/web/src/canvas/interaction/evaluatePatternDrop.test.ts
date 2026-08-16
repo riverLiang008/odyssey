@@ -18,37 +18,6 @@ function emptySlot(config: PatternConfig): { id: UUID } {
 }
 
 describe('Pattern drop preflight', () => {
-  it('stages Pattern replacement without changing the Pattern', () => {
-    const config = pattern()
-    const before = structuredClone(config)
-    const result = evaluatePatternDrop(
-      { version: 1, kind: 'pattern-template', templateKey: 'diamond_loop' },
-      { kind: 'system-canvas' },
-      config,
-    )
-    expect(result.status === 'valid' && result.action.type).toBe('stage-pattern-replacement')
-    expect(config).toEqual(before)
-  })
-
-  it('deduplicates replacement Agent identities in stable Slot order', () => {
-    const config = pattern()
-    const firstAgentId = config.slots[0]?.agentId
-    if (!firstAgentId || !config.slots[1]) throw new Error('Expected assigned fixture Slots')
-    config.slots[1].agentId = firstAgentId
-    const before = structuredClone(config)
-    const expectedAgentIds = [...new Set(config.slots.flatMap((slot) => slot.agentId ? [slot.agentId] : []))]
-    const result = evaluatePatternDrop(
-      { version: 1, kind: 'pattern-template', templateKey: 'diamond_loop' },
-      { kind: 'system-canvas' },
-      config,
-    )
-    expect(result).toMatchObject({
-      status: 'valid',
-      action: { type: 'stage-pattern-replacement', affectedAgentIds: expectedAgentIds },
-    })
-    expect(config).toEqual(before)
-  })
-
   it('instantiates a Template only into an empty Slot and rejects an occupied Slot', () => {
     const config = pattern()
     const empty = emptySlot(config)

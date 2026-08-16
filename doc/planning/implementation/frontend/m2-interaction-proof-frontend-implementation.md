@@ -4,7 +4,7 @@
 > Scope: `v1-implementation-plan.md` 中 M2 Interaction Proof 的前端技术验证  
 > Target stack: Vue 3、TypeScript、Vite、Pinia、Vue Router、Naive UI、Vue Flow  
 > Figma source: [Odyssey Design](https://www.figma.com/design/P3EF9io2DhyhwkNYBVqB5Z/Odyssey-Design?node-id=1-2)
-> Frontend guideline: [`Odyssey 前端工程规范`](../../frontend-engineering-guidelines.md)
+> Frontend guideline: [`Odyssey 前端工程规范`](../../../frontend-engineering-guidelines.md)
 
 ## 1. 目标
 
@@ -27,9 +27,9 @@ Vue Flow event → Editor Command → Domain mutation → Graph/Layout update
 
 实施时按以下顺序解决资料冲突：
 
-1. [`doc/architecture/domain/odyssey-v1-design-constraints.md`](../../architecture/domain/odyssey-v1-design-constraints.md) 中已接受的 V1 约束。
-2. [`doc/architecture/data/contracts/canonical-json-contracts-draft.md`](../../architecture/data/contracts/canonical-json-contracts-draft.md)；当前为 Canonical JSON 的 working baseline，冻结后再移除文件名中的 `draft`。
-3. [`doc/product/information-architecture/odyssey-figma-information-architecture.md`](../../product/information-architecture/odyssey-figma-information-architecture.md) 的页面、路由和 UI-state 边界。
+1. [`doc/architecture/domain/odyssey-v1-design-constraints.md`](../../../architecture/domain/odyssey-v1-design-constraints.md) 中已接受的 V1 约束。
+2. [`doc/architecture/data/contracts/canonical-json-contracts-draft.md`](../../../architecture/data/contracts/canonical-json-contracts-draft.md)；当前为 Canonical JSON 的 working baseline，冻结后再移除文件名中的 `draft`。
+3. [`doc/product/information-architecture/odyssey-figma-information-architecture.md`](../../../product/information-architecture/odyssey-figma-information-architecture.md) 的页面、路由和 UI-state 边界。
 4. 其他 detail design 文档中的具体交互规则。
 5. 精确 Figma frame 的视觉和状态参考。
 6. `v1-implementation-plan.md` 中仍未同步的旧描述。
@@ -206,6 +206,11 @@ interface EditorRepository {
 
 ## 7. Pattern Slot 实施
 
+> Product update (2026-08-15): `diamond_loop` 的旧 diamond role/fixed-layout
+> 描述已被覆盖。后续实现必须遵循
+> [`diamond-loop-pattern-decision.md`](../../../architecture/domain/diamond-loop-pattern-decision.md)：
+> 它是带唯一入口的动态单向闭环，不包含分支或汇合语义。
+
 ### 7.1 Pattern strategy
 
 为每个 built-in template 提供纯函数 strategy：
@@ -215,7 +220,7 @@ interface EditorRepository {
 | `solo_component` | 单 slot assignment | 无内部 route；固定居中 |
 | `linear_sequence` | add/remove/reorder/exchange | 按 `order` 生成相邻 route 与横向布局 |
 | `hub_and_spoke` | 支持范围内 add/remove/exchange | hub role 不随 Agent exchange 改变；spoke 环绕布局 |
-| `diamond_loop` | 仅允许规则定义的位置操作 | 按 topology role 生成 diamond route 与固定布局 |
+| `diamond_loop` | dynamic add/remove/reorder within a directed cycle | 按环形顺序生成闭环 route 与环形布局；明确标记唯一入口 |
 
 模板实例化必须一次性生成完整、有效的 slots/routes。之后 `PatternConfig` 是唯一事实来源，template card 和视觉坐标不是持久化数据。
 

@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
 import { revisionSchema, utcTimestampSchema, uuidSchema, type Revision, type UUID } from '../common'
-import { agentTemplateSchema, agentWorkflowEditorDocumentSchema, createAgentTemplateSchema, createAgentWorkflowEditorDocumentSchema, journeyEditorDocumentSchema, type AgentTemplate, type AgentWorkflowEditorDocument, type JourneyEditorDocument } from '../editor'
-import { patternConfigSchema } from '../pattern'
+import { agentTemplateSchema, agentWorkflowEditorDocumentSchema, createAgentTemplateSchema, createAgentWorkflowEditorDocumentSchema, journeyEditorDocumentSchema, journeyStatusSchema, type AgentTemplate, type AgentWorkflowEditorDocument, type JourneyEditorDocument } from '../editor'
+import { patternConfigSchema, patternTemplateKeySchema } from '../pattern'
 import {
   agentReusableToolSchema,
   agentVariableSchema,
@@ -17,14 +17,12 @@ import {
 export const createJourneyAgentInputSchema = z.strictObject({
   journeyId: uuidSchema,
   slotId: uuidSchema,
-  name: z.string().trim().min(1),
-  description: z.string().nullable(),
+  expectedRevision: revisionSchema,
 })
 
 export const saveAgentAsTemplateInputSchema = z.strictObject({
   journeyId: uuidSchema,
   agentId: uuidSchema,
-  ownerWorkspaceId: uuidSchema,
   name: z.string().trim().min(1),
   description: z.string().nullable(),
 })
@@ -33,8 +31,26 @@ export const instantiateAgentTemplateInputSchema = z.strictObject({
   journeyId: uuidSchema,
   slotId: uuidSchema,
   templateId: uuidSchema,
-  name: z.string().trim().min(1).optional(),
-  dependencyMappings: z.array(z.strictObject({ dependencyId: uuidSchema, assetId: uuidSchema })),
+  expectedRevision: revisionSchema,
+})
+
+export const removeOccupiedSlotInputSchema = z.strictObject({
+  journeyId: uuidSchema,
+  slotId: uuidSchema,
+  expectedRevision: revisionSchema,
+  expectedAgentId: uuidSchema,
+  agentAction: z.discriminatedUnion('type', [
+    z.strictObject({ type: z.literal('discard') }),
+    z.strictObject({
+      type: z.literal('save_as_template_and_discard'),
+      template: z.strictObject({ name: z.string().trim().min(1), description: z.string().nullable() }),
+    }),
+  ]),
+})
+
+export const removeOccupiedSlotSuccessSchema = z.strictObject({
+  journey: journeyEditorDocumentSchema,
+  template: agentTemplateSchema.nullable(),
 })
 
 export interface CreateOrInstantiateAgentSuccess {
@@ -91,6 +107,26 @@ export const saveJourneyInputSchema = z.strictObject({
   pattern: patternConfigSchema,
 })
 
+export const journeySummarySchema = z.strictObject({
+  id: uuidSchema,
+  name: z.string().trim().min(1),
+  description: z.string().nullable(),
+  status: journeyStatusSchema,
+  patternKind: patternTemplateKeySchema,
+  agentCount: z.number().int().nonnegative(),
+  revision: revisionSchema,
+  createdAt: utcTimestampSchema,
+  updatedAt: utcTimestampSchema,
+})
+export const journeySummaryListSchema = z.array(journeySummarySchema)
+export const createJourneyInputSchema = z.strictObject({
+  name: z.string().trim().min(1),
+  description: z.string().trim().min(1).nullable(),
+  patternTemplateKey: patternTemplateKeySchema,
+})
+export const deleteJourneyInputSchema = z.strictObject({ journeyId: uuidSchema, expectedRevision: revisionSchema })
+export const deleteJourneySuccessSchema = z.strictObject({ journeyId: uuidSchema })
+
 export const saveAgentWorkflowInputSchema = z.strictObject({
   journeyId: uuidSchema,
   agentId: uuidSchema,
@@ -122,13 +158,33 @@ export const repositoryErrorCodeSchema = z.enum([
   'NETWORK_FAILED',
   'REVISION_CONFLICT',
   'ABORTED',
+  'REQUEST_INVALID',
+  'VALIDATION_FAILED',
+  'STATE_CONFLICT',
+  'LEGACY_PATTERN_UNSUPPORTED',
+  'CURRENT_WORKSPACE_UNAVAILABLE',
 ])
+export const apiErrorEnvelopeSchema = z.strictObject({
+  error: z.strictObject({
+    code: z.enum(['VALIDATION_FAILED', 'NOT_FOUND', 'REVISION_CONFLICT', 'STATE_CONFLICT', 'LEGACY_PATTERN_UNSUPPORTED', 'CURRENT_WORKSPACE_UNAVAILABLE']),
+    details: z.unknown(),
+  }),
+})
+export const validationErrorDetailsSchema = z.strictObject({
+  issues: z.array(z.strictObject({ path: z.array(z.union([z.string(), z.number()])), code: z.string().min(1) })),
+})
+export const revisionConflictDetailsSchema = z.strictObject({ expectedRevision: revisionSchema, currentRevision: revisionSchema })
+export const stateConflictReasonSchema = z.enum(['PATTERN_IMMUTABLE', 'OCCUPIED_SLOT_REMOVAL_REQUIRES_COMMAND', 'SLOT_OCCUPIED', 'SLOT_AGENT_CHANGED'])
+export const stateConflictDetailsSchema = z.object({ reason: stateConflictReasonSchema }).passthrough()
 
 const simpleRepositoryErrorSchema = z.discriminatedUnion('code', [
   z.strictObject({ code: z.literal('NOT_FOUND') }),
   z.strictObject({ code: z.literal('RESPONSE_INVALID') }),
   z.strictObject({ code: z.literal('NETWORK_FAILED') }),
   z.strictObject({ code: z.literal('ABORTED') }),
+  z.strictObject({ code: z.literal('REQUEST_INVALID') }),
+  z.strictObject({ code: z.literal('LEGACY_PATTERN_UNSUPPORTED') }),
+  z.strictObject({ code: z.literal('CURRENT_WORKSPACE_UNAVAILABLE') }),
 ])
 const revisionConflictErrorSchema = z.strictObject({
   code: z.literal('REVISION_CONFLICT'),
@@ -138,9 +194,21 @@ const revisionConflictErrorSchema = z.strictObject({
 export const repositoryErrorSchema = z.union([
   simpleRepositoryErrorSchema,
   revisionConflictErrorSchema,
+  z.strictObject({
+    code: z.literal('VALIDATION_FAILED'),
+    issues: z.array(z.strictObject({ path: z.array(z.union([z.string(), z.number()])), code: z.string().min(1) })),
+  }),
+  z.strictObject({
+    code: z.literal('STATE_CONFLICT'),
+    reason: z.enum(['PATTERN_IMMUTABLE', 'OCCUPIED_SLOT_REMOVAL_REQUIRES_COMMAND', 'SLOT_OCCUPIED', 'SLOT_AGENT_CHANGED']),
+  }),
 ])
 
 export type SaveJourneyInput = z.infer<typeof saveJourneyInputSchema>
+export type JourneySummary = z.infer<typeof journeySummarySchema>
+export type CreateJourneyInput = z.infer<typeof createJourneyInputSchema>
+export type DeleteJourneyInput = z.infer<typeof deleteJourneyInputSchema>
+export type DeleteJourneySuccess = z.infer<typeof deleteJourneySuccessSchema>
 export interface SaveAgentWorkflowInput {
   journeyId: UUID
   agentId: UUID
@@ -153,6 +221,8 @@ export interface SaveAgentWorkflowInput {
 export type CreateJourneyAgentInput = z.infer<typeof createJourneyAgentInputSchema>
 export type SaveAgentAsTemplateInput = z.infer<typeof saveAgentAsTemplateInputSchema>
 export type InstantiateAgentTemplateInput = z.infer<typeof instantiateAgentTemplateInputSchema>
+export type RemoveOccupiedSlotInput = z.infer<typeof removeOccupiedSlotInputSchema>
+export type RemoveOccupiedSlotSuccess = z.infer<typeof removeOccupiedSlotSuccessSchema>
 export type SaveAgentAsTemplateSuccess = AgentTemplate
 export type SaveJourneySuccess = z.infer<typeof saveJourneySuccessSchema>
 export type SaveAgentWorkflowSuccess = z.infer<typeof saveAgentWorkflowSuccessSchema>

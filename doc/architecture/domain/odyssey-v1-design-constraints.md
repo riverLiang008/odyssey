@@ -95,7 +95,7 @@ V1 does not provide a completely free-form Pattern route editor.
 - **Linear sequence:** users may add or remove Slots and exchange their order. Routes are derived automatically from Slot order.
 - **Solo component:** contains one isolated Slot and no internal Agent route.
 - **Hub and spoke:** users may add or remove supported Slots; the Pattern rule maintains the hub-and-spoke topology.
-- **Diamond loop:** users may add or remove supported Slots only where permitted by the Pattern rule; the Pattern rule maintains the diamond topology.
+- **Diamond loop / Circular Loop:** `diamond_loop` is retained as the persisted compatibility key, but its accepted product semantics are a directed circular loop with one explicit entry and dynamic Slot count. The final Slot routes back to the entry. It has no built-in branch or merge semantics. See [`diamond-loop-pattern-decision.md`](./diamond-loop-pattern-decision.md).
 - **Custom free-form Pattern:** deferred to a future version.
 
 Users do not manually create or delete Pattern Routes in V1. Pattern-specific domain rules maintain valid Routes after a Slot operation.
@@ -131,7 +131,7 @@ System Canvas Slot coordinates are derived presentation state and are not part o
 - Linear Slots are laid out by `order`.
 - New Linear Slots are appended after the current last Slot.
 - Hub-and-spoke Slots are arranged around the hub according to the Pattern rule.
-- Diamond Slots are positioned according to their topology role.
+- Circular Loop Slots are positioned around a ring; the explicitly designated entry receives a distinct accessible indicator.
 - Solo uses a fixed single-Slot layout.
 
 The System Canvas should not persist arbitrary Slot `x/y` coordinates for these built-in Patterns.
@@ -169,23 +169,22 @@ Cancelling the form must not leave an anonymous or orphaned Agent record.
 - One configured Slot references zero or one Agent instance.
 - An Agent Template may be instantiated many times, but each result is an independent Agent instance.
 
-## 5. Pattern Replacement and Agent Deletion
+## 5. Pattern Immutability and Agent Deletion
 
-### 5.1 Switching Pattern
+### 5.1 Pattern is selected at Journey creation
 
-Switching Pattern replaces the current Pattern configuration. Existing Journey Agent instances may be discarded as part of that replacement.
+In V1, the user selects one built-in Pattern while creating a Journey. After creation,
+`pattern.id`, `pattern.kind`, and `pattern.templateKey` are immutable. Odyssey does not
+support Pattern replacement, either through ordinary Journey save or through a dedicated
+replacement command.
 
-Before replacement, Odyssey must:
+The Pattern's supported internal operations may still change Slots, Routes, assignments,
+and configuration while preserving its immutable identity and topology invariants.
 
-1. identify all affected Agent instances;
-2. show the affected Agents to the user;
-3. offer `Save as Template` for Agents the user wants to preserve;
-4. allow the user to discard the remaining Agents or cancel the switch;
-5. apply template creation, Agent removal, and Pattern replacement atomically.
-
-The replacement must be handled as one backend transaction. The product must not leave the Journey in a partially replaced state if any operation fails.
-
-The frontend should stage the replacement and request confirmation before destructive persistence. Selecting a Pattern card must not immediately issue multiple irreversible delete calls.
+To use a different Pattern, the user must delete the existing Journey and create a new
+Journey with the desired Pattern. Journey deletion is destructive, requires explicit
+confirmation and optimistic concurrency protection, deletes Journey-owned AgentWorkflow
+data atomically, and preserves independently saved Agent Templates.
 
 ### 5.2 Deleting an Agent
 
@@ -247,7 +246,7 @@ The persistence model should therefore use current fields such as:
 
 Records should retain an integer `revision` or equivalent optimistic concurrency mechanism so that an outdated editor session cannot silently overwrite newer data.
 
-Autosave may persist ordinary editor changes after a debounce. Destructive operations such as Pattern replacement and Agent deletion always require explicit confirmation. The UI should expose `saving`, `saved`, `failed`, and `conflict` states.
+Autosave may persist ordinary editor changes after a debounce. Destructive operations such as Journey deletion and Agent deletion always require explicit confirmation. The UI should expose `saving`, `saved`, `failed`, and `conflict` states.
 
 `Save as Template` is not versioning. It creates a new reusable blueprint from the current instance.
 
@@ -326,7 +325,7 @@ A Knowledge Space is an independent persistent asset.
 
 - It is not owned by a Journey Agent.
 - Multiple Journey Agents may reference the same Knowledge Space.
-- Agent deletion and Pattern replacement must not delete a referenced Knowledge Space.
+- Agent deletion and Journey deletion must not delete a referenced Knowledge Space.
 - Agent Template creation preserves Knowledge Space IDs as references and does not copy Knowledge Space content.
 - Knowledge Space deletion requires reference checks against current Journey configurations and templates where applicable.
 

@@ -26,10 +26,10 @@ function initialSlots(kind: PatternKind, idFactory: PatternIdFactory): PatternSl
       ...Array.from({ length: 4 }, (_, index) => slot(idFactory, `Spoke ${index + 1}`, 'spoke', null)),
     ]
     case 'diamond_loop': return [
-      slot(idFactory, 'Entry', 'entry', null),
-      slot(idFactory, 'Upper branch', 'upper_branch', null),
-      slot(idFactory, 'Exit', 'exit', null),
-      slot(idFactory, 'Lower branch', 'lower_branch', null),
+      slot(idFactory, 'Entry', 'entry', 0),
+      slot(idFactory, 'Stage 2', 'loop', 1),
+      slot(idFactory, 'Stage 3', 'loop', 2),
+      slot(idFactory, 'Stage 4', 'loop', 3),
     ]
   }
 }
@@ -68,4 +68,3 @@ export const PATTERN_STRATEGIES = {
 export function instantiatePattern(templateKey: PatternTemplateKey, idFactory: PatternIdFactory): PatternConfig {
   return PATTERN_STRATEGIES[templateKey].instantiate(idFactory)
 }
-

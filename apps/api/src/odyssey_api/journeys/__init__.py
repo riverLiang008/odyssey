@@ -1,0 +1,1 @@
+"""Journey persistence vertical slice."""

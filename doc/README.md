@@ -28,6 +28,8 @@ doc/
 ├── planning/
 │   ├── project/
 │   └── implementation/
+│       ├── frontend/
+│       └── backend/
 ├── assets/
 │   ├── brand/
 │   └── diagrams/
@@ -49,6 +51,10 @@ doc/
 | Workflow/Canvas 执行模型 | [`architecture/execution/Canvas Execution Model.md`](<architecture/execution/Canvas Execution Model.md>) | Current design |
 | Knowledge Space 产品规格 | [`product/feature-specifications/knowledge-space/knowledge-space-specification.md`](product/feature-specifications/knowledge-space/knowledge-space-specification.md) | Product specification；已确认的 V1 database/storage 决策可覆盖其中的旧持久化建议 |
 | 前端工程规范 | [`frontend-engineering-guidelines.md`](frontend-engineering-guidelines.md) | Authoritative |
+| M2 前端实施计划 | [`planning/implementation/frontend/m2-interaction-proof-frontend-implementation.md`](planning/implementation/frontend/m2-interaction-proof-frontend-implementation.md) | Active frontend planning |
+| M2.4B 创建 Journey 前端计划 | [`planning/implementation/frontend/m2.4b-new-journey-pattern-selection-implementation-plan.md`](planning/implementation/frontend/m2.4b-new-journey-pattern-selection-implementation-plan.md) | Ready for implementation |
+| Journey 后端纵向切片交接 | [`planning/implementation/backend/journey-persistence-vertical-slice-handoff.md`](planning/implementation/backend/journey-persistence-vertical-slice-handoff.md) | Backend planning handoff |
+| M2.4B Journey 后端计划 | [`planning/implementation/backend/m2.4b-journey-persistence-api-implementation-plan.md`](planning/implementation/backend/m2.4b-journey-persistence-api-implementation-plan.md) | Ready for implementation |
 | V1 实施计划 | [`planning/implementation/v1-implementation-plan.md`](planning/implementation/v1-implementation-plan.md) | Planning baseline；与 Accepted/Implementation baseline 冲突时以后者为准 |
 | 项目初始化 | [`planning/project/odyssey-project-initialization-v2.md`](planning/project/odyssey-project-initialization-v2.md) | Current project setup |
 
@@ -95,7 +101,7 @@ doc/
 存放阶段性项目规划和实施方案。
 
 - `project/`：项目初始化、技术栈和仓库建设方案。
-- `implementation/`：版本、里程碑或功能阶段的实施计划。
+- `implementation/`：版本、里程碑或功能阶段的实施计划；`frontend/` 与 `backend/` 分别存放端侧计划，跨端总计划保留在该目录根部。
 
 ### `assets/`
 

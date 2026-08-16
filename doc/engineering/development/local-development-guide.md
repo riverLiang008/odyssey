@@ -106,12 +106,20 @@ $env:ODYSSEY_DATABASE_URL = "postgresql+asyncpg://odyssey:odyssey@127.0.0.1:5543
 
 ## 5. 手动执行数据库迁移
 
-确保 PostgreSQL 已健康运行，然后执行：
+配置只从仓库根目录 `.env` 自动加载；先在仓库根目录执行：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+不要在 `apps/api` 创建另一份 `.env`。确保 PostgreSQL 已健康运行，然后执行迁移与显式、
+幂等的 development Workspace bootstrap：
 
 ```powershell
 Set-Location apps/api
 uv run alembic upgrade head
 uv run alembic current
+uv run python -m odyssey_api.bootstrap
 Set-Location ../..
 ```
 
@@ -123,13 +131,31 @@ Set-Location ../..
 
 ```powershell
 Set-Location apps/api
-uv run uvicorn odyssey_api.main:app --reload
+uv run uvicorn odyssey_api.main:app --host 127.0.0.1 --port 8000
 ```
 
 API 地址：
 
 - 健康检查：<http://localhost:8000/api/v1/health>
-- OpenAPI 文档：<http://localhost:8000/docs>
+- Swagger API 文档：<http://localhost:8000/docs>
+- OpenAPI 3.1 JSON：<http://localhost:8000/openapi.json>
+
+Swagger 文档由 FastAPI 路由和 Pydantic DTO 自动生成，包含请求/响应 schema、错误 envelope、
+示例与可直接发起请求的 **Try it out**。生产环境默认同时关闭 Swagger UI 和 OpenAPI JSON；
+如需向外部分发合同，请在受控构建流程中导出 development/test 环境的 OpenAPI JSON，而不是
+在生产服务上开放文档入口。
+
+需要 `--reload` 时，先确认 8000 端口没有残留监听进程。Windows 上必须先识别 PID 与命令行：
+
+```powershell
+Get-NetTCPConnection -LocalPort 8000 -State Listen |
+  Select-Object LocalAddress,LocalPort,OwningProcess
+Get-CimInstance Win32_Process -Filter "ProcessId = <PID>" |
+  Select-Object ProcessId,Name,CommandLine
+```
+
+只有确认命令行属于已失效的 Odyssey Uvicorn 后，才执行 `Stop-Process -Id <PID>`；不得按
+Python 进程名批量停止。随后可选择以 `--reload` 启动。
 
 如果 Docker PostgreSQL 使用 `55432`，需要先在同一个窗口设置 `ODYSSEY_DATABASE_URL`，再启动 API。
 

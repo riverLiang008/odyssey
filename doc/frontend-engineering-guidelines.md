@@ -3,7 +3,7 @@
 > Status: Engineering guideline  
 > Scope: Odyssey Web 前端的架构、状态管理、交互实现、测试与代码评审  
 > Stack: Vue 3、TypeScript、Pinia、Vue Router、Naive UI、Vue Flow  
-> Related: [`M2 Interaction Proof — Frontend Implementation Plan`](./planning/implementation/m2-interaction-proof-frontend-implementation.md)
+> Related: [`M2 Interaction Proof — Frontend Implementation Plan`](./planning/implementation/frontend/m2-interaction-proof-frontend-implementation.md)
 
 ## 1. 目的
 

@@ -35,10 +35,17 @@ doc/                    product and architecture source documents
 
 ## Local development
 
-Copy `.env.example` to `.env`, then start local services:
+The repository-root `.env` is the only automatically loaded local configuration file.
+Create it once, regardless of which directory is used to start the API:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Then start PostgreSQL (MinIO is optional for the Journey persistence slice):
 
 ```bash
-docker compose -f infrastructure/compose.yaml up -d
+docker compose -f infrastructure/compose.yaml up -d postgres
 ```
 
 Install and run the web app:
@@ -54,10 +61,44 @@ Install and run the API in another terminal:
 cd apps/api
 uv sync --dev
 uv run alembic upgrade head
-uv run uvicorn odyssey_api.main:app --reload
+uv run python -m odyssey_api.bootstrap
+uv run uvicorn odyssey_api.main:app --host 127.0.0.1 --port 8000
 ```
 
-The web app runs at `http://localhost:5173`; the API health endpoint is `http://localhost:8000/api/v1/health`.
+The bootstrap command explicitly creates the configured development Workspace and is safe
+to repeat. It never runs in production and never chooses or generates a Workspace ID.
+
+For routine development, add `--reload` only after confirming no existing process owns port
+8000. On Windows, identify the listener and its command line before stopping anything:
+
+```powershell
+Get-NetTCPConnection -LocalPort 8000 -State Listen |
+  Select-Object LocalAddress,LocalPort,OwningProcess
+Get-CimInstance Win32_Process -Filter "ProcessId = <PID>" |
+  Select-Object ProcessId,Name,CommandLine
+Stop-Process -Id <PID>
+```
+
+Only run `Stop-Process` after the command line confirms that the PID is the stale Odyssey
+Uvicorn process. Do not kill processes merely because they use Python.
+
+The web app may run at `http://localhost:5173` or `http://127.0.0.1:5173`. The API base URL is
+`http://127.0.0.1:8000/api/v1`, and its health endpoint is
+`http://127.0.0.1:8000/api/v1/health`.
+
+Alternatively, the root lifecycle commands manage the complete stack as a singleton:
+
+```powershell
+pnpm.cmd dev:all
+# From another terminal:
+pnpm.cmd dev:down
+```
+
+`dev:all` starts infrastructure, runs migrations and the Workspace bootstrap, then starts one
+non-reload API process and one Web process. It refuses to start when a managed instance or an
+unmanaged process already owns port 8000/5173. `dev:down` securely contacts the matching
+orchestrator through its local tokenized control channel, stops Web and API, runs Compose
+down, and removes its runtime state. The state lives under ignored `.odyssey-dev/`.
 
 ## Checks
 

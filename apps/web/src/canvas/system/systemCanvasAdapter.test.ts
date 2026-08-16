@@ -19,6 +19,7 @@ describe('System Canvas adapter', () => {
     const before = structuredClone(document)
     const model = createSystemCanvasViewModel(document, document.pattern.slots[0]?.id ?? null)
     expect(model.slots).toHaveLength(document.pattern.slots.length)
+    expect(model.routes.every((route) => route.targetSlotId !== null)).toBe(true)
     expect(model.routes.every((route) => model.slots.some((slot) => slot.id === route.sourceSlotId)
       && (route.targetSlotId === null || model.slots.some((slot) => slot.id === route.targetSlotId)))).toBe(true)
     expect(document).toEqual(before)
@@ -33,6 +34,38 @@ describe('System Canvas adapter', () => {
     const model = createSystemCanvasViewModel(document, null)
     expect(model.slots.find((slot) => slot.id === occupied.id)?.assignment).toBe('missing-summary')
     expect(model.diagnostics).toContainEqual({ code: 'AGENT_SUMMARY_MISSING', id: occupied.agentId })
+  })
+
+  it('maps topology into the supplied bounds and anchors routes at node edges', () => {
+    const document = createJourneyEditorDocumentFixture()
+    document.pattern = instantiatePattern('linear_sequence', ids())
+    const model = createSystemCanvasViewModel(document, null, { width: 400, height: 180 })
+    expect(model.slots.every((slot) => slot.position.x >= 0 && slot.position.x <= 400)).toBe(true)
+    expect(model.slots.every((slot) => slot.position.y >= 0 && slot.position.y <= 180)).toBe(true)
+    const firstRoute = model.routes[0]!
+    const sourceCenter = model.slots.find((slot) => slot.id === firstRoute.sourceSlotId)!.position
+    const targetCenter = model.slots.find((slot) => slot.id === firstRoute.targetSlotId)!.position
+    expect(firstRoute.source.x).toBeGreaterThan(sourceCenter.x)
+    expect(firstRoute.target.x).toBeLessThan(targetCenter.x)
+    expect(firstRoute.source).not.toEqual(sourceCenter)
+    expect(firstRoute.target).not.toEqual(targetCenter)
+  })
+
+  it.each([
+    ['solo_component', 0],
+    ['linear_sequence', 3],
+    ['hub_and_spoke', 4],
+    ['diamond_loop', 4],
+  ] as const)('renders only internal directed routes for %s', (kind, expectedRouteCount) => {
+    const document = createJourneyEditorDocumentFixture()
+    document.pattern = instantiatePattern(kind, ids())
+    const model = createSystemCanvasViewModel(document, null)
+    expect(model.routes).toHaveLength(expectedRouteCount)
+    expect(model.routes.every((route) => route.targetSlotId !== null)).toBe(true)
+    if (kind === 'diamond_loop') {
+      expect(model.slots.filter((slot) => slot.isEntry)).toHaveLength(1)
+      expect(model.slots.every((slot) => slot.canReorder)).toBe(true)
+    }
   })
 
   it('preserves a canonical Slot and diagnoses a missing presentation position', () => {

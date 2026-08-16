@@ -2,6 +2,8 @@ import {
   createAgentLifecycleResponseSchemas,
   createJourneyAgentInputSchema,
   instantiateAgentTemplateInputSchema,
+  removeOccupiedSlotInputSchema,
+  removeOccupiedSlotSuccessSchema,
   saveAgentAsTemplateInputSchema,
   uuidSchema,
   createAgentWorkflowEditorDocumentSchema,
@@ -10,12 +12,22 @@ import {
   saveAgentWorkflowSuccessSchema,
   saveJourneyInputSchema,
   saveJourneySuccessSchema,
+  createJourneyInputSchema,
+  deleteJourneyInputSchema,
+  deleteJourneySuccessSchema,
+  journeySummaryListSchema,
   type AgentTemplate,
   type AgentWorkflowEditorDocument,
   type CreateJourneyAgentInput,
   type CreateOrInstantiateAgentSuccess,
   type InstantiateAgentTemplateInput,
+  type RemoveOccupiedSlotInput,
+  type RemoveOccupiedSlotSuccess,
   type JourneyEditorDocument,
+  type JourneySummary,
+  type CreateJourneyInput,
+  type DeleteJourneyInput,
+  type DeleteJourneySuccess,
   type RepositoryError,
   type RepositoryResult,
   type SaveAgentAsTemplateInput,
@@ -33,7 +45,8 @@ import {
   saveAgentAsTemplate,
   type AgentLifecycleIdFactory,
 } from '@/domain/agent-template'
-import type { AgentLifecycleRepository, EditorRepository, OdysseyEditorRepository, RepositoryOperationOptions } from './editorRepository'
+import { instantiatePattern, removeSlot as removePatternSlot, unassignAgent, type PatternIdFactory } from '@/domain/pattern'
+import type { AgentLifecycleRepository, EditorRepository, JourneyLifecycleRepository, OdysseyEditorRepository, RepositoryOperationOptions } from './editorRepository'
 
 type InjectableFailure = 'NETWORK_FAILED' | 'RESPONSE_INVALID' | 'REVISION_CONFLICT'
 
@@ -45,6 +58,9 @@ export interface InMemoryEditorRepositoryOptions {
   now?: () => string
   systemVariableIds?: readonly string[]
   idFactory?: AgentLifecycleIdFactory
+  patternIdFactory?: PatternIdFactory
+  journeyIdFactory?: () => UUID
+  developmentWorkspaceId?: UUID
 }
 
 export interface InMemoryEditorRepositoryControls {
@@ -93,7 +109,7 @@ function waitForLatency(latencyMs: number, signal?: AbortSignal): Promise<'compl
   })
 }
 
-export class InMemoryEditorRepository implements EditorRepository, AgentLifecycleRepository {
+export class InMemoryEditorRepository implements EditorRepository, AgentLifecycleRepository, JourneyLifecycleRepository {
   readonly #journeys = new Map<string, JourneyEditorDocument>()
   readonly #agentWorkflows = new Map<string, AgentWorkflowEditorDocument>()
   readonly #agentTemplates = new Map<string, AgentTemplate>()
@@ -104,6 +120,9 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
   readonly #lifecycleSchemas
   readonly #systemVariableIds: readonly UUID[]
   readonly #idFactory: AgentLifecycleIdFactory
+  readonly #patternIdFactory: PatternIdFactory
+  readonly #journeyIdFactory: () => UUID
+  readonly #workspaceId: UUID
 
   constructor(options: InMemoryEditorRepositoryOptions = {}, scenario?: ScenarioState) {
     this.#latencyMs = options.latencyMs ?? 0
@@ -130,6 +149,15 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
       toolStepId: nextUuid,
       configurationEntryId: nextUuid,
     }
+    this.#patternIdFactory = options.patternIdFactory ?? {
+      patternId: nextUuid,
+      slotId: nextUuid,
+      routeId: nextUuid,
+    }
+    this.#journeyIdFactory = options.journeyIdFactory ?? nextUuid
+    this.#workspaceId = options.developmentWorkspaceId
+      ?? options.journeys?.[0]?.journey.workspaceId
+      ?? uuidSchema.parse('0195f076-b6e6-7ef0-98db-d721990f8000')
     for (const document of options.journeys ?? []) {
       this.#journeys.set(document.journey.id, structuredClone(document))
     }
@@ -142,23 +170,94 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
     }
   }
 
-  async listAgentTemplates(workspaceId: UUID, options?: RepositoryOperationOptions): Promise<RepositoryResult<AgentTemplate[]>> {
+  async listJourneys(options?: RepositoryOperationOptions): Promise<RepositoryResult<JourneySummary[]>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const injected = this.#consumeSimpleFailure()
+    if (injected) return injected
+    const candidate: unknown = this.#consumeInvalidResponse() ? { invalid: true } : [...this.#journeys.values()]
+      .filter((document) => document.journey.workspaceId === this.#workspaceId)
+      .map((document) => ({
+        id: document.journey.id,
+        name: document.journey.name,
+        description: document.journey.description,
+        status: document.journey.status,
+        patternKind: document.pattern.kind,
+        agentCount: document.agents.length,
+        revision: document.journey.revision,
+        createdAt: document.journey.createdAt,
+        updatedAt: document.journey.updatedAt,
+      }))
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    const parsed = journeySummaryListSchema.safeParse(candidate)
+    return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async createJourney(input: CreateJourneyInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<JourneyEditorDocument>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const parsedInput = createJourneyInputSchema.safeParse(input)
+    if (!parsedInput.success) return failure({ code: 'RESPONSE_INVALID' })
+    const injected = this.#consumeSimpleFailure()
+    if (injected) return injected
+    const timestamp = this.#now()
+    const candidate: unknown = this.#consumeInvalidResponse() ? { invalid: true } : {
+      journey: {
+        id: this.#journeyIdFactory(),
+        workspaceId: this.#workspaceId,
+        name: parsedInput.data.name,
+        description: parsedInput.data.description,
+        status: 'draft',
+        tags: [],
+        revision: 1,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+      pattern: instantiatePattern(parsedInput.data.patternTemplateKey, this.#patternIdFactory),
+      agents: [],
+    }
+    const parsed = journeyEditorDocumentSchema.safeParse(candidate)
+    if (!parsed.success) return failure({ code: 'RESPONSE_INVALID' })
+    this.#journeys.set(parsed.data.journey.id, structuredClone(parsed.data))
+    return { ok: true, value: parsed.data }
+  }
+
+  async deleteJourney(input: DeleteJourneyInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<DeleteJourneySuccess>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const parsedInput = deleteJourneyInputSchema.safeParse(input)
+    if (!parsedInput.success) return failure({ code: 'RESPONSE_INVALID' })
+    const injected = this.#consumeSimpleFailure()
+    if (injected) return injected
+    const stored = this.#journeys.get(parsedInput.data.journeyId)
+    if (!stored || stored.journey.workspaceId !== this.#workspaceId) return failure({ code: 'NOT_FOUND' })
+    if (this.#consumeConflict() || stored.journey.revision !== parsedInput.data.expectedRevision) {
+      return failure({ code: 'REVISION_CONFLICT', expectedRevision: parsedInput.data.expectedRevision, currentRevision: stored.journey.revision })
+    }
+    const responseCandidate: unknown = this.#consumeInvalidResponse() ? { invalid: true } : { journeyId: stored.journey.id }
+    const parsedResponse = deleteJourneySuccessSchema.safeParse(responseCandidate)
+    if (!parsedResponse.success) return failure({ code: 'RESPONSE_INVALID' })
+    this.#journeys.delete(stored.journey.id)
+    for (const [agentId, document] of this.#agentWorkflows) {
+      if (document.agent.journeyId === stored.journey.id) this.#agentWorkflows.delete(agentId)
+    }
+    return { ok: true, value: parsedResponse.data }
+  }
+
+  async listAgentTemplates(options?: RepositoryOperationOptions): Promise<RepositoryResult<AgentTemplate[]>> {
     if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
     const injected = this.#consumeSimpleFailure()
     if (injected) return injected
     const candidate: unknown = this.#consumeInvalidResponse()
       ? { invalid: true }
-      : [...this.#agentTemplates.values()].filter((template) => template.ownerWorkspaceId === workspaceId || template.visibility === 'public').map((template) => structuredClone(template))
+      : [...this.#agentTemplates.values()].filter((template) => template.ownerWorkspaceId === this.#workspaceId || template.visibility === 'public').map((template) => structuredClone(template))
     const parsed = this.#lifecycleSchemas.agentTemplateList.safeParse(candidate)
     return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
   }
 
-  async loadAgentTemplate(workspaceId: UUID, templateId: UUID, options?: RepositoryOperationOptions): Promise<RepositoryResult<AgentTemplate>> {
+  async loadAgentTemplate(templateId: UUID, options?: RepositoryOperationOptions): Promise<RepositoryResult<AgentTemplate>> {
     if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
     const injected = this.#consumeSimpleFailure()
     if (injected) return injected
     const stored = this.#agentTemplates.get(templateId)
-    if (!stored || (stored.ownerWorkspaceId !== workspaceId && stored.visibility !== 'public')) return failure({ code: 'NOT_FOUND' })
+    if (!stored || (stored.ownerWorkspaceId !== this.#workspaceId && stored.visibility !== 'public')) return failure({ code: 'NOT_FOUND' })
     const candidate: unknown = this.#consumeInvalidResponse() ? { invalid: true } : structuredClone(stored)
     const parsed = this.#lifecycleSchemas.agentTemplate.safeParse(candidate)
     return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
@@ -172,7 +271,8 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
     if (injected) return injected
     const journey = this.#journeys.get(parsedInput.data.journeyId)
     if (!journey) return failure({ code: 'NOT_FOUND' })
-    const created = createMinimalAgent(journey, parsedInput.data.slotId, parsedInput.data.name, parsedInput.data.description, this.#now(), this.#idFactory, this.#systemVariableIds)
+    if (journey.journey.revision !== parsedInput.data.expectedRevision) return failure({ code: 'REVISION_CONFLICT', expectedRevision: parsedInput.data.expectedRevision, currentRevision: journey.journey.revision })
+    const created = createMinimalAgent(journey, parsedInput.data.slotId, `Agent ${journey.agents.length + 1}`, null, this.#now(), this.#idFactory, this.#systemVariableIds)
     if (!created.ok) return failure({ code: created.error.code === 'SLOT_NOT_FOUND' ? 'NOT_FOUND' : 'RESPONSE_INVALID' })
     const responseCandidate: unknown = this.#consumeInvalidResponse()
       ? { invalid: true }
@@ -194,8 +294,7 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
     const journey = this.#journeys.get(parsedInput.data.journeyId)
     const agent = this.#agentWorkflows.get(parsedInput.data.agentId)
     if (!journey || !agent || agent.agent.journeyId !== journey.journey.id) return failure({ code: 'NOT_FOUND' })
-    if (journey.journey.workspaceId !== parsedInput.data.ownerWorkspaceId) return failure({ code: 'NOT_FOUND' })
-    const saved = saveAgentAsTemplate(agent, parsedInput.data.ownerWorkspaceId, parsedInput.data.name, parsedInput.data.description, this.#now(), this.#idFactory, this.#systemVariableIds)
+    const saved = saveAgentAsTemplate(agent, this.#workspaceId, parsedInput.data.name, parsedInput.data.description, this.#now(), this.#idFactory, this.#systemVariableIds)
     if (!saved.ok) return failure({ code: 'RESPONSE_INVALID' })
     const responseCandidate: unknown = this.#consumeInvalidResponse() ? { invalid: true } : saved.value
     const parsedResponse = this.#lifecycleSchemas.agentTemplate.safeParse(responseCandidate)
@@ -213,7 +312,8 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
     const journey = this.#journeys.get(parsedInput.data.journeyId)
     const template = this.#agentTemplates.get(parsedInput.data.templateId)
     if (!journey || !template) return failure({ code: 'NOT_FOUND' })
-    const instantiated = instantiateAgentTemplate(journey, template, parsedInput.data.slotId, parsedInput.data.name, this.#now(), this.#idFactory, this.#systemVariableIds, parsedInput.data.dependencyMappings)
+    if (journey.journey.revision !== parsedInput.data.expectedRevision) return failure({ code: 'REVISION_CONFLICT', expectedRevision: parsedInput.data.expectedRevision, currentRevision: journey.journey.revision })
+    const instantiated = instantiateAgentTemplate(journey, template, parsedInput.data.slotId, undefined, this.#now(), this.#idFactory, this.#systemVariableIds, [])
     if (!instantiated.ok) return failure({ code: instantiated.error.code === 'SLOT_NOT_FOUND' ? 'NOT_FOUND' : 'RESPONSE_INVALID' })
     const responseCandidate: unknown = this.#consumeInvalidResponse()
       ? { invalid: true }
@@ -224,6 +324,38 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
     this.#journeys.set(journey.journey.id, structuredClone(parsedResponse.data.journey))
     this.#agentWorkflows.set(parsedResponse.data.agent.agent.id, structuredClone(parsedResponse.data.agent))
     return { ok: true, value: parsedResponse.data }
+  }
+
+  async removeOccupiedSlot(input: RemoveOccupiedSlotInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<RemoveOccupiedSlotSuccess>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const parsedInput = removeOccupiedSlotInputSchema.safeParse(input)
+    if (!parsedInput.success) return failure({ code: 'REQUEST_INVALID' })
+    const journey = this.#journeys.get(parsedInput.data.journeyId)
+    if (!journey) return failure({ code: 'NOT_FOUND' })
+    if (journey.journey.revision !== parsedInput.data.expectedRevision) return failure({ code: 'REVISION_CONFLICT', expectedRevision: parsedInput.data.expectedRevision, currentRevision: journey.journey.revision })
+    const slot = journey.pattern.slots.find((candidate) => candidate.id === parsedInput.data.slotId)
+    if (!slot) return failure({ code: 'NOT_FOUND' })
+    if (slot.agentId !== parsedInput.data.expectedAgentId) return failure({ code: 'STATE_CONFLICT', reason: 'SLOT_AGENT_CHANGED' })
+    const agent = this.#agentWorkflows.get(parsedInput.data.expectedAgentId)
+    if (!agent) return failure({ code: 'NOT_FOUND' })
+    let template: AgentTemplate | null = null
+    if (parsedInput.data.agentAction.type === 'save_as_template_and_discard') {
+      const saved = saveAgentAsTemplate(agent, this.#workspaceId, parsedInput.data.agentAction.template.name, parsedInput.data.agentAction.template.description, this.#now(), this.#idFactory, this.#systemVariableIds)
+      if (!saved.ok) return failure({ code: 'RESPONSE_INVALID' })
+      template = saved.value
+    }
+    const unassigned = unassignAgent(journey.pattern, slot.id)
+    if (!unassigned.ok) return failure({ code: 'STATE_CONFLICT', reason: 'SLOT_AGENT_CHANGED' })
+    const removed = removePatternSlot(unassigned.value, slot.id, this.#patternIdFactory)
+    if (!removed.ok) return failure({ code: 'STATE_CONFLICT', reason: 'SLOT_AGENT_CHANGED' })
+    const updatedAt = this.#now()
+    const candidate = { ...structuredClone(journey), journey: { ...journey.journey, revision: journey.journey.revision + 1, updatedAt }, pattern: removed.value }
+    const response = removeOccupiedSlotSuccessSchema.safeParse({ journey: candidate, template })
+    if (!response.success) return failure({ code: 'RESPONSE_INVALID' })
+    this.#journeys.set(journey.journey.id, structuredClone(response.data.journey))
+    this.#agentWorkflows.delete(agent.agent.id)
+    if (template) this.#agentTemplates.set(template.id, structuredClone(template))
+    return { ok: true, value: response.data }
   }
 
   async loadJourney(

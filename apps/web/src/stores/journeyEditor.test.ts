@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { journeyEditorDocumentSchema, uuidSchema, type JourneyEditorDocument, type RepositoryResult } from '@odyssey/schemas'
+import { journeyEditorDocumentSchema, uuidSchema, type CreateOrInstantiateAgentSuccess, type JourneyEditorDocument, type RepositoryResult } from '@odyssey/schemas'
 
-import { createJourneyEditorDocumentFixture, FIXTURE_IDS } from '@/fixtures'
+import { createAgentWorkflowEditorDocumentFixture, createJourneyEditorDocumentFixture, FIXTURE_IDS } from '@/fixtures'
 import { createInMemoryEditorRepositoryScenario, InMemoryEditorRepository } from '@/repositories'
+import type { AgentLifecycleRepository } from '@/repositories'
 import { useJourneyEditorStore } from './journeyEditor'
 
 function patternIdFactory(start = 9000) {
@@ -152,5 +153,133 @@ describe('journeyEditor store', () => {
     expect(returned?.ok).toBe(true)
     if (returned?.ok) returned.value.slots[0]!.label = 'external mutation'
     expect(store.document?.pattern.slots[0]?.label).not.toBe('external mutation')
+  })
+
+  it('preflights and dispatches valid drops while keeping invalid dragover atomic', async () => {
+    const fixture = createJourneyEditorDocumentFixture()
+    const repository = new InMemoryEditorRepository({ journeys: [fixture] })
+    const store = useJourneyEditorStore()
+    await store.load(fixture.journey.id, 'pattern', repository)
+    const source = fixture.pattern.slots[0]!
+    const target = fixture.pattern.slots[1]!
+    const before = JSON.parse(JSON.stringify(store.document))
+
+    store.beginDrag({ version: 1, kind: 'assigned-agent', agentId: source.agentId!, sourceSlotId: source.id })
+    expect(store.evaluateDrag({ kind: 'agent-slot', slotId: target.id })?.status).toBe('valid')
+    expect(store.document).toEqual(before)
+    expect(store.persistence.mutationSeq).toBe(0)
+    expect(await store.dispatchDrop(repository, patternIdFactory())).toBe(true)
+    expect(store.document?.pattern.slots[0]?.agentId).toBe(target.agentId)
+    expect(store.document?.pattern.slots[1]?.agentId).toBe(source.agentId)
+    expect(store.persistence.mutationSeq).toBe(1)
+    expect(store.session.interaction.type).toBe('idle')
+
+    const afterExchange = JSON.parse(JSON.stringify(store.document))
+    store.beginDrag({ version: 1, kind: 'assigned-agent', agentId: target.agentId!, sourceSlotId: source.id })
+    expect(store.evaluateDrag({ kind: 'agent-slot', slotId: source.id })?.status).toBe('duplicate')
+    expect(await store.dispatchDrop(repository, patternIdFactory())).toBe(false)
+    expect(store.document).toEqual(afterExchange)
+    expect(store.persistence.mutationSeq).toBe(1)
+    expect(store.session.interaction.type).toBe('idle')
+    store.beginDrag({ version: 1, kind: 'agent-template', templateId: uuidSchema.parse(FIXTURE_IDS.researchAgent) })
+    store.rejectDragBoundary('MALFORMED_JSON')
+    expect(store.session.interaction.type).toBe('idle')
+    expect(store.session.lastDragBoundaryError).toBe('MALFORMED_JSON')
+  })
+
+  it('models selection, menu, staged destructive actions and stale Slot reconciliation as session state', async () => {
+    const fixture = createJourneyEditorDocumentFixture()
+    const repository = new InMemoryEditorRepository({ journeys: [fixture] })
+    const store = useJourneyEditorStore()
+    await store.load(fixture.journey.id, 'pattern', repository)
+    const lastSlot = fixture.pattern.slots[2]!
+    store.selectSlot(lastSlot.id)
+    store.openMenu(lastSlot.id, { x: 10, y: 20 })
+    expect(store.session.interaction).toEqual({ type: 'menu-open', slotId: lastSlot.id, anchor: { x: 10, y: 20 } })
+    expect(store.unassignAgent(lastSlot.id)?.ok).toBe(true)
+    expect(store.removeSlot(lastSlot.id, patternIdFactory())?.ok).toBe(true)
+    expect(store.session.selectedSlotId).toBeNull()
+    expect(store.session.interaction.type).toBe('idle')
+
+    expect(store.toSaveInput()).not.toHaveProperty('interaction')
+  })
+
+  it('orchestrates atomic create, Save as Template, list and instantiate lifecycle operations', async () => {
+    const fixture = createJourneyEditorDocumentFixture()
+    fixture.pattern.slots[1]!.agentId = null
+    fixture.pattern.slots[2]!.agentId = null
+    const repository = new InMemoryEditorRepository({
+      journeys: [fixture],
+      agentWorkflows: [
+        createAgentWorkflowEditorDocumentFixture('research'),
+        createAgentWorkflowEditorDocumentFixture('minimal'),
+        createAgentWorkflowEditorDocumentFixture('loop'),
+      ],
+    })
+    const store = useJourneyEditorStore()
+    await store.load(fixture.journey.id, 'agent', repository)
+    const createSlotId = fixture.pattern.slots[1]!.id
+    expect(await store.createAgent(createSlotId, repository)).toBeTruthy()
+    const createdAgentId = store.document?.pattern.slots[1]?.agentId
+    expect(createdAgentId).toBeTruthy()
+    if (!createdAgentId) throw new Error('Created Agent identity is missing')
+    expect(store.persistence.mutationSeq).toBe(1)
+    expect(await store.saveAsTemplate(createdAgentId, 'Reusable Agent', null, repository)).toBe(true)
+    expect(store.agentTemplates).toHaveLength(1)
+    await store.loadAgentTemplates(repository)
+    expect(store.lifecycle.templateStatus).toBe('ready')
+    const templateId = store.agentTemplates[0]!.id
+    const targetSlotId = fixture.pattern.slots[2]!.id
+    expect(await store.instantiateTemplate(templateId, targetSlotId, repository)).toBe(true)
+    expect(store.document?.pattern.slots[2]?.agentId).toBeTruthy()
+    expect(store.persistence.mutationSeq).toBe(2)
+  })
+
+  it('invalidates lifecycle ownership on dispose and blocks concurrent operations', async () => {
+    const fixture = createJourneyEditorDocumentFixture()
+    fixture.pattern.slots[1]!.agentId = null
+    const editorRepository = new InMemoryEditorRepository({ journeys: [fixture] })
+    const pending = deferred<RepositoryResult<CreateOrInstantiateAgentSuccess>>()
+    const createJourneyAgent = vi.fn(() => pending.promise)
+    const lifecycleRepository = {
+      listAgentTemplates: async () => ({ ok: true, value: [] } as const),
+      loadAgentTemplate: async () => { throw new Error('Unexpected Template load') },
+      createJourneyAgent,
+      saveAgentAsTemplate: async () => { throw new Error('Unexpected Template save') },
+      instantiateAgentTemplate: async () => { throw new Error('Unexpected Template instantiate') },
+      removeOccupiedSlot: async () => { throw new Error('Unexpected occupied Slot removal') },
+    } satisfies AgentLifecycleRepository
+    const store = useJourneyEditorStore()
+    await store.load(fixture.journey.id, 'agent', editorRepository)
+    const slotId = fixture.pattern.slots[1]!.id
+    const first = store.createAgent(slotId, lifecycleRepository)
+    expect(await store.createAgent(slotId, lifecycleRepository)).toBe(false)
+    expect(createJourneyAgent).toHaveBeenCalledOnce()
+    store.dispose()
+    pending.resolve({ ok: true, value: {
+      journey: fixture,
+      agent: createAgentWorkflowEditorDocumentFixture('research'),
+    } })
+    expect(await first).toBe(false)
+    expect(store.document).toBeNull()
+    expect(store.lifecycle.operationStatus).toBe('idle')
+    expect(store.agentTemplates).toEqual([])
+  })
+
+  it('resets lifecycle state when loading a new Journey identity', async () => {
+    const first = createJourneyEditorDocumentFixture()
+    const secondId = uuidSchema.parse('0195f076-b6e6-7ef0-98db-d721990f8998')
+    const second = journeyEditorDocumentSchema.parse({
+      ...createJourneyEditorDocumentFixture(),
+      journey: { ...createJourneyEditorDocumentFixture().journey, id: secondId, name: 'Second Journey' },
+    })
+    const repository = new InMemoryEditorRepository({ journeys: [first, second] })
+    const store = useJourneyEditorStore()
+    await store.load(first.journey.id, 'agent', repository)
+    store.lifecycle.operationStatus = 'error'
+    store.lifecycle.templateStatus = 'error'
+    store.lifecycle.error = { code: 'NETWORK_FAILED' }
+    await store.load(secondId, 'pattern', repository)
+    expect(store.lifecycle).toEqual({ templateStatus: 'idle', operationStatus: 'idle', error: null })
   })
 })

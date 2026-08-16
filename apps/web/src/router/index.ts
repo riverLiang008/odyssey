@@ -12,6 +12,7 @@ export function createAppRouter(history: RouterHistory = createWebHistory()) {
       component: AppShell,
       children: [
         { path: 'journeys', name: 'journeys', component: () => import('@/views/JourneyListView.vue') },
+        { path: 'journeys/new', name: 'journey-create', component: () => import('@/views/JourneyListView.vue') },
         { path: 'journeys/:journeyId', name: 'journey-editor', component: () => import('@/views/JourneyEditorView.vue') },
         { path: 'journeys/:journeyId/agents/:agentId', name: 'agent-workflow', component: () => import('@/views/AgentWorkflowView.vue') },
       ],

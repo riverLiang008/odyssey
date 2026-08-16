@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { uuidSchema, type UUID } from '@odyssey/schemas'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import AgentLibrary from './AgentLibrary.vue'
 import AgentSlot from './AgentSlot.vue'
@@ -47,7 +47,7 @@ describe('Journey editor presentational libraries', () => {
     const opener = globalThis.document.createElement('button')
     globalThis.document.body.append(opener)
     opener.focus()
-    const wrapper = mount(AgentSlotContextMenu, { props: { slotId: SLOT_ID }, attachTo: document.body })
+    const wrapper = mount(AgentSlotContextMenu, { props: { slotId: SLOT_ID, configured: true }, attachTo: document.body })
     expect(document.activeElement).toBe(wrapper.get('button').element)
     await wrapper.get('button').trigger('click')
     expect(wrapper.emitted('action')).toEqual([['open', SLOT_ID]])
@@ -71,7 +71,7 @@ describe('Journey editor presentational libraries', () => {
     const wrapper = mount(SystemCanvas, { props: { model } })
     expect(wrapper.text()).toContain('Agent unavailable')
     expect(wrapper.text()).toContain('Some canvas references are unavailable')
-    await wrapper.get('.agent-slot').trigger('click')
+    await wrapper.get('.agent-slot__select').trigger('click')
     expect(wrapper.emitted('selectSlot')).toEqual([[SLOT_ID]])
   })
 
@@ -116,6 +116,48 @@ describe('Journey editor presentational libraries', () => {
     await enabled.get('button').trigger('click')
     await enabled.get('button').trigger('contextmenu')
     expect(enabled.emitted('select')).toEqual([[SLOT_ID]])
-    expect(enabled.emitted('menu')).toEqual([[SLOT_ID]])
+    expect(enabled.emitted('menu')).toEqual([[SLOT_ID, { x: 0, y: 0 }]])
+  })
+
+  it('serializes typed drag payloads and blocks drag intents when disabled', async () => {
+    const model = { id: SLOT_ID, label: 'Agent Slot', topologyRole: null, order: null,
+      position: { x: 0, y: 0 }, selected: false, canReorder: false, canAssign: false,
+      assignment: 'configured', agent: { id: SLOT_ID, name: 'Research Agent', description: null,
+        revision: 1, updatedAt: '2026-08-14T00:00:00.000Z' } } as const
+    const setData = vi.fn()
+    const enabled = mount(AgentSlot, { props: { model } })
+    await enabled.get('button').trigger('dragstart', { dataTransfer: { setData } })
+    expect(enabled.emitted('dragStart')).toEqual([[{
+      version: 1, kind: 'assigned-agent', agentId: SLOT_ID, sourceSlotId: SLOT_ID,
+    }]])
+    expect(setData).toHaveBeenCalledOnce()
+
+    const disabled = mount(AgentSlot, { props: { model, disabled: true } })
+    await disabled.get('button').trigger('dragstart', { dataTransfer: { setData: vi.fn() } })
+    expect(disabled.emitted('dragStart')).toBeUndefined()
+  })
+
+  it('disables library choose and drag intents during lifecycle operations', async () => {
+    const pattern = mount(PatternTemplateLibrary, { props: { disabled: true } })
+    await pattern.get('button').trigger('click')
+    await pattern.get('button').trigger('dragstart', { dataTransfer: { setData: vi.fn() } })
+    expect(pattern.emitted('choose')).toBeUndefined()
+    expect(pattern.emitted('dragStart')).toBeUndefined()
+  })
+
+  it('exposes typed Linear Slot drag intents without detached arrow controls', async () => {
+    const secondId = uuidSchema.parse('0195f076-b6e6-7ef0-98db-777777777778')
+    const model = { kind: 'linear_sequence', name: 'Linear', diagnostics: [], routes: [], slots: [
+      { id: SLOT_ID, label: 'First', topologyRole: null, order: 0, position: { x: 100, y: 100 }, agent: null,
+        assignment: 'empty', selected: false, canAssign: true, canReorder: true },
+      { id: secondId, label: 'Second', topologyRole: null, order: 1, position: { x: 300, y: 100 }, agent: null,
+        assignment: 'empty', selected: false, canAssign: true, canReorder: true },
+    ] } as const
+    const wrapper = mount(SystemCanvas, { props: { model } })
+    const setData = vi.fn()
+    await wrapper.get('[aria-label="Drag Second to reorder"]').trigger('dragstart', { dataTransfer: { setData } })
+    expect(wrapper.emitted('reorderDragStart')).toEqual([[{ version: 1, kind: 'pattern-slot', slotId: secondId }]])
+    expect(setData).toHaveBeenCalledOnce()
+    expect(wrapper.find('.slot-order-controls').exists()).toBe(false)
   })
 })

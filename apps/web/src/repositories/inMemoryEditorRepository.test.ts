@@ -7,7 +7,7 @@ import {
 } from '@odyssey/schemas'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createInMemoryEditorRepositoryScenario } from './inMemoryEditorRepository'
+import { createInMemoryEditorRepositoryScenario, InMemoryEditorRepository } from './inMemoryEditorRepository'
 
 const JOURNEY_ID = '0195f076-b6e6-7ef0-98db-d721990f8800'
 const WORKSPACE_ID = '0195f076-b6e6-7ef0-98db-d721990f8000'
@@ -113,6 +113,18 @@ afterEach(() => {
 })
 
 describe('InMemoryEditorRepository', () => {
+  it('lists, creates and deletes Journey aggregates while preserving revision checks', async () => {
+    const journeyId = uuidSchema.parse('0195f076-b6e6-7ef0-98db-444444444444')
+    const repository = new InMemoryEditorRepository({ journeyIdFactory: () => journeyId, now: () => SAVED_TIME })
+    const created = await repository.createJourney({ name: 'Loop Journey', description: null, patternTemplateKey: 'diamond_loop' })
+    expect(created.ok && created.value.pattern.kind).toBe('diamond_loop')
+    const listed = await repository.listJourneys()
+    expect(listed.ok && listed.value).toHaveLength(1)
+    expect(await repository.deleteJourney({ journeyId, expectedRevision: 2 })).toMatchObject({ ok: false, error: { code: 'REVISION_CONFLICT' } })
+    expect(await repository.deleteJourney({ journeyId, expectedRevision: 1 })).toEqual({ ok: true, value: { journeyId } })
+    const empty = await repository.listJourneys()
+    expect(empty.ok && empty.value).toEqual([])
+  })
   it('returns deep-cloned documents from load', async () => {
     const { repository } = createScenario()
     const first = await repository.loadJourney(createJourneyDocument().journey.id)

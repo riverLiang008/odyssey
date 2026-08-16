@@ -1,8 +1,6 @@
 import {
   jsonObjectSchema,
-  patternTemplateKeySchema,
   uuidSchema,
-  type PatternTemplateKey,
   type UUID,
   type WorkflowNode,
 } from '@odyssey/schemas'
@@ -10,7 +8,6 @@ import {
 export const ODYSSEY_DRAG_MIME = 'application/x-odyssey-drag+json'
 
 export type OdysseyDragPayloadV1 =
-  | { version: 1; kind: 'pattern-template'; templateKey: PatternTemplateKey }
   | { version: 1; kind: 'agent-template'; templateId: UUID }
   | { version: 1; kind: 'assigned-agent'; agentId: UUID; sourceSlotId: UUID }
   | { version: 1; kind: 'pattern-slot'; slotId: UUID }
@@ -19,7 +16,7 @@ export type OdysseyDragPayloadV1 =
 
 export type PatternDragPayload = Extract<
   OdysseyDragPayloadV1,
-  { kind: 'pattern-template' | 'agent-template' | 'assigned-agent' | 'pattern-slot' }
+  { kind: 'agent-template' | 'assigned-agent' | 'pattern-slot' }
 >
 
 export type DragPayloadParseErrorCode =
@@ -62,13 +59,6 @@ export function parseOdysseyDragPayload(serialized: unknown): DragPayloadParseRe
   if (typeof value.kind !== 'string') return { ok: false, error: { code: 'UNKNOWN_KIND' } }
 
   switch (value.kind) {
-    case 'pattern-template': {
-      if (!hasExactKeys(value, ['version', 'kind', 'templateKey'])) return { ok: false, error: { code: 'PAYLOAD_INVALID' } }
-      const templateKey = patternTemplateKeySchema.safeParse(value.templateKey)
-      return templateKey.success
-        ? { ok: true, value: { version: 1, kind: value.kind, templateKey: templateKey.data } }
-        : { ok: false, error: { code: 'PAYLOAD_INVALID' } }
-    }
     case 'agent-template': {
       if (!hasExactKeys(value, ['version', 'kind', 'templateId'])) return { ok: false, error: { code: 'PAYLOAD_INVALID' } }
       const templateId = uuid(value.templateId)

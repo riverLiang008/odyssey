@@ -43,12 +43,12 @@ function cardinalityAndRoleIssues(pattern: PatternConfig): PatternTopologyIssue[
     }
     if (!allOrdersNull) issues.push({ code: 'SLOT_ORDER_INVALID' })
   } else {
-    const expectedRoles = ['entry', 'upper_branch', 'exit', 'lower_branch']
-    if (pattern.slots.length !== 4) issues.push({ code: 'SLOT_CARDINALITY_INVALID' })
-    if (expectedRoles.some((role) => roleCount(role) !== 1) || roles.some((role) => !expectedRoles.includes(role ?? ''))) {
+    if (pattern.slots.length < 2) issues.push({ code: 'SLOT_CARDINALITY_INVALID' })
+    if (roleCount('entry') !== 1 || roleCount('loop') !== pattern.slots.length - 1) {
       issues.push({ code: 'TOPOLOGY_ROLE_INVALID' })
     }
-    if (!allOrdersNull) issues.push({ code: 'SLOT_ORDER_INVALID' })
+    const orders = pattern.slots.map((slot) => slot.order).sort((left, right) => (left ?? -1) - (right ?? -1))
+    if (orders.some((order, index) => order !== index)) issues.push({ code: 'SLOT_ORDER_INVALID' })
   }
   return issues
 }

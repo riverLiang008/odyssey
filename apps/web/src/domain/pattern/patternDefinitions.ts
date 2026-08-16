@@ -35,9 +35,9 @@ export const PATTERN_DEFINITIONS = {
   diamond_loop: {
     kind: 'diamond_loop',
     templateKey: 'diamond_loop',
-    name: 'Diamond loop',
+    name: 'Circular loop',
     initialSlotCount: 4,
-    supportedOperations: ASSIGNMENT_OPERATIONS,
+    supportedOperations: [...ASSIGNMENT_OPERATIONS, 'add_slot', 'remove_slot', 'reorder_slot'],
   },
   linear_sequence: {
     kind: 'linear_sequence',
@@ -54,4 +54,3 @@ export const PATTERN_DEFINITIONS = {
     supportedOperations: ASSIGNMENT_OPERATIONS,
   },
 } as const satisfies Record<PatternKind, PatternDefinition>
-

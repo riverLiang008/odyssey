@@ -145,6 +145,18 @@ describe('Pattern Slot commands', () => {
     expectFiniteCompletePresentation(removed)
   })
 
+  it('inserts a Linear Slot relative to a stable Slot identity', () => {
+    const input = instantiatePattern('linear_sequence', deterministicFactory())
+    const anchor = input.slots[1]!
+    const added = expectSuccess(addSlot(input, 'Inserted stage', deterministicFactory(300), {
+      slotId: anchor.id, placement: 'before',
+    }))
+    expect(added.slots[1]?.label).toBe('Inserted stage')
+    expect(added.slots[2]?.id).toBe(anchor.id)
+    expect(added.slots.map((slot) => slot.order)).toEqual([0, 1, 2, 3, 4])
+    expectFiniteCompletePresentation(added)
+  })
+
   it('reorders Linear Slot identity and assignment rather than exchanging Agents', () => {
     let input = instantiatePattern('linear_sequence', deterministicFactory())
     const movedSlotId = input.slots[0]!.id
@@ -184,10 +196,6 @@ describe('Pattern Slot commands', () => {
   })
 
   it('rejects unsupported, immutable, occupied, cardinality, label, and reorder failures', () => {
-    const diamond = instantiatePattern('diamond_loop', deterministicFactory())
-    expectFailure(addSlot(diamond, 'No', deterministicFactory(100)), 'OPERATION_NOT_SUPPORTED')
-    expectFailure(reorderSlot(diamond, diamond.slots[0]!.id, 1, deterministicFactory(100)), 'OPERATION_NOT_SUPPORTED')
-
     const hub = instantiatePattern('hub_and_spoke', deterministicFactory())
     const hubSlot = hub.slots.find((slot) => slot.topologyRole === 'hub')!
     expectFailure(removeSlot(hub, hubSlot.id, deterministicFactory(100)), 'IMMUTABLE_TOPOLOGY_ROLE')
@@ -210,6 +218,26 @@ describe('Pattern Slot commands', () => {
     minimumLinear.slots = minimumLinear.slots.slice(0, 1)
     minimumLinear.routes = [{ ...minimumLinear.routes[0]!, sourceSlotId: minimumLinear.slots[0]!.id, target: { type: 'journey_end' } }]
     expectFailure(removeSlot(minimumLinear, minimumLinear.slots[0]!.id, deterministicFactory(100)), 'CARDINALITY_VIOLATION')
+  })
+
+  it('adds, reorders, and removes Circular Loop Slots while preserving one entry and a closed cycle', () => {
+    const input = instantiatePattern('diamond_loop', deterministicFactory())
+    const entryId = input.slots.find((slot) => slot.topologyRole === 'entry')!.id
+    const added = expectSuccess(addSlot(input, 'Stage 5', deterministicFactory(100), { slotId: input.slots[1]!.id, placement: 'after' }))
+    expect(added.slots).toHaveLength(5)
+    expect(added.routes).toHaveLength(5)
+    expect(added.slots.filter((slot) => slot.topologyRole === 'entry').map((slot) => slot.id)).toEqual([entryId])
+    expect(added.slots.map((slot) => slot.order)).toEqual([0, 1, 2, 3, 4])
+
+    const reordered = expectSuccess(reorderSlot(added, added.slots[4]!.id, 1, deterministicFactory(200)))
+    expect(reordered.slots.find((slot) => slot.id === entryId)?.topologyRole).toBe('entry')
+    expect(reordered.routes).toHaveLength(5)
+
+    const removedEntry = expectSuccess(removeSlot(reordered, entryId, deterministicFactory(300)))
+    expect(removedEntry.slots).toHaveLength(4)
+    expect(removedEntry.slots.filter((slot) => slot.topologyRole === 'entry')).toHaveLength(1)
+    expect(removedEntry.routes).toHaveLength(4)
+    expect(validatePatternConfig(removedEntry).ok).toBe(true)
   })
 
   it('rejects an ID-colliding factory without exposing a partial candidate', () => {

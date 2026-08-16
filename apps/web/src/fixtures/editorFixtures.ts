@@ -58,20 +58,26 @@ export function createPatternConfigFixture(
     id: SLOT_IDS[index],
     topologyRole:
       kind === 'hub_and_spoke' ? (index === 0 ? 'hub' : 'spoke') :
-      kind === 'diamond_loop' ? (index === 0 ? 'entry' : 'branch') : null,
+      kind === 'diamond_loop' ? (index === 0 ? 'entry' : 'loop') :
+      kind === 'solo_component' ? 'solo' : null,
     label: `Agent ${index + 1}`,
-    order: index,
+    order: kind === 'linear_sequence' || kind === 'diamond_loop' ? index : null,
     agentId: agentIds[index] ?? null,
     configuration: {},
   }))
-  const routes = slots.map((slot, index) => ({
-    id: ROUTE_IDS[index],
-    sourceSlotId: slot.id,
-    target:
-      index + 1 < slots.length
-        ? { type: 'slot' as const, slotId: slots[index + 1]!.id }
-        : { type: 'journey_end' as const },
-  }))
+  const routes = kind === 'solo_component' ? [] : kind === 'hub_and_spoke'
+    ? slots.slice(1).map((slot, index) => ({
+        id: ROUTE_IDS[index], sourceSlotId: slots[0]!.id,
+        target: { type: 'slot' as const, slotId: slot.id },
+      }))
+    : slots.map((slot, index) => ({
+        id: ROUTE_IDS[index], sourceSlotId: slot.id,
+        target: kind === 'diamond_loop'
+          ? { type: 'slot' as const, slotId: slots[(index + 1) % slots.length]!.id }
+          : index + 1 < slots.length
+            ? { type: 'slot' as const, slotId: slots[index + 1]!.id }
+            : { type: 'journey_end' as const },
+      }))
 
   return patternConfigSchema.parse({
     schemaVersion: '1.0.0',

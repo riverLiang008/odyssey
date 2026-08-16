@@ -1,5 +1,17 @@
-import { existsSync } from 'node:fs'
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { spawn, spawnSync } from 'node:child_process'
+import { createConnection, createServer } from 'node:net'
+import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
@@ -18,8 +30,17 @@ const postgresPort = useLocalCompose ? '55432' : '5432'
 const databaseUrl =
   process.env.ODYSSEY_DATABASE_URL ??
   `postgresql+asyncpg://odyssey:odyssey@127.0.0.1:${postgresPort}/odyssey`
+const apiPort = Number.parseInt(process.env.ODYSSEY_DEV_API_PORT ?? '8000', 10)
+const webPort = Number.parseInt(process.env.ODYSSEY_DEV_WEB_PORT ?? '5173', 10)
 const children = new Set()
+const runtimeDir = join(rootDir, '.odyssey-dev')
+const stateFile = join(runtimeDir, 'dev-all.json')
+const stateVersion = 1
 let stopping = false
+let controlServer
+let controlToken
+let ownsStateFile = false
+let infrastructureStarted = false
 
 function commandInvocation(command, args) {
   if (command === 'pnpm' && process.env.npm_execpath) {
@@ -89,6 +110,138 @@ function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
+function processIsAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function readState() {
+  if (!existsSync(stateFile)) return null
+  try {
+    const state = JSON.parse(readFileSync(stateFile, 'utf8'))
+    if (state.version !== stateVersion || state.rootDir !== rootDir) return null
+    return state
+  } catch {
+    return null
+  }
+}
+
+function writeState(extra = {}) {
+  mkdirSync(runtimeDir, { recursive: true })
+  const nextState = {
+    version: stateVersion,
+    rootDir,
+    orchestratorPid: process.pid,
+    controlPort: controlServer?.address()?.port,
+    controlToken,
+    childPids: [...children].map((child) => child.pid).filter(Boolean),
+    startedAt: new Date().toISOString(),
+    ...extra,
+  }
+  const temporary = `${stateFile}.${process.pid}.tmp`
+  writeFileSync(temporary, `${JSON.stringify(nextState, null, 2)}\n`, 'utf8')
+  renameSync(temporary, stateFile)
+}
+
+function removeState() {
+  const state = readState()
+  if (ownsStateFile && (!state || state.orchestratorPid === process.pid)) {
+    unlinkSync(stateFile)
+  }
+  try {
+    rmSync(runtimeDir, { recursive: false })
+  } catch {
+    // Keep the directory when another diagnostic artifact exists.
+  }
+}
+
+function claimStateFile() {
+  mkdirSync(runtimeDir, { recursive: true })
+  try {
+    const descriptor = openSync(stateFile, 'wx')
+    closeSync(descriptor)
+    ownsStateFile = true
+  } catch (error) {
+    if (error?.code === 'EEXIST') {
+      throw new Error('Another dev:all command claimed the Odyssey runtime state.')
+    }
+    throw error
+  }
+}
+
+function portIsAvailable(port) {
+  return new Promise((resolve) => {
+    const probe = createServer()
+    probe.unref()
+    probe.once('error', () => resolve(false))
+    probe.listen({ host: '127.0.0.1', port, exclusive: true }, () => {
+      probe.close(() => resolve(true))
+    })
+  })
+}
+
+async function assertSingleInstance() {
+  for (const [name, port] of [
+    ['ODYSSEY_DEV_API_PORT', apiPort],
+    ['ODYSSEY_DEV_WEB_PORT', webPort],
+  ]) {
+    if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+      throw new Error(`${name} must be a valid TCP port.`)
+    }
+  }
+  const state = readState()
+  if (state && processIsAlive(state.orchestratorPid)) {
+    throw new Error(
+      `Odyssey dev services are already running under PID ${state.orchestratorPid}. ` +
+        'Run `pnpm dev:down` first.',
+    )
+  }
+  if (existsSync(stateFile)) unlinkSync(stateFile)
+
+  for (const [port, service] of [
+    [apiPort, 'API'],
+    [webPort, 'Web'],
+  ]) {
+    if (!(await portIsAvailable(port))) {
+      throw new Error(
+        `${service} port ${port} is already in use by an unmanaged process. ` +
+          'Identify its PID before stopping it; dev:all will not stack another instance.',
+      )
+    }
+  }
+}
+
+function startControlServer() {
+  controlToken = randomUUID()
+  controlServer = createServer((socket) => {
+    socket.setEncoding('utf8')
+    socket.once('data', (payload) => {
+      let request
+      try {
+        request = JSON.parse(payload)
+      } catch {
+        socket.end('{"ok":false}\n')
+        return
+      }
+      if (request.token !== controlToken || request.command !== 'shutdown') {
+        socket.end('{"ok":false}\n')
+        return
+      }
+      socket.end('{"ok":true}\n')
+      void shutdown(0)
+    })
+  })
+  return new Promise((resolve, reject) => {
+    controlServer.once('error', reject)
+    controlServer.listen(0, '127.0.0.1', resolve)
+  })
+}
+
 async function ensureDockerIsReady() {
   if (dockerIsReady()) return
 
@@ -138,14 +291,29 @@ async function shutdown(exitCode = 0) {
   console.log('\nStopping Web and API...')
   for (const child of children) terminateProcessTree(child)
   children.clear()
-  console.log('PostgreSQL and MinIO are still running. Use `pnpm dev:down` to stop them.')
+  controlServer?.close()
+  if (infrastructureStarted) {
+    console.log('Stopping PostgreSQL and MinIO...')
+    spawnSync('docker', ['compose', ...composeFiles, 'down'], {
+      cwd: rootDir,
+      env: process.env,
+      stdio: 'inherit',
+      windowsHide: true,
+    })
+  }
+  removeState()
   process.exit(exitCode)
 }
 
 async function startAll() {
+  await assertSingleInstance()
+  claimStateFile()
+  await startControlServer()
+  writeState()
   await ensureDockerIsReady()
   console.log('Starting PostgreSQL and MinIO...')
   await run('docker', ['compose', ...composeFiles, 'up', '-d', '--wait'])
+  infrastructureStarted = true
 
   console.log(`Applying database migrations on PostgreSQL port ${postgresPort}...`)
   await run('uv', ['run', 'alembic', 'upgrade', 'head'], {
@@ -153,23 +321,74 @@ async function startAll() {
     env: { ...process.env, ODYSSEY_DATABASE_URL: databaseUrl },
   })
 
-  console.log('Starting API and Web...')
-  start('pnpm', ['--filter', '@odyssey/web', 'dev', '--host', '127.0.0.1'], { cwd: rootDir })
-  start('uv', ['run', 'uvicorn', 'odyssey_api.main:app', '--reload'], {
+  console.log('Bootstrapping the configured development Workspace...')
+  await run('uv', ['run', 'python', '-m', 'odyssey_api.bootstrap'], {
     cwd: apiDir,
     env: { ...process.env, ODYSSEY_DATABASE_URL: databaseUrl },
   })
 
+  console.log('Starting API and Web...')
+  start(
+    'pnpm',
+    ['--filter', '@odyssey/web', 'dev', '--host', '127.0.0.1', '--port', String(webPort)],
+    { cwd: rootDir },
+  )
+  start('uv', [
+    'run',
+    'uvicorn',
+    'odyssey_api.main:app',
+    '--host',
+    '127.0.0.1',
+    '--port',
+    String(apiPort),
+  ], {
+    cwd: apiDir,
+    env: { ...process.env, ODYSSEY_DATABASE_URL: databaseUrl },
+  })
+  writeState()
+
   console.log('\nOdyssey is starting:')
-  console.log('  Web:       http://127.0.0.1:5173')
-  console.log('  API:       http://127.0.0.1:8000/api/v1/health')
-  console.log('  API docs:  http://127.0.0.1:8000/docs')
+  console.log(`  Web:       http://127.0.0.1:${webPort}`)
+  console.log(`  API:       http://127.0.0.1:${apiPort}/api/v1/health`)
+  console.log(`  API docs:  http://127.0.0.1:${apiPort}/docs`)
   console.log('  MinIO:     http://127.0.0.1:9001')
-  console.log('\nPress Ctrl+C to stop Web and API.')
+  console.log('\nPress Ctrl+C or run `pnpm dev:down` in another terminal to stop everything.')
 }
 
 async function stopInfrastructure() {
-  console.log('Stopping PostgreSQL and MinIO...')
+  const state = readState()
+  if (state && processIsAlive(state.orchestratorPid) && state.controlPort && state.controlToken) {
+    await new Promise((resolve, reject) => {
+      const socket = createConnection({ host: '127.0.0.1', port: state.controlPort })
+      socket.setTimeout(5_000)
+      socket.once('connect', () => {
+        socket.write(JSON.stringify({ command: 'shutdown', token: state.controlToken }))
+      })
+      socket.once('data', () => {
+        socket.end()
+        resolve()
+      })
+      socket.once('timeout', () => reject(new Error('Timed out contacting dev:all.')))
+      socket.once('error', reject)
+    })
+    for (let attempt = 0; attempt < 50 && existsSync(stateFile); attempt += 1) {
+      await delay(100)
+    }
+    if (existsSync(stateFile)) {
+      throw new Error('dev:all did not finish shutting down within 5 seconds.')
+    }
+    console.log('Odyssey Web, API, PostgreSQL, and MinIO are stopped.')
+    return
+  }
+
+  if (state?.childPids?.some(processIsAlive)) {
+    throw new Error(
+      'Found a stale state file with live child PIDs but no reachable orchestrator. ' +
+        `Inspect ${stateFile} and the recorded commands before stopping them manually.`,
+    )
+  }
+  if (existsSync(stateFile)) unlinkSync(stateFile)
+  console.log('No managed Web/API instance is running; stopping infrastructure...')
   await run('docker', ['compose', ...composeFiles, 'down'])
 }
 

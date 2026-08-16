@@ -4,6 +4,8 @@ import type {
   CreateJourneyAgentInput,
   CreateOrInstantiateAgentSuccess,
   InstantiateAgentTemplateInput,
+  RemoveOccupiedSlotInput,
+  RemoveOccupiedSlotSuccess,
   JourneyEditorDocument,
   RepositoryResult,
   SaveAgentAsTemplateInput,
@@ -13,6 +15,10 @@ import type {
   SaveJourneyInput,
   SaveJourneySuccess,
   UUID,
+  JourneySummary,
+  CreateJourneyInput,
+  DeleteJourneyInput,
+  DeleteJourneySuccess,
 } from '@odyssey/schemas'
 
 export interface RepositoryOperationOptions {
@@ -39,13 +45,15 @@ export interface EditorRepository {
   ): Promise<RepositoryResult<SaveAgentWorkflowSuccess>>
 }
 
+export interface JourneyLifecycleRepository {
+  listJourneys(options?: RepositoryOperationOptions): Promise<RepositoryResult<JourneySummary[]>>
+  createJourney(input: CreateJourneyInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<JourneyEditorDocument>>
+  deleteJourney(input: DeleteJourneyInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<DeleteJourneySuccess>>
+}
+
 export interface AgentLifecycleRepository {
-  listAgentTemplates(
-    workspaceId: UUID,
-    options?: RepositoryOperationOptions,
-  ): Promise<RepositoryResult<AgentTemplate[]>>
+  listAgentTemplates(options?: RepositoryOperationOptions): Promise<RepositoryResult<AgentTemplate[]>>
   loadAgentTemplate(
-    workspaceId: UUID,
     templateId: UUID,
     options?: RepositoryOperationOptions,
   ): Promise<RepositoryResult<AgentTemplate>>
@@ -61,6 +69,10 @@ export interface AgentLifecycleRepository {
     input: InstantiateAgentTemplateInput,
     options?: RepositoryOperationOptions,
   ): Promise<RepositoryResult<CreateOrInstantiateAgentSuccess>>
+  removeOccupiedSlot(
+    input: RemoveOccupiedSlotInput,
+    options?: RepositoryOperationOptions,
+  ): Promise<RepositoryResult<RemoveOccupiedSlotSuccess>>
 }
 
-export type OdysseyEditorRepository = EditorRepository & AgentLifecycleRepository
+export type OdysseyEditorRepository = EditorRepository & AgentLifecycleRepository & JourneyLifecycleRepository

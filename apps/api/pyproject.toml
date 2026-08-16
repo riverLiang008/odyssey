@@ -31,6 +31,10 @@ select = ["E", "F", "I", "UP", "B", "ASYNC"]
 addopts = "-q"
 testpaths = ["tests"]
 asyncio_mode = "auto"
+asyncio_default_test_loop_scope = "session"
+markers = [
+  "integration: requires the local PostgreSQL service",
+]
 
 [build-system]
 requires = ["hatchling"]

@@ -99,21 +99,26 @@ export function addSlot(
   pattern: PatternConfig,
   label: string,
   idFactory: Pick<PatternIdFactory, 'slotId' | 'routeId'>,
+  anchor?: { readonly slotId: UUID; readonly placement: 'before' | 'after' },
 ): PatternCommandResult {
   const invalid = validated(pattern) ?? unsupported(pattern, 'add_slot')
   if (invalid) return invalid
   if (label.trim().length === 0) return failure({ code: 'INVALID_SLOT_LABEL' })
 
   const candidate = structuredClone(pattern)
+  const anchorIndex = anchor ? slotIndex(candidate, anchor.slotId) : -1
+  if (anchor && anchorIndex < 0) return failure({ code: 'SLOT_NOT_FOUND', slotId: anchor.slotId })
+  const insertionIndex = anchorIndex < 0 ? candidate.slots.length : anchorIndex + (anchor?.placement === 'after' ? 1 : 0)
   const newSlot: PatternSlot = {
     id: idFactory.slotId(),
-    topologyRole: candidate.kind === 'hub_and_spoke' ? 'spoke' : null,
+    topologyRole: candidate.kind === 'hub_and_spoke' ? 'spoke' : candidate.kind === 'diamond_loop' ? 'loop' : null,
     label: label.trim(),
-    order: candidate.kind === 'linear_sequence' ? candidate.slots.length : null,
+    order: candidate.kind === 'linear_sequence' || candidate.kind === 'diamond_loop' ? insertionIndex : null,
     agentId: null,
     configuration: {},
   }
-  candidate.slots.push(newSlot)
+  candidate.slots.splice(insertionIndex, 0, newSlot)
+  if (candidate.kind === 'linear_sequence' || candidate.kind === 'diamond_loop') candidate.slots.forEach((candidateSlot, order) => { candidateSlot.order = order })
   return reconcileCandidate(candidate, idFactory)
 }
 
@@ -132,13 +137,17 @@ export function removeSlot(
     return failure({ code: 'IMMUTABLE_TOPOLOGY_ROLE', slotId })
   }
   if (slot.agentId !== null) return failure({ code: 'SLOT_OCCUPIED', slotId })
-  if ((pattern.slots.length <= 2 && pattern.kind === 'hub_and_spoke') || pattern.slots.length <= 1) {
+  if ((pattern.slots.length <= 2 && (pattern.kind === 'hub_and_spoke' || pattern.kind === 'diamond_loop')) || pattern.slots.length <= 1) {
     return failure({ code: 'CARDINALITY_VIOLATION', kind: pattern.kind })
   }
 
   const candidate = structuredClone(pattern)
   candidate.slots.splice(index, 1)
-  if (candidate.kind === 'linear_sequence') {
+  if (candidate.kind === 'diamond_loop' && slot.topologyRole === 'entry') {
+    const successorIndex = index < candidate.slots.length ? index : 0
+    candidate.slots[successorIndex]!.topologyRole = 'entry'
+  }
+  if (candidate.kind === 'linear_sequence' || candidate.kind === 'diamond_loop') {
     candidate.slots
       .sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
       .forEach((candidateSlot, order) => { candidateSlot.order = order })

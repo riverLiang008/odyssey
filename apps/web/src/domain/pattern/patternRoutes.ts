@@ -38,12 +38,13 @@ export function deriveRouteEndpoints(kind: PatternKind, slots: readonly PatternS
       .map((spoke) => ({ sourceSlotId: hub.id, target: { type: 'slot', slotId: spoke.id } }))
   }
 
-  const roleSequence = ['entry', 'upper_branch', 'exit', 'lower_branch'] as const
-  const roleSlots = roleSequence.map((role) => slotWithRole(slots, role))
-  if (roleSlots.some((slot) => slot === undefined)) return []
-  return roleSlots.map((slot, index) => ({
-    sourceSlotId: slot!.id,
-    target: { type: 'slot', slotId: roleSlots[(index + 1) % roleSlots.length]!.id },
+  const ordered = [...slots].sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
+  const entryIndex = ordered.findIndex((slot) => slot.topologyRole === 'entry')
+  if (entryIndex < 0) return []
+  const cycle = [...ordered.slice(entryIndex), ...ordered.slice(0, entryIndex)]
+  return cycle.map((slot, index) => ({
+    sourceSlotId: slot.id,
+    target: { type: 'slot', slotId: cycle[(index + 1) % cycle.length]!.id },
   }))
 }
 

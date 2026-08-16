@@ -24,6 +24,15 @@ function errorCopy(error: RepositoryError | null | undefined): { title: string; 
       return { title: `${props.subject} request was cancelled`, detail: 'Try loading the page again.' }
     case 'NOT_FOUND':
       return { title: `${props.subject} not found`, detail: 'It may have been removed or the link may be incorrect.' }
+    case 'REQUEST_INVALID':
+    case 'VALIDATION_FAILED':
+      return { title: `${props.subject} request is invalid`, detail: 'Review the current configuration and try again.' }
+    case 'STATE_CONFLICT':
+      return { title: `${props.subject} state changed`, detail: 'Reload the latest state before continuing.' }
+    case 'LEGACY_PATTERN_UNSUPPORTED':
+      return { title: `${props.subject} uses an unsupported Pattern`, detail: 'Create a new Journey with a current Pattern.' }
+    case 'CURRENT_WORKSPACE_UNAVAILABLE':
+      return { title: 'Workspace is unavailable', detail: 'Restart the local API after configuring the development Workspace.' }
     case undefined:
       return { title: `Unable to load ${props.subject}`, detail: 'Try loading the page again.' }
   }

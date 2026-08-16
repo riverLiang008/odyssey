@@ -1,19 +1,40 @@
 <script setup lang="ts">
-import { computed, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
+import { uuidSchema, type UUID } from '@odyssey/schemas'
 
 import { useEditorRepository } from '@/app/editorRepository'
 import RouteBoundary from '@/app/RouteBoundary.vue'
-import { journeyTabs, parseJourneyRoute, routeLocations, type JourneyTab } from '@/router/routeContracts'
+import { createSystemCanvasViewModel } from '@/canvas/system'
+import { cryptoPatternIdFactory } from '@/domain/pattern'
+import { routeLocations, journeyTabs, parseJourneyRoute, type JourneyTab } from '@/router/routeContracts'
 import { useJourneyEditorStore } from '@/stores/journeyEditor'
+import { ODYSSEY_DRAG_MIME, parseOdysseyDragPayload, type OdysseyDragPayloadV1, type PatternDragPayload } from '@/canvas/interaction'
+import AgentLibrary from '@/features/journey-editor/AgentLibrary.vue'
+import AgentSlotContextMenu from '@/features/journey-editor/AgentSlotContextMenu.vue'
+import CurrentPatternSummary from '@/features/journey-editor/CurrentPatternSummary.vue'
+import SystemCanvas from '@/features/journey-editor/SystemCanvas.vue'
+import SaveAgentTemplateDialog from '@/features/journey-editor/SaveAgentTemplateDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
 const repository = useEditorRepository()
 const store = useJourneyEditorStore()
-const { document, persistence, session } = storeToRefs(store)
+const { agentTemplates, document, lifecycle, persistence, session } = storeToRefs(store)
 const identity = computed(() => parseJourneyRoute(route.params.journeyId, route.query.tab))
+const canvasModel = computed(() => document.value
+  ? createSystemCanvasViewModel(document.value, session.value.selectedSlotId)
+  : null)
+const selectedSlot = computed(() => canvasModel.value?.slots.find((slot) => slot.id === session.value.selectedSlotId) ?? null)
+const interactionFeedback = computed(() => session.value.interaction.type === 'dragging' ? session.value.interaction.feedback : null)
+const overSlotId = computed(() => session.value.interaction.type === 'dragging' && session.value.interaction.over?.kind === 'agent-slot'
+  ? session.value.interaction.over.slotId : null)
+const overOrder = computed(() => session.value.interaction.type === 'dragging' && session.value.interaction.over?.kind === 'linear-order'
+  ? session.value.interaction.over.targetOrder : null)
+const templateDraft = reactive({ name: '', description: '' })
+const duplicateDraft = reactive({ name: '', targetSlotId: '' })
+const removalTemplateDraft = reactive({ name: '', description: '' })
 
 watch(identity, (next) => {
   if (!next) {
@@ -21,10 +42,15 @@ watch(identity, (next) => {
   } else if (store.document?.journey.id === next.journeyId && store.persistence.loadStatus === 'ready') {
     store.setActiveTab(next.tab)
   } else {
-    void store.load(next.journeyId, next.tab, repository)
+    void store.load(next.journeyId, next.tab, repository).then(() => store.loadAgentTemplates(repository))
   }
 }, { immediate: true })
-onUnmounted(() => store.dispose())
+function keydown(event: globalThis.KeyboardEvent) { if (event.key === 'Escape') store.cancelInteraction() }
+onMounted(() => globalThis.document?.addEventListener('keydown', keydown))
+onUnmounted(() => {
+  globalThis.document?.removeEventListener('keydown', keydown)
+  store.dispose()
+})
 
 function selectTab(tab: JourneyTab) {
   const current = identity.value
@@ -35,21 +61,183 @@ function selectTab(tab: JourneyTab) {
 
 function retry() {
   const current = identity.value
-  if (current) void store.load(current.journeyId, current.tab, repository)
+  if (current) void store.load(current.journeyId, current.tab, repository).then(() => store.loadAgentTemplates(repository))
+}
+
+function beginDrag(payload: PatternDragPayload) { store.beginDrag(payload) }
+function dragOverSlot(slotId: UUID) { store.evaluateDrag({ kind: 'agent-slot', slotId }) }
+function dragOverOrder(targetOrder: number) {
+  if (session.value.interaction.type !== 'dragging') return
+  if (session.value.interaction.payload.kind === 'pattern-slot') {
+    store.evaluateDrag({ kind: 'linear-order', targetOrder })
+    return
+  }
+  const target = canvasModel.value?.slots.find((slot) => slot.order === targetOrder)
+  if (target) dragOverSlot(target.id)
+}
+function dropOnSlot(payload: PatternDragPayload, slotId: UUID) {
+  store.beginDrag(payload)
+  store.evaluateDrag({ kind: 'agent-slot', slotId })
+  void store.dispatchDrop(repository, cryptoPatternIdFactory)
+}
+
+function isPatternPayload(payload: OdysseyDragPayloadV1): payload is PatternDragPayload {
+  return payload.kind === 'agent-template'
+    || payload.kind === 'assigned-agent' || payload.kind === 'pattern-slot'
+}
+
+function dropOnCanvas(event: globalThis.DragEvent) {
+  if (lifecycle.value.operationStatus === 'loading') return
+  const parsed = parseOdysseyDragPayload(event.dataTransfer?.getData(ODYSSEY_DRAG_MIME) ?? '')
+  if (!parsed.ok) { store.rejectDragBoundary(parsed.error.code); return }
+  if (!isPatternPayload(parsed.value)) { store.rejectDrop('TARGET_KIND_UNSUPPORTED'); return }
+  store.beginDrag(parsed.value)
+  store.evaluateDrag({ kind: 'system-canvas' })
+  void store.dispatchDrop(repository, cryptoPatternIdFactory)
+}
+
+function reorder(slotId: UUID, targetOrder: number) {
+  store.beginDrag({ version: 1, kind: 'pattern-slot', slotId })
+  store.evaluateDrag({ kind: 'linear-order', targetOrder })
+  void store.dispatchDrop(repository, cryptoPatternIdFactory)
+}
+
+function dropOrder(payload: Extract<PatternDragPayload, { kind: 'pattern-slot' }>, targetOrder: number) {
+  store.beginDrag(payload)
+  store.evaluateDrag({ kind: 'linear-order', targetOrder })
+  void store.dispatchDrop(repository, cryptoPatternIdFactory)
+}
+
+function chooseTemplate(templateId: UUID) {
+  if (lifecycle.value.operationStatus === 'loading') return
+  if (session.value.interaction.type === 'choosing-agent' && session.value.interaction.mode === 'replace') {
+    store.stageAgentReplacement(session.value.interaction.slotId, templateId)
+    return
+  }
+  const slot = selectedSlot.value
+  if (slot?.assignment === 'empty') void store.instantiateTemplate(templateId, slot.id, repository)
+}
+
+function openMenu(slotId: UUID, anchor: { x: number; y: number }) { store.openMenu(slotId, anchor) }
+
+function menuAction(action: 'open' | 'save-template' | 'replace' | 'duplicate' | 'add-before' | 'add-after' | 'move-earlier' | 'move-later' | 'remove-slot' | 'remove', slotId: UUID) {
+  if (lifecycle.value.operationStatus === 'loading') return
+  const agentId = document.value?.pattern.slots.find((slot) => slot.id === slotId)?.agentId
+  if (action === 'open' && identity.value && agentId) void router.push(routeLocations.agentWorkflow(identity.value.journeyId, agentId))
+  if (action === 'remove') store.unassignAgent(slotId)
+  if (action === 'save-template') {
+    templateDraft.name = ''
+    templateDraft.description = ''
+    store.stageTemplateName(slotId)
+  }
+  const slot = canvasModel.value?.slots.find((candidate) => candidate.id === slotId)
+  if (action === 'move-earlier' && slot?.order !== null && slot?.order !== undefined) reorder(slotId, slot.order - 1)
+  if (action === 'move-later' && slot?.order !== null && slot?.order !== undefined) reorder(slotId, slot.order + 1)
+  if ((action === 'add-before' || action === 'add-after') && document.value) {
+    const label = document.value.pattern.kind === 'hub_and_spoke'
+      ? `Spoke ${document.value.pattern.slots.length}`
+      : `Stage ${document.value.pattern.slots.length + 1}`
+    store.addSlot(label, cryptoPatternIdFactory, { slotId, placement: action === 'add-before' ? 'before' : 'after' })
+    store.cancelInteraction()
+  }
+  if (action === 'remove-slot' && slot) {
+    if (slot.assignment === 'configured') {
+      removalTemplateDraft.name = ''
+      removalTemplateDraft.description = ''
+      store.stageSlotRemoval(slotId)
+    }
+    else { store.removeSlot(slotId, cryptoPatternIdFactory); store.cancelInteraction() }
+  }
+  if (action === 'replace') {
+    store.chooseAgent(slotId, 'replace')
+    selectTab('agent')
+  }
+  if (action === 'duplicate') {
+    duplicateDraft.name = ''
+    duplicateDraft.targetSlotId = ''
+    store.stageDuplicate(slotId)
+  }
+  if (action === 'open' || action === 'remove') store.cancelInteraction()
+}
+
+async function selectSlot(slotId: UUID) {
+  const slot = canvasModel.value?.slots.find((candidate) => candidate.id === slotId)
+  if (!slot || lifecycle.value.operationStatus === 'loading') return
+  store.selectSlot(slotId)
+  if (slot.assignment !== 'empty' || !identity.value) return
+  const agentId = await store.createAgent(slot.id, repository)
+  if (agentId) await router.push(routeLocations.agentWorkflow(identity.value.journeyId, agentId))
+}
+
+function requestDuplicate() {
+  if (!duplicateDraft.name.trim() || !duplicateDraft.targetSlotId) return
+  const targetSlotId = uuidSchema.safeParse(duplicateDraft.targetSlotId)
+  if (!targetSlotId.success) return
+  store.updateDuplicateName(duplicateDraft.name)
+  store.updateDuplicateTarget(targetSlotId.data)
+  store.requestDuplicate()
+}
+
+function removeOccupiedSlot(saveAsTemplate: boolean) {
+  if (session.value.interaction.type !== 'confirming-slot-removal') return
+  if (saveAsTemplate && !removalTemplateDraft.name.trim()) return
+  const { slotId, agentId } = session.value.interaction
+  const action = saveAsTemplate
+    ? { type: 'save_as_template_and_discard' as const, template: { name: removalTemplateDraft.name.trim(), description: removalTemplateDraft.description.trim() || null } }
+    : { type: 'discard' as const }
+  void store.removeOccupiedSlot(slotId, agentId, action, repository)
+}
+
+async function saveTemplate() {
+  const slotId = session.value.interaction.type === 'naming-template' ? session.value.interaction.slotId : null
+  const agent = canvasModel.value?.slots.find((slot) => slot.id === slotId)?.agent
+  if (!agent || !templateDraft.name.trim()) return
+  if (await store.saveAsTemplate(agent.id, templateDraft.name, templateDraft.description.trim() || null, repository)) {
+    templateDraft.name = ''; templateDraft.description = ''
+  }
 }
 </script>
 
 <template>
   <section v-if="!identity" class="proof-page"><h1>Invalid Journey</h1><RouterLink to="/journeys">Return to Journeys</RouterLink></section>
   <RouteBoundary v-else-if="persistence.loadStatus !== 'ready'" :status="persistence.loadStatus" subject="Journey" :error="persistence.error" :back-to="routeLocations.journeys()" back-label="Return to Journeys" @retry="retry" />
-  <section v-else-if="document" class="editor-page journey-editor-page">
+  <section v-else-if="document && canvasModel" class="editor-page journey-editor-page">
     <nav class="editor-tabs" aria-label="Journey sections">
       <button v-for="tab in journeyTabs" :key="tab" type="button" :class="{ 'is-active': session.activeTab === tab }" @click="selectTab(tab)">{{ tab }}</button>
     </nav>
     <header class="editor-page__heading"><h1>OdyJourney · {{ document.journey.name }}</h1><span>Revision {{ document.journey.revision }}</span></header>
     <div class="journey-editor-layout">
-      <aside class="editor-panel"><h2>{{ session.activeTab === 'agent' ? 'Agent templates' : `${session.activeTab} library` }}</h2><p>Library interactions arrive in the next M2 task.</p></aside>
-      <section class="editor-canvas-placeholder"><h2>System configuration</h2><p>Fixed structure · domain commands are intentionally not implemented in M2.2.</p><div class="placeholder-structure">{{ document.pattern.name }}</div></section>
+      <AgentLibrary v-if="session.activeTab === 'agent'" :templates="agentTemplates" :loading="lifecycle.templateStatus === 'loading'" :disabled="lifecycle.operationStatus === 'loading'" :error="lifecycle.templateStatus === 'error' ? lifecycle.error?.code : null" @choose="chooseTemplate" @drag-start="beginDrag" />
+      <CurrentPatternSummary v-else-if="session.activeTab === 'pattern'" :pattern="document.pattern" />
+      <aside v-else class="journey-library"><h2>{{ session.activeTab }}</h2><p>This configuration panel is reserved for its M2 milestone.</p></aside>
+      <div class="journey-canvas-stack" @dragover.prevent="store.evaluateDrag({ kind: 'system-canvas' })" @drop.prevent="dropOnCanvas">
+        <SystemCanvas :model="canvasModel" :disabled="lifecycle.operationStatus === 'loading'" :over-slot-id="overSlotId" :over-order="overOrder" :feedback="interactionFeedback" @select-slot="selectSlot" @open-menu="openMenu" @drag-start="beginDrag" @reorder-drag-start="beginDrag" @drag-over-slot="dragOverSlot" @drag-over-order="dragOverOrder" @drop-payload="dropOnSlot" @drop-order-payload="dropOrder" @drop-rejected="store.rejectDragBoundary" @drop-unsupported="store.rejectDrop('TARGET_KIND_UNSUPPORTED')" @drag-end="store.endDrag" @reorder="reorder" />
+        <p v-if="session.lastDropError" class="journey-feedback" role="alert">{{ session.lastDropError }}</p>
+        <p v-if="session.lastDragBoundaryError" class="journey-feedback" role="alert">{{ session.lastDragBoundaryError }}</p>
+        <p v-if="lifecycle.operationStatus === 'error'" class="journey-feedback" role="alert">{{ lifecycle.error?.code }}</p>
+      </div>
     </div>
+    <AgentSlotContextMenu v-if="session.interaction.type === 'menu-open' && lifecycle.operationStatus !== 'loading'" class="journey-context-menu" :style="{ left: `${session.interaction.anchor.x}px`, top: `${session.interaction.anchor.y}px` }" :slot-id="session.interaction.slotId" :configured="selectedSlot?.assignment === 'configured'" :can-add-sibling="selectedSlot?.canAddSibling" :can-remove-slot="selectedSlot?.canRemove" :can-reorder="selectedSlot?.canReorder" :can-move-earlier="(selectedSlot?.order ?? 0) > 0" :can-move-later="selectedSlot?.order !== null && selectedSlot?.order !== undefined && selectedSlot.order < canvasModel.slots.length - 1" @action="menuAction" @close="store.cancelInteraction" />
+    <SaveAgentTemplateDialog v-if="session.interaction.type === 'naming-template'" :loading="lifecycle.operationStatus === 'loading'" :error="lifecycle.operationStatus === 'error' ? lifecycle.error?.code : null" @submit="(name, description) => { templateDraft.name = name; templateDraft.description = description ?? ''; void saveTemplate() }" @close="store.cancelInteraction" />
+    <section v-if="session.interaction.type === 'confirming-slot-removal'" class="journey-staged-dialog" role="dialog" aria-modal="true" aria-labelledby="remove-slot-title">
+      <h2 id="remove-slot-title">Remove occupied Slot?</h2><p>The Slot and its Agent will be removed atomically. Optionally save the Agent as a reusable Template first.</p>
+      <input v-model="removalTemplateDraft.name" aria-label="Template name before removal" placeholder="Template name (optional)">
+      <textarea v-model="removalTemplateDraft.description" aria-label="Template description before removal" placeholder="Template description (optional)" />
+      <button :disabled="lifecycle.operationStatus === 'loading'" @click="removeOccupiedSlot(false)">Discard Agent and Slot</button>
+      <button :disabled="!removalTemplateDraft.name.trim() || lifecycle.operationStatus === 'loading'" @click="removeOccupiedSlot(true)">Save Template and remove</button>
+      <button :disabled="lifecycle.operationStatus === 'loading'" @click="store.cancelInteraction">Cancel</button>
+    </section>
+    <section v-if="session.interaction.type === 'confirming-agent-replacement'" class="journey-staged-dialog" role="dialog" aria-modal="true" aria-labelledby="agent-replace-title">
+      <h2 id="agent-replace-title">Replace Agent?</h2><p>Confirmation stages the selected Template and occupied Slot for an atomic replacement transaction.</p><button @click="store.requestAgentReplacement">Continue</button><button @click="store.cancelInteraction">Cancel</button>
+    </section>
+    <section v-if="session.interaction.type === 'naming-duplicate'" class="journey-staged-dialog" role="dialog" aria-modal="true" aria-labelledby="duplicate-title">
+      <h2 id="duplicate-title">Duplicate Agent</h2><p>Choose a destination and name for the typed atomic duplication request.</p>
+      <input v-model="duplicateDraft.name" aria-label="Duplicate Agent name" placeholder="Agent name">
+      <select v-model="duplicateDraft.targetSlotId" aria-label="Duplicate destination Slot"><option value="">Choose empty Slot</option><option v-for="slot in canvasModel.slots.filter((candidate) => candidate.assignment === 'empty')" :key="slot.id" :value="slot.id">{{ slot.label }}</option></select>
+      <button :disabled="!duplicateDraft.name.trim() || !duplicateDraft.targetSlotId" @click="requestDuplicate">Continue</button><button @click="store.cancelInteraction">Cancel</button>
+    </section>
+    <section v-if="session.interaction.type === 'agent-replacement-requested' || session.interaction.type === 'duplicate-requested' || session.interaction.type === 'slot-removal-requested'" class="journey-staged-dialog" role="status">
+      <h2>Transaction request ready</h2><p>The canonical document is unchanged. A future trusted transaction boundary can consume this typed request.</p><button @click="store.cancelInteraction">Close</button>
+    </section>
   </section>
 </template>

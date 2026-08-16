@@ -1,4 +1,4 @@
-import type { PatternConfig, PatternTemplateKey, UUID } from '@odyssey/schemas'
+import type { PatternConfig, UUID } from '@odyssey/schemas'
 
 import type { OdysseyDragPayloadV1 } from './odysseyDragPayload'
 
@@ -8,7 +8,6 @@ export type PatternDropTarget =
   | { kind: 'linear-order'; targetOrder: number }
 
 export type PatternDropAction =
-  | { type: 'stage-pattern-replacement'; templateKey: PatternTemplateKey; affectedAgentIds: readonly UUID[] }
   | { type: 'instantiate-agent-template'; templateId: UUID; targetSlotId: UUID }
   | { type: 'move-agent'; agentId: UUID; sourceSlotId: UUID; targetSlotId: UUID }
   | { type: 'exchange-agents'; agentId: UUID; sourceSlotId: UUID; targetSlotId: UUID }
@@ -38,8 +37,6 @@ const REASON_MESSAGES: Record<PatternDropReason, string> = {
   REORDER_POSITION_INVALID: 'The requested Slot position is invalid.',
 }
 
-const PATTERN_REPLACEMENT_CONFIRMATION_MESSAGE = 'Replacing the Pattern requires confirmation.'
-
 function rejected(status: 'invalid' | 'occupied' | 'duplicate', reason: PatternDropReason): PatternDropEvaluation {
   return { status, reason, feedback: { tone: status, message: REASON_MESSAGES[reason] } }
 }
@@ -55,15 +52,6 @@ export function evaluatePatternDrop(
 ): PatternDropEvaluation {
   if (payload.kind === 'workflow-node-template' || payload.kind === 'resource') {
     return rejected('invalid', 'TARGET_KIND_UNSUPPORTED')
-  }
-  if (payload.kind === 'pattern-template') {
-    if (target.kind !== 'system-canvas') return rejected('invalid', 'TARGET_KIND_UNSUPPORTED')
-    const affectedAgentIds = [...new Set(pattern.slots.flatMap((slot) => slot.agentId ? [slot.agentId] : []))]
-    return accepted(
-      { type: 'stage-pattern-replacement', templateKey: payload.templateKey, affectedAgentIds },
-      PATTERN_REPLACEMENT_CONFIRMATION_MESSAGE,
-      'confirmation',
-    )
   }
   if (payload.kind === 'agent-template') {
     if (target.kind !== 'agent-slot') return rejected('invalid', 'TARGET_KIND_UNSUPPORTED')
