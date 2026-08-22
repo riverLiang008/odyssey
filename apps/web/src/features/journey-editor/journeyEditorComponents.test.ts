@@ -7,6 +7,7 @@ import AgentSlot from './AgentSlot.vue'
 import AgentSlotContextMenu from './AgentSlotContextMenu.vue'
 import PatternTemplateLibrary from './PatternTemplateLibrary.vue'
 import SystemCanvas from './SystemCanvas.vue'
+import { positionMenuBeside } from './contextMenuPosition'
 import { saveAgentAsTemplate, type AgentLifecycleIdFactory } from '@/domain/agent-template'
 import { createAgentWorkflowEditorDocumentFixture } from '@/fixtures'
 
@@ -60,6 +61,18 @@ describe('Journey editor presentational libraries', () => {
     opener.remove()
   })
 
+  it('uses the same menu structure for empty Slots and disables Agent-only actions', async () => {
+    const wrapper = mount(AgentSlotContextMenu, { props: { slotId: SLOT_ID, configured: false } })
+    const buttons = wrapper.findAll('button')
+    expect(buttons.map((button) => button.text()).slice(0, 5)).toEqual([
+      'Open workflow', 'Replace agent', 'Duplicate', 'Remove agent', 'Save as template',
+    ])
+    expect(buttons[0]?.attributes('disabled')).toBeUndefined()
+    for (const button of buttons.slice(1, 5)) expect(button.attributes('disabled')).toBeDefined()
+    await buttons[0]?.trigger('click')
+    expect(wrapper.emitted('action')).toEqual([['open', SLOT_ID]])
+  })
+
   it('renders explicit Slot and diagnostic states and emits identity-only intents', async () => {
     const model = {
       kind: 'solo_component', name: 'Solo', routes: [],
@@ -73,6 +86,48 @@ describe('Journey editor presentational libraries', () => {
     expect(wrapper.text()).toContain('Some canvas references are unavailable')
     await wrapper.get('.agent-slot__select').trigger('click')
     expect(wrapper.emitted('selectSlot')).toEqual([[SLOT_ID]])
+  })
+
+  it('uses one configuration grid with Behavior spanning the execution chain', () => {
+    const model = {
+      kind: 'solo_component', name: 'Solo', routes: [], diagnostics: [],
+      slots: [{ id: SLOT_ID, label: 'Solo Agent', topologyRole: null, order: null,
+        position: { x: 234, y: 87 }, agent: null, assignment: 'empty',
+        selected: false, canAssign: true, canReorder: false }],
+    } as const
+    const wrapper = mount(SystemCanvas, { props: { model } })
+    const grid = wrapper.get('.system-configuration-grid')
+
+    expect(grid.get('.system-shell--input').text()).toContain('Input Guardrail')
+    expect(grid.get('.system-shell--execution').text()).toContain('Execution · Solo')
+    expect(grid.get('.system-shell--output').text()).toContain('Output Guardrail')
+    expect(grid.get('.system-shell--behavior').text()).toContain('Execution Behavior')
+    expect(wrapper.findAll('.system-configuration-grid')).toHaveLength(1)
+  })
+
+  it('renders routes and Slots in the same pixel coordinate system', () => {
+    const model = {
+      kind: 'solo_component', name: 'Solo', bounds: { width: 640, height: 280 }, routes: [], diagnostics: [],
+      slots: [{ id: SLOT_ID, label: 'Solo Agent', topologyRole: null, order: null,
+        position: { x: 420, y: 140 }, agent: null, assignment: 'empty',
+        selected: false, canAssign: true, canReorder: false }],
+    } as const
+    const wrapper = mount(SystemCanvas, { props: { model } })
+
+    expect(wrapper.get('.pattern-routes').attributes('viewBox')).toBe('0 0 640 280')
+    expect(wrapper.get('.agent-slot').attributes('style')).toContain('left: 420px')
+    expect(wrapper.get('.agent-slot').attributes('style')).toContain('top: 140px')
+  })
+
+  it('positions a context menu beside its Slot and flips only at the viewport edge', () => {
+    expect(positionMenuBeside(
+      { left: 100, right: 144, top: 80 },
+      { width: 800, height: 600 },
+    )).toEqual({ x: 152, y: 80 })
+    expect(positionMenuBeside(
+      { left: 740, right: 784, top: 580 },
+      { width: 800, height: 600 },
+    )).toEqual({ x: 538, y: 498 })
   })
 
   it.each(['valid', 'invalid', 'occupied', 'duplicate', 'confirmation'] as const)(

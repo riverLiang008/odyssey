@@ -1,7 +1,7 @@
 import { uuidSchema, type UUID } from '@odyssey/schemas'
 import type { LocationQueryValue } from 'vue-router'
 
-export const journeyTabs = ['pattern', 'execution', 'behavior', 'agent'] as const
+export const journeyTabs = ['execution', 'behavior', 'agent'] as const
 export type JourneyTab = (typeof journeyTabs)[number]
 
 export interface JourneyRouteIdentity {
@@ -20,7 +20,7 @@ function firstQueryValue(value: LocationQueryValue | LocationQueryValue[] | unde
 
 export function parseJourneyTab(value: LocationQueryValue | LocationQueryValue[] | undefined): JourneyTab {
   const candidate = firstQueryValue(value)
-  return journeyTabs.find((tab) => tab === candidate) ?? 'pattern'
+  return journeyTabs.find((tab) => tab === candidate) ?? 'execution'
 }
 
 export function parseJourneyRoute(
@@ -47,7 +47,7 @@ export function parseAgentWorkflowRoute(
 export const routeLocations = {
   journeys: () => ({ name: 'journeys' as const }),
   newJourney: () => ({ name: 'journey-create' as const }),
-  journey: (journeyId: UUID, tab: JourneyTab = 'pattern') => ({
+  journey: (journeyId: UUID, tab: JourneyTab = 'execution') => ({
     name: 'journey-editor' as const,
     params: { journeyId },
     query: { tab },

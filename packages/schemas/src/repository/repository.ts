@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { revisionSchema, utcTimestampSchema, uuidSchema, type Revision, type UUID } from '../common'
-import { agentTemplateSchema, agentWorkflowEditorDocumentSchema, createAgentTemplateSchema, createAgentWorkflowEditorDocumentSchema, journeyEditorDocumentSchema, journeyStatusSchema, type AgentTemplate, type AgentWorkflowEditorDocument, type JourneyEditorDocument } from '../editor'
+import { agentTemplateSchema, agentWorkflowEditorDocumentSchema, createAgentTemplateSchema, createAgentWorkflowEditorDocumentSchema, guardrailSideSchema, journeyEditorDocumentSchema, journeyStatusSchema, type AgentTemplate, type AgentWorkflowEditorDocument, type JourneyEditorDocument } from '../editor'
 import { patternConfigSchema, patternTemplateKeySchema } from '../pattern'
 import {
   agentReusableToolSchema,
@@ -18,6 +18,19 @@ export const createJourneyAgentInputSchema = z.strictObject({
   journeyId: uuidSchema,
   slotId: uuidSchema,
   expectedRevision: revisionSchema,
+})
+
+export const addGuardrailInputSchema = z.strictObject({
+  journeyId: uuidSchema,
+  side: guardrailSideSchema,
+  expectedRevision: revisionSchema,
+})
+
+export const removeGuardrailInputSchema = z.strictObject({
+  journeyId: uuidSchema,
+  side: guardrailSideSchema,
+  expectedRevision: revisionSchema,
+  expectedAgentId: uuidSchema,
 })
 
 export const saveAgentAsTemplateInputSchema = z.strictObject({
@@ -82,6 +95,24 @@ export const createOrInstantiateAgentSuccessSchema: z.ZodType<CreateOrInstantiat
   journey: journeyEditorDocumentSchema,
   agent: agentWorkflowEditorDocumentSchema,
 }).superRefine(refineCreateOrInstantiateResult)
+
+export const addGuardrailSuccessSchema = z.strictObject({
+  journey: journeyEditorDocumentSchema,
+  agent: agentWorkflowEditorDocumentSchema,
+}).superRefine((result, context) => {
+  const metadata = result.agent.agent
+  const guardrails = [result.journey.inputGuardrail, result.journey.outputGuardrail]
+  const matches = guardrails.filter(
+    (guardrail) => guardrail.state === 'active' && guardrail.agentId === metadata.id,
+  )
+  if (metadata.journeyId !== result.journey.journey.id || matches.length !== 1) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Created Guardrail Agent must belong to and be bound exactly once in the Journey',
+      path: ['agent', 'agent', 'id'],
+    })
+  }
+})
 
 export const saveAgentAsTemplateSuccessSchema: z.ZodType<AgentTemplate> = agentTemplateSchema
 
@@ -174,7 +205,7 @@ export const validationErrorDetailsSchema = z.strictObject({
   issues: z.array(z.strictObject({ path: z.array(z.union([z.string(), z.number()])), code: z.string().min(1) })),
 })
 export const revisionConflictDetailsSchema = z.strictObject({ expectedRevision: revisionSchema, currentRevision: revisionSchema })
-export const stateConflictReasonSchema = z.enum(['PATTERN_IMMUTABLE', 'OCCUPIED_SLOT_REMOVAL_REQUIRES_COMMAND', 'SLOT_OCCUPIED', 'SLOT_AGENT_CHANGED'])
+export const stateConflictReasonSchema = z.enum(['PATTERN_IMMUTABLE', 'OCCUPIED_SLOT_REMOVAL_REQUIRES_COMMAND', 'SLOT_OCCUPIED', 'SLOT_AGENT_CHANGED', 'GUARDRAIL_ALREADY_ACTIVE', 'GUARDRAIL_ALREADY_INACTIVE', 'GUARDRAIL_AGENT_MISMATCH', 'GUARDRAIL_STATE_INVALID'])
 export const stateConflictDetailsSchema = z.object({ reason: stateConflictReasonSchema }).passthrough()
 
 const simpleRepositoryErrorSchema = z.discriminatedUnion('code', [
@@ -200,7 +231,7 @@ export const repositoryErrorSchema = z.union([
   }),
   z.strictObject({
     code: z.literal('STATE_CONFLICT'),
-    reason: z.enum(['PATTERN_IMMUTABLE', 'OCCUPIED_SLOT_REMOVAL_REQUIRES_COMMAND', 'SLOT_OCCUPIED', 'SLOT_AGENT_CHANGED']),
+    reason: stateConflictReasonSchema,
   }),
 ])
 
@@ -219,6 +250,9 @@ export interface SaveAgentWorkflowInput {
   reusableTools: AgentReusableTool[]
 }
 export type CreateJourneyAgentInput = z.infer<typeof createJourneyAgentInputSchema>
+export type AddGuardrailInput = z.infer<typeof addGuardrailInputSchema>
+export type RemoveGuardrailInput = z.infer<typeof removeGuardrailInputSchema>
+export type AddGuardrailSuccess = z.infer<typeof addGuardrailSuccessSchema>
 export type SaveAgentAsTemplateInput = z.infer<typeof saveAgentAsTemplateInputSchema>
 export type InstantiateAgentTemplateInput = z.infer<typeof instantiateAgentTemplateInputSchema>
 export type RemoveOccupiedSlotInput = z.infer<typeof removeOccupiedSlotInputSchema>

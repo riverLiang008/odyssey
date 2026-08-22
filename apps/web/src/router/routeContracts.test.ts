@@ -6,7 +6,7 @@ import { parseAgentWorkflowRoute, parseJourneyRoute, parseJourneyTab, routeLocat
 describe('route contracts', () => {
   it('parses UUID route identities and normalizes unknown tabs', () => {
     expect(parseJourneyRoute(FIXTURE_IDS.journey, 'agent')).toEqual({ journeyId: FIXTURE_IDS.journey, tab: 'agent' })
-    expect(parseJourneyRoute(FIXTURE_IDS.journey, 'unknown')?.tab).toBe('pattern')
+    expect(parseJourneyRoute(FIXTURE_IDS.journey, 'unknown')?.tab).toBe('execution')
     expect(parseJourneyTab(['execution', 'agent'])).toBe('execution')
   })
 
@@ -18,7 +18,7 @@ describe('route contracts', () => {
 
   it('builds named locations without UI state', () => {
     expect(routeLocations.journey(uuidSchema.parse(FIXTURE_IDS.journey))).toEqual({
-      name: 'journey-editor', params: { journeyId: FIXTURE_IDS.journey }, query: { tab: 'pattern' },
+      name: 'journey-editor', params: { journeyId: FIXTURE_IDS.journey }, query: { tab: 'execution' },
     })
   })
 })

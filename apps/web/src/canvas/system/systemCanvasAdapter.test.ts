@@ -36,6 +36,16 @@ describe('System Canvas adapter', () => {
     expect(model.diagnostics).toContainEqual({ code: 'AGENT_SUMMARY_MISSING', id: occupied.agentId })
   })
 
+  it('places the Hub label below and assigns directional labels to Spokes', () => {
+    const document = createJourneyEditorDocumentFixture()
+    document.pattern = instantiatePattern('hub_and_spoke', ids())
+    const model = createSystemCanvasViewModel(document, null)
+    const hub = model.slots.find((slot) => slot.topologyRole === 'hub')
+    expect(hub?.labelPlacement).toBe('bottom')
+    const spokes = model.slots.filter((slot) => slot.topologyRole === 'spoke')
+    expect(spokes.map((slot) => slot.labelPlacement)).toEqual(['top', 'top', 'bottom', 'bottom'])
+  })
+
   it('maps topology into the supplied bounds and anchors routes at node edges', () => {
     const document = createJourneyEditorDocumentFixture()
     document.pattern = instantiatePattern('linear_sequence', ids())

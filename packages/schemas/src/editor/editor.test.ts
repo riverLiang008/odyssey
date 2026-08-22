@@ -69,6 +69,8 @@ describe('Agent lifecycle success contract', () => {
       journey: { id: id('30'), workspaceId: id('31'), name: 'Journey', description: null, status: 'draft', tags: [], revision: 1, createdAt: time, updatedAt: time },
       pattern: { schemaVersion: '1.0.0', id: id('32'), templateKey: 'solo_component', kind: 'solo_component', name: 'Solo', slots: [{ id: id('33'), topologyRole: 'solo', label: 'Solo', order: null, agentId: id('34'), configuration: {} }], routes: [], configuration: {} },
       agents: [{ id: id('34'), name: 'Agent', description: null, revision: 1, updatedAt: time }],
+      inputGuardrail: { state: 'inactive' },
+      outputGuardrail: { state: 'inactive' },
     })
     const agent = agentWorkflowEditorDocumentSchema.parse({
       agent: { id: id('34'), journeyId: id('30'), name: 'Agent', description: null, revision: 1, createdAt: time, updatedAt: time },

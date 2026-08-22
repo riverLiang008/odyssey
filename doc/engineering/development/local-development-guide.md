@@ -169,7 +169,7 @@ Python 进程名批量停止。随后可选择以 `--reload` 启动。
 pnpm dev
 ```
 
-Web 地址：<http://localhost:5173>
+Web 地址：<http://localhost:4173>
 
 停止 Web：在其终端中按 `Ctrl+C`。
 

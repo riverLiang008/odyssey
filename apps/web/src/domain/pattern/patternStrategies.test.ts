@@ -37,6 +37,38 @@ describe('built-in Pattern strategies', () => {
     expect(pattern.routes.every((route) => route.sourceSlotId === hub.id && route.target.type === 'slot')).toBe(true)
   })
 
+  it('lays out the default Hub topology as a centered radial cross', () => {
+    const pattern = instantiatePattern('hub_and_spoke', deterministicIdFactory())
+    const presentation = derivePatternPresentation(pattern)
+    const hub = pattern.slots.find((slot) => slot.topologyRole === 'hub')!
+    const spokes = pattern.slots.filter((slot) => slot.topologyRole === 'spoke')
+    const positionBySlotId = new Map(presentation.slots.map((slot) => [slot.slotId, slot]))
+
+    expect(positionBySlotId.get(hub.id)).toMatchObject({ x: 360, y: 210 })
+    expect(spokes.map((slot) => positionBySlotId.get(slot.id))).toEqual([
+      expect.objectContaining({ x: 360, y: 30, labelPlacement: 'top' }),
+      expect.objectContaining({ x: 640, y: 210, labelPlacement: 'top' }),
+      expect.objectContaining({ x: 360, y: 390, labelPlacement: 'bottom' }),
+      expect.objectContaining({ x: 80, y: 210, labelPlacement: 'bottom' }),
+    ])
+  })
+
+  it.each([
+    [1, [[640, 210]]],
+    [2, [[80, 210], [640, 210]]],
+    [3, [[360, 30], [118, 300], [602, 300]]],
+    [4, [[360, 30], [640, 210], [360, 390], [80, 210]]],
+  ] as const)('uses the frozen Hub directions for %i Spokes', (count, expected) => {
+    const pattern = instantiatePattern('hub_and_spoke', deterministicIdFactory())
+    const hub = pattern.slots.find((slot) => slot.topologyRole === 'hub')!
+    const spokes = pattern.slots.filter((slot) => slot.topologyRole === 'spoke').slice(0, count)
+    pattern.slots = [hub, ...spokes]
+    const positions = derivePatternPresentation(pattern).slots
+      .filter((slot) => slot.slotId !== hub.id)
+      .map((slot) => [slot.x, slot.y])
+    expect(positions).toEqual(expected)
+  })
+
   it('creates the accepted four-stage Circular Loop with one entry', () => {
     const pattern = instantiatePattern('diamond_loop', deterministicIdFactory())
     const ordered = [...pattern.slots].sort((left, right) => (left.order ?? 0) - (right.order ?? 0))

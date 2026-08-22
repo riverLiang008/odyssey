@@ -14,6 +14,8 @@ const previewDocument = computed<JourneyEditorDocument>(() => ({
   },
   pattern: props.pattern,
   agents: [],
+  inputGuardrail: { state: 'inactive' },
+  outputGuardrail: { state: 'inactive' },
 }))
 const model = computed(() => createSystemCanvasViewModel(previewDocument.value, null))
 </script>

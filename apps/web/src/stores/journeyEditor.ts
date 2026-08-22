@@ -1,14 +1,16 @@
-import { computed, reactive, ref, toRaw } from 'vue'
+import { computed, reactive, ref, shallowRef, toRaw } from 'vue'
 import { defineStore } from 'pinia'
 import type {
   AgentTemplate,
+  AgentWorkflowEditorDocument,
+  GuardrailSide,
   JourneyEditorDocument,
   RepositoryError,
   SaveJourneyInput,
   UUID,
 } from '@odyssey/schemas'
 
-import type { AgentLifecycleRepository, EditorRepository } from '@/repositories'
+import type { AgentLifecycleRepository, EditorRepository, GuardrailLifecycleRepository } from '@/repositories'
 import type { JourneyTab } from '@/router/routeContracts'
 import {
   addSlot as addPatternSlot,
@@ -35,18 +37,41 @@ import type { LoadStatus, SaveStatus } from './editorStatus'
 
 export type { LoadStatus, SaveStatus } from './editorStatus'
 
+export type GuardrailOperationState =
+  | { type: 'idle' }
+  | { type: 'adding'; side: GuardrailSide; requestSeq: number }
+  | { type: 'removing'; side: GuardrailSide; requestSeq: number }
+  | { type: 'failed'; side: GuardrailSide; operation: 'add' | 'remove'; error: RepositoryError }
+  | { type: 'conflict'; side: GuardrailSide; operation: 'add' | 'remove'; error: Extract<RepositoryError, { code: 'REVISION_CONFLICT' | 'STATE_CONFLICT' }> }
+
+export type GuardrailInteractionState =
+  | { type: 'idle' }
+  | { type: 'menu-open'; side: GuardrailSide; agentId: UUID; anchor: MenuAnchor }
+  | { type: 'confirming-removal'; side: GuardrailSide; agentId: UUID }
+
+export type WorkflowPreviewState =
+  | { type: 'closed' }
+  | { type: 'loading'; agentId: UUID; requestSeq: number }
+  | { type: 'ready'; agentId: UUID }
+  | { type: 'error'; agentId: UUID; error: RepositoryError }
+
 export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   const document = ref<JourneyEditorDocument | null>(null)
   const session = reactive({
-    activeTab: 'pattern' as JourneyTab,
+    activeTab: 'execution' as JourneyTab,
     selectedSlotId: null as UUID | null,
     previewAgentId: null as UUID | null,
     lastPatternError: null as PatternDomainError | null,
     lastDropError: null as PatternDropReason | null,
     lastDragBoundaryError: null as DragPayloadParseErrorCode | null,
     interaction: { type: 'idle' } as PatternInteractionState,
+    guardrailInteraction: { type: 'idle' } as GuardrailInteractionState,
   })
-  const agentTemplates = ref<AgentTemplate[]>([])
+  // Templates are replaced as validated repository snapshots; deep Vue proxy
+  // unwrapping is unnecessary and causes pathological type expansion here.
+  const agentTemplates = shallowRef<AgentTemplate[]>([])
+  const previewDocument = shallowRef<AgentWorkflowEditorDocument | null>(null)
+  const previewState = ref<WorkflowPreviewState>({ type: 'closed' })
   const lifecycle = reactive({
     templateStatus: 'idle' as 'idle' | 'loading' | 'ready' | 'error',
     operationStatus: 'idle' as 'idle' | 'loading' | 'success' | 'error',
@@ -58,16 +83,21 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     error: null as RepositoryError | null,
     mutationSeq: 0,
   })
+  const guardrailOperation = ref<GuardrailOperationState>({ type: 'idle' })
   let activeRequest = 0
   let loadController: AbortController | null = null
   let lifecycleRequest = 0
   let lifecycleController: AbortController | null = null
   let templateRequest = 0
   let templateController: AbortController | null = null
+  let guardrailRequest = 0
+  let guardrailController: AbortController | null = null
+  let previewRequest = 0
+  let previewController: AbortController | null = null
 
   const isReady = computed(() => persistence.loadStatus === 'ready' && document.value !== null)
 
-  function resetSession(tab: JourneyTab = 'pattern') {
+  function resetSession(tab: JourneyTab = 'execution') {
     session.activeTab = tab
     session.selectedSlotId = null
     session.previewAgentId = null
@@ -75,6 +105,12 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     session.lastDropError = null
     session.lastDragBoundaryError = null
     session.interaction = { type: 'idle' }
+    session.guardrailInteraction = { type: 'idle' }
+    previewRequest += 1
+    previewController?.abort()
+    previewController = null
+    previewDocument.value = null
+    previewState.value = { type: 'closed' }
   }
 
   function invalidateLifecycleRequests() {
@@ -84,12 +120,16 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     templateController?.abort()
     lifecycleController = null
     templateController = null
+    guardrailRequest += 1
+    guardrailController?.abort()
+    guardrailController = null
   }
 
   function resetLifecycle() {
     lifecycle.templateStatus = 'idle'
     lifecycle.operationStatus = 'idle'
     lifecycle.error = null
+    guardrailOperation.value = { type: 'idle' }
   }
 
   async function load(journeyId: UUID, tab: JourneyTab, repository: EditorRepository) {
@@ -127,6 +167,70 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
       : null
   }
 
+  function closeWorkflowPreview() {
+    previewRequest += 1
+    previewController?.abort()
+    previewController = null
+    previewDocument.value = null
+    previewState.value = { type: 'closed' }
+    session.previewAgentId = null
+  }
+
+  async function openWorkflowPreview(agentId: UUID, repository: EditorRepository): Promise<boolean> {
+    const current = document.value
+    if (!current || !current.agents.some((agent) => agent.id === agentId)) return false
+    if (previewState.value.type === 'ready' && previewDocument.value?.agent.id === agentId) return true
+    previewController?.abort()
+    const controller = new AbortController()
+    previewController = controller
+    const requestSeq = ++previewRequest
+    const journeyId = current.journey.id
+    session.previewAgentId = agentId
+    previewDocument.value = null
+    previewState.value = { type: 'loading', agentId, requestSeq }
+    const result = await repository.loadAgentWorkflow(journeyId, agentId, { signal: controller.signal })
+    if (requestSeq !== previewRequest || controller.signal.aborted || document.value?.journey.id !== journeyId || session.previewAgentId !== agentId) return false
+    if (!result.ok) {
+      if (result.error.code === 'ABORTED') {
+        closeWorkflowPreview()
+        return false
+      }
+      previewState.value = { type: 'error', agentId, error: result.error }
+      return false
+    }
+    if (result.value.agent.id !== agentId || result.value.agent.journeyId !== journeyId) {
+      previewState.value = { type: 'error', agentId, error: { code: 'RESPONSE_INVALID' } }
+      return false
+    }
+    previewDocument.value = structuredClone(result.value)
+    previewState.value = { type: 'ready', agentId }
+    return true
+  }
+
+  async function selectSlotForPreview(slotId: UUID, repository: EditorRepository): Promise<boolean> {
+    const slot = document.value?.pattern.slots.find((candidate) => candidate.id === slotId)
+    if (!slot) return false
+    session.selectedSlotId = slotId
+    session.guardrailInteraction = { type: 'idle' }
+    if (!slot.agentId) {
+      closeWorkflowPreview()
+      return true
+    }
+    return openWorkflowPreview(slot.agentId, repository)
+  }
+
+  async function selectGuardrailForPreview(side: GuardrailSide, repository: EditorRepository): Promise<boolean> {
+    const guardrail = side === 'input' ? document.value?.inputGuardrail : document.value?.outputGuardrail
+    if (guardrail?.state !== 'active') return false
+    session.selectedSlotId = null
+    return openWorkflowPreview(guardrail.agentId, repository)
+  }
+
+  async function retryWorkflowPreview(repository: EditorRepository): Promise<boolean> {
+    const agentId = session.previewAgentId
+    return agentId ? openWorkflowPreview(agentId, repository) : false
+  }
+
   function openMenu(slotId: UUID, anchor: MenuAnchor) {
     if (!document.value?.pattern.slots.some((slot) => slot.id === slotId)) return
     session.selectedSlotId = slotId
@@ -135,6 +239,80 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
 
   function cancelInteraction() {
     session.interaction = transitionPatternInteraction(session.interaction, { type: 'cancel' })
+    session.guardrailInteraction = { type: 'idle' }
+  }
+
+  function openGuardrailMenu(side: GuardrailSide, anchor: MenuAnchor) {
+    const guardrail = side === 'input' ? document.value?.inputGuardrail : document.value?.outputGuardrail
+    if (guardrail?.state !== 'active') return
+    session.selectedSlotId = null
+    session.interaction = { type: 'idle' }
+    session.guardrailInteraction = { type: 'menu-open', side, agentId: guardrail.agentId, anchor }
+  }
+
+  function stageGuardrailRemoval(side: GuardrailSide, agentId: UUID) {
+    const guardrail = side === 'input' ? document.value?.inputGuardrail : document.value?.outputGuardrail
+    if (guardrail?.state !== 'active' || guardrail.agentId !== agentId) return
+    session.guardrailInteraction = { type: 'confirming-removal', side, agentId }
+  }
+
+  function guardrailFailure(side: GuardrailSide, operation: 'add' | 'remove', error: RepositoryError): GuardrailOperationState {
+    return error.code === 'REVISION_CONFLICT' || error.code === 'STATE_CONFLICT'
+      ? { type: 'conflict', side, operation, error }
+      : { type: 'failed', side, operation, error }
+  }
+
+  async function addGuardrail(side: GuardrailSide, repository: GuardrailLifecycleRepository): Promise<UUID | false> {
+    const current = document.value
+    const projection = side === 'input' ? current?.inputGuardrail : current?.outputGuardrail
+    if (!current || projection?.state !== 'inactive' || guardrailOperation.value.type === 'adding' || guardrailOperation.value.type === 'removing') return false
+    guardrailController?.abort()
+    const controller = new AbortController()
+    guardrailController = controller
+    const requestSeq = ++guardrailRequest
+    const journeyId = current.journey.id
+    guardrailOperation.value = { type: 'adding', side, requestSeq }
+    const result = await repository.addGuardrail({ journeyId, side, expectedRevision: current.journey.revision }, { signal: controller.signal })
+    if (requestSeq !== guardrailRequest || controller.signal.aborted || document.value?.journey.id !== journeyId) return false
+    if (!result.ok) {
+      guardrailOperation.value = guardrailFailure(side, 'add', result.error)
+      return false
+    }
+    document.value = structuredClone(result.value.journey)
+    session.selectedSlotId = null
+    closeWorkflowPreview()
+    session.previewAgentId = result.value.agent.agent.id
+    previewDocument.value = structuredClone(result.value.agent)
+    previewState.value = { type: 'ready', agentId: result.value.agent.agent.id }
+    session.guardrailInteraction = { type: 'idle' }
+    persistence.mutationSeq += 1
+    guardrailOperation.value = { type: 'idle' }
+    return result.value.agent.agent.id
+  }
+
+  async function removeGuardrail(side: GuardrailSide, expectedAgentId: UUID, repository: GuardrailLifecycleRepository): Promise<boolean> {
+    const current = document.value
+    const projection = side === 'input' ? current?.inputGuardrail : current?.outputGuardrail
+    if (!current || projection?.state !== 'active' || projection.agentId !== expectedAgentId || guardrailOperation.value.type === 'adding' || guardrailOperation.value.type === 'removing') return false
+    guardrailController?.abort()
+    const controller = new AbortController()
+    guardrailController = controller
+    const requestSeq = ++guardrailRequest
+    const journeyId = current.journey.id
+    guardrailOperation.value = { type: 'removing', side, requestSeq }
+    const result = await repository.removeGuardrail({ journeyId, side, expectedRevision: current.journey.revision, expectedAgentId }, { signal: controller.signal })
+    if (requestSeq !== guardrailRequest || controller.signal.aborted || document.value?.journey.id !== journeyId) return false
+    if (!result.ok) {
+      guardrailOperation.value = guardrailFailure(side, 'remove', result.error)
+      return false
+    }
+    document.value = structuredClone(result.value)
+    if (session.previewAgentId === expectedAgentId) closeWorkflowPreview()
+    session.selectedSlotId = null
+    session.guardrailInteraction = { type: 'idle' }
+    persistence.mutationSeq += 1
+    guardrailOperation.value = { type: 'idle' }
+    return true
   }
 
   function stageTemplateName(slotId: UUID) {
@@ -185,7 +363,6 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     session.interaction = transitionPatternInteraction(session.interaction, {
       type: 'evaluate-drag', target, feedback: evaluation.feedback,
     })
-    session.lastDropError = evaluation.status === 'valid' ? null : evaluation.reason
     return evaluation
   }
 
@@ -198,6 +375,12 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
       : session.interaction.type === 'naming-duplicate' || session.interaction.type === 'duplicate-requested'
         ? session.interaction.sourceSlotId : null
     if (interactionSlotId && !slotIds.has(interactionSlotId)) cancelInteraction()
+    const activeAgentIds = new Set(document.value?.pattern.slots.flatMap((slot) => slot.agentId ? [slot.agentId] : []) ?? [])
+    const input = document.value?.inputGuardrail
+    const output = document.value?.outputGuardrail
+    if (input?.state === 'active') activeAgentIds.add(input.agentId)
+    if (output?.state === 'active') activeAgentIds.add(output.agentId)
+    if (session.previewAgentId && !activeAgentIds.has(session.previewAgentId)) closeWorkflowPreview()
   }
 
   function applyPatternCommand(command: (pattern: JourneyEditorDocument['pattern']) => PatternCommandResult): PatternCommandResult | null {
@@ -333,6 +516,56 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     return true
   }
 
+  async function unassignAgentAndSave(slotId: UUID, repository: EditorRepository): Promise<boolean> {
+    const current = document.value
+    if (!current || lifecycle.operationStatus === 'loading') return false
+    const candidate = unassignPatternAgent(structuredClone(toRaw(current.pattern)), slotId)
+    if (!candidate.ok) {
+      session.lastPatternError = candidate.error
+      return false
+    }
+    const persistedPattern = structuredClone(toRaw(candidate.value))
+
+    const controller = new AbortController()
+    lifecycleController = controller
+    const request = ++lifecycleRequest
+    const journeyId = current.journey.id
+    const expectedRevision = current.journey.revision
+    lifecycle.operationStatus = 'loading'
+    lifecycle.error = null
+    persistence.saveStatus = 'saving'
+    persistence.error = null
+    cancelInteraction()
+
+    const result = await repository.saveJourney({
+      journeyId,
+      expectedRevision,
+      pattern: persistedPattern,
+    }, { signal: controller.signal })
+    if (request !== lifecycleRequest || controller.signal.aborted || document.value?.journey.id !== journeyId) return false
+    if (!result.ok) {
+      lifecycle.operationStatus = 'error'
+      lifecycle.error = result.error
+      persistence.saveStatus = result.error.code === 'REVISION_CONFLICT' ? 'conflict' : 'error'
+      persistence.error = result.error
+      return false
+    }
+
+    const latest = document.value
+    if (!latest || latest.journey.revision !== expectedRevision) return false
+    latest.pattern = persistedPattern
+    latest.journey.revision = result.value.revision
+    latest.journey.updatedAt = result.value.updatedAt
+    session.selectedSlotId = slotId
+    session.lastPatternError = null
+    persistence.mutationSeq += 1
+    persistence.saveStatus = 'saved'
+    persistence.error = null
+    lifecycle.operationStatus = 'success'
+    reconcileSession()
+    return true
+  }
+
   async function saveAsTemplate(agentId: UUID, name: string, description: string | null, repository: AgentLifecycleRepository) {
     const current = document.value
     if (!current || lifecycle.operationStatus === 'loading') return false
@@ -352,10 +585,10 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     if (!result.ok) {
       lifecycle.operationStatus = 'error'; lifecycle.error = result.error; return false
     }
-    const updatedTemplates: AgentTemplate[] = [
-      ...agentTemplates.value.filter((template) => template.id !== result.value.id),
-      structuredClone(result.value),
-    ]
+    const savedTemplate: AgentTemplate = structuredClone(result.value)
+    const retainedTemplates: AgentTemplate[] = agentTemplates.value
+      .filter((template: AgentTemplate) => template.id !== savedTemplate.id)
+    const updatedTemplates: AgentTemplate[] = [...retainedTemplates, savedTemplate]
     agentTemplates.value = updatedTemplates
     lifecycle.operationStatus = 'success'
     cancelInteraction()
@@ -397,6 +630,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
       ]
     }
     session.selectedSlotId = null
+    reconcileSession()
     persistence.mutationSeq += 1
     lifecycle.operationStatus = 'success'
     cancelInteraction()
@@ -455,14 +689,26 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   return {
     document,
     agentTemplates,
+    previewDocument,
+    previewState,
     session,
     persistence,
     lifecycle,
+    guardrailOperation,
     isReady,
     load,
     setActiveTab,
     selectSlot,
+    selectSlotForPreview,
+    selectGuardrailForPreview,
+    openWorkflowPreview,
+    closeWorkflowPreview,
+    retryWorkflowPreview,
     openMenu,
+    openGuardrailMenu,
+    stageGuardrailRemoval,
+    addGuardrail,
+    removeGuardrail,
     stageTemplateName,
     stageSlotRemoval,
     requestSlotRemoval,
@@ -489,6 +735,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     moveAgent,
     exchangeAgents,
     unassignAgent,
+    unassignAgentAndSave,
     addSlot,
     removeSlot,
     reorderSlot,

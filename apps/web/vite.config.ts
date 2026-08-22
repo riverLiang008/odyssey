@@ -6,6 +6,6 @@ export default defineConfig({
   envDir: fileURLToPath(new URL('../..', import.meta.url)),
   plugins: [vue()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
-  server: { port: 5173 },
+  server: { port: 4173 },
   test: { environment: 'jsdom', setupFiles: './src/test/setup.ts' },
 })

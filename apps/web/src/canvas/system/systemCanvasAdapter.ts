@@ -5,7 +5,7 @@ import type { PatternOperation } from '@/domain/pattern'
 
 export interface CanvasPoint { readonly x: number; readonly y: number }
 export interface CanvasBounds { readonly width: number; readonly height: number }
-export const SYSTEM_PATTERN_BOUNDS: CanvasBounds = { width: 468, height: 174 }
+export const SYSTEM_PATTERN_BOUNDS: CanvasBounds = { width: 468, height: 280 }
 export interface SystemCanvasSlotViewModel {
   readonly id: UUID
   readonly label: string
@@ -17,7 +17,7 @@ export interface SystemCanvasSlotViewModel {
   readonly selected: boolean
   readonly canAssign: boolean
   readonly isEntry?: boolean
-  readonly labelPlacement?: 'above' | 'below'
+  readonly labelPlacement?: 'top' | 'right' | 'bottom' | 'left'
   readonly canReorder: boolean
   readonly canAddSibling?: boolean
   readonly canRemove?: boolean
@@ -47,9 +47,10 @@ export function createSystemCanvasViewModel(
   const operations: readonly PatternOperation[] = PATTERN_DEFINITIONS[document.pattern.kind].supportedOperations
   const nodeRadius = 22
   const mapPoint = (point: CanvasPoint): CanvasPoint => ({
-    x: 18 + (point.x / 720) * (bounds.width - 36),
-    y: 18 + (point.y / 420) * (bounds.height - 54),
+    x: 44 + (point.x / 720) * (bounds.width - 88),
+    y: 40 + (point.y / 420) * (bounds.height - 80),
   })
+  const presentationBySlotId = new Map(presentation.slots.map((slot) => [slot.slotId, slot]))
   const positions = new Map(presentation.slots.map((slot) => [slot.slotId, mapPoint({ x: slot.x, y: slot.y })]))
   const agents = new Map(document.agents.map((agent) => [agent.id, agent]))
   const diagnostics: SystemCanvasViewModel['diagnostics'][number][] = []
@@ -64,8 +65,8 @@ export function createSystemCanvasViewModel(
       agent, assignment: !slot.agentId ? 'empty' : agent ? 'configured' : 'missing-summary',
       selected: slot.id === selectedSlotId, canAssign: slot.agentId === null,
       isEntry: document.pattern.kind === 'diamond_loop' && slot.topologyRole === 'entry',
-      labelPlacement: (document.pattern.kind === 'hub_and_spoke' || document.pattern.kind === 'diamond_loop') && position.y < bounds.height / 2
-        ? 'above' : 'below',
+      labelPlacement: presentationBySlotId.get(slot.id)?.labelPlacement
+        ?? ((document.pattern.kind === 'diamond_loop' && position.y < bounds.height / 2) ? 'top' : 'bottom'),
       canReorder: document.pattern.kind === 'linear_sequence' || document.pattern.kind === 'diamond_loop',
       canAddSibling: operations.includes('add_slot'),
       canRemove: operations.includes('remove_slot') && !(document.pattern.kind === 'hub_and_spoke' && slot.topologyRole === 'hub'),

@@ -1,33 +1,37 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
-import { uuidSchema, type UUID } from '@odyssey/schemas'
+import { uuidSchema, type GuardrailSide, type UUID } from '@odyssey/schemas'
 
 import { useEditorRepository } from '@/app/editorRepository'
 import RouteBoundary from '@/app/RouteBoundary.vue'
-import { createSystemCanvasViewModel } from '@/canvas/system'
+import { createSystemCanvasViewModel, SYSTEM_PATTERN_BOUNDS, type CanvasBounds } from '@/canvas/system'
 import { cryptoPatternIdFactory } from '@/domain/pattern'
 import { routeLocations, journeyTabs, parseJourneyRoute, type JourneyTab } from '@/router/routeContracts'
 import { useJourneyEditorStore } from '@/stores/journeyEditor'
 import { ODYSSEY_DRAG_MIME, parseOdysseyDragPayload, type OdysseyDragPayloadV1, type PatternDragPayload } from '@/canvas/interaction'
 import AgentLibrary from '@/features/journey-editor/AgentLibrary.vue'
 import AgentSlotContextMenu from '@/features/journey-editor/AgentSlotContextMenu.vue'
-import CurrentPatternSummary from '@/features/journey-editor/CurrentPatternSummary.vue'
+import ExecutionTemplateLibrary from '@/features/journey-editor/ExecutionTemplateLibrary.vue'
 import SystemCanvas from '@/features/journey-editor/SystemCanvas.vue'
 import SaveAgentTemplateDialog from '@/features/journey-editor/SaveAgentTemplateDialog.vue'
+import GuardrailContextMenu from '@/features/journey-editor/GuardrailContextMenu.vue'
+import WorkflowPreview from '@/features/journey-editor/WorkflowPreview.vue'
 
 const route = useRoute()
 const router = useRouter()
 const repository = useEditorRepository()
 const store = useJourneyEditorStore()
-const { agentTemplates, document, lifecycle, persistence, session } = storeToRefs(store)
+const { agentTemplates, document, guardrailOperation, lifecycle, persistence, previewDocument, previewState, session } = storeToRefs(store)
+const patternStageBounds = ref<CanvasBounds>(SYSTEM_PATTERN_BOUNDS)
 const identity = computed(() => parseJourneyRoute(route.params.journeyId, route.query.tab))
 const canvasModel = computed(() => document.value
-  ? createSystemCanvasViewModel(document.value, session.value.selectedSlotId)
+  ? createSystemCanvasViewModel(document.value, session.value.selectedSlotId, patternStageBounds.value)
   : null)
 const selectedSlot = computed(() => canvasModel.value?.slots.find((slot) => slot.id === session.value.selectedSlotId) ?? null)
 const interactionFeedback = computed(() => session.value.interaction.type === 'dragging' ? session.value.interaction.feedback : null)
+const isDropForbidden = computed(() => interactionFeedback.value?.tone === 'invalid')
 const overSlotId = computed(() => session.value.interaction.type === 'dragging' && session.value.interaction.over?.kind === 'agent-slot'
   ? session.value.interaction.over.slotId : null)
 const overOrder = computed(() => session.value.interaction.type === 'dragging' && session.value.interaction.over?.kind === 'linear-order'
@@ -35,6 +39,9 @@ const overOrder = computed(() => session.value.interaction.type === 'dragging' &
 const templateDraft = reactive({ name: '', description: '' })
 const duplicateDraft = reactive({ name: '', targetSlotId: '' })
 const removalTemplateDraft = reactive({ name: '', description: '' })
+const guardrailPendingSide = computed(() => guardrailOperation.value.type === 'adding' || guardrailOperation.value.type === 'removing'
+  ? guardrailOperation.value.side
+  : null)
 
 watch(identity, (next) => {
   if (!next) {
@@ -96,6 +103,11 @@ function dropOnCanvas(event: globalThis.DragEvent) {
   void store.dispatchDrop(repository, cryptoPatternIdFactory)
 }
 
+function dragOverCanvas(event: globalThis.DragEvent) {
+  const evaluation = store.evaluateDrag({ kind: 'system-canvas' })
+  if (event.dataTransfer) event.dataTransfer.dropEffect = evaluation?.status === 'valid' ? 'move' : 'none'
+}
+
 function reorder(slotId: UUID, targetOrder: number) {
   store.beginDrag({ version: 1, kind: 'pattern-slot', slotId })
   store.evaluateDrag({ kind: 'linear-order', targetOrder })
@@ -120,11 +132,43 @@ function chooseTemplate(templateId: UUID) {
 
 function openMenu(slotId: UUID, anchor: { x: number; y: number }) { store.openMenu(slotId, anchor) }
 
-function menuAction(action: 'open' | 'save-template' | 'replace' | 'duplicate' | 'add-before' | 'add-after' | 'move-earlier' | 'move-later' | 'remove-slot' | 'remove', slotId: UUID) {
+function resizePatternStage(bounds: CanvasBounds): void {
+  if (patternStageBounds.value.width === bounds.width && patternStageBounds.value.height === bounds.height) return
+  patternStageBounds.value = bounds
+}
+
+function addGuardrail(side: GuardrailSide) {
+  void store.addGuardrail(side, repository)
+}
+
+function openGuardrailMenu(side: GuardrailSide, anchor: { x: number; y: number }) {
+  store.openGuardrailMenu(side, anchor)
+}
+
+async function openGuardrailWorkflow(agentId: UUID) {
+  if (!identity.value) return
+  store.cancelInteraction()
+  await router.push(routeLocations.agentWorkflow(identity.value.journeyId, agentId))
+}
+
+function confirmGuardrailRemoval(side: GuardrailSide, agentId: UUID) {
+  store.stageGuardrailRemoval(side, agentId)
+}
+
+function removeGuardrail() {
+  const interaction = session.value.guardrailInteraction
+  if (interaction.type !== 'confirming-removal') return
+  void store.removeGuardrail(interaction.side, interaction.agentId, repository)
+}
+
+async function menuAction(action: 'open' | 'save-template' | 'replace' | 'duplicate' | 'add-before' | 'add-after' | 'move-earlier' | 'move-later' | 'remove-slot' | 'remove', slotId: UUID) {
   if (lifecycle.value.operationStatus === 'loading') return
   const agentId = document.value?.pattern.slots.find((slot) => slot.id === slotId)?.agentId
-  if (action === 'open' && identity.value && agentId) void router.push(routeLocations.agentWorkflow(identity.value.journeyId, agentId))
-  if (action === 'remove') store.unassignAgent(slotId)
+  if (action === 'open' && identity.value) {
+    const workflowAgentId = agentId ?? await store.createAgent(slotId, repository)
+    if (workflowAgentId) await router.push(routeLocations.agentWorkflow(identity.value.journeyId, workflowAgentId))
+  }
+  if (action === 'remove') await store.unassignAgentAndSave(slotId, repository)
   if (action === 'save-template') {
     templateDraft.name = ''
     templateDraft.description = ''
@@ -157,16 +201,29 @@ function menuAction(action: 'open' | 'save-template' | 'replace' | 'duplicate' |
     duplicateDraft.targetSlotId = ''
     store.stageDuplicate(slotId)
   }
-  if (action === 'open' || action === 'remove') store.cancelInteraction()
+  if (action === 'remove' || (action === 'open' && agentId)) store.cancelInteraction()
 }
 
-async function selectSlot(slotId: UUID) {
+function selectSlot(slotId: UUID) {
   const slot = canvasModel.value?.slots.find((candidate) => candidate.id === slotId)
   if (!slot || lifecycle.value.operationStatus === 'loading') return
-  store.selectSlot(slotId)
-  if (slot.assignment !== 'empty' || !identity.value) return
-  const agentId = await store.createAgent(slot.id, repository)
-  if (agentId) await router.push(routeLocations.agentWorkflow(identity.value.journeyId, agentId))
+  void store.selectSlotForPreview(slotId, repository)
+}
+
+function selectGuardrail(side: GuardrailSide) {
+  void store.selectGuardrailForPreview(side, repository)
+}
+
+function retryWorkflowPreview() {
+  void store.retryWorkflowPreview(repository)
+}
+
+async function openPreviewCanvas() {
+  const journeyId = document.value?.journey.id
+  const agentId = session.value.previewAgentId
+  if (!journeyId || !agentId) return
+  store.closeWorkflowPreview()
+  await router.push(routeLocations.agentWorkflow(journeyId, agentId))
 }
 
 function requestDuplicate() {
@@ -208,25 +265,59 @@ async function saveTemplate() {
     <header class="editor-page__heading"><h1>OdyJourney · {{ document.journey.name }}</h1><span>Revision {{ document.journey.revision }}</span></header>
     <div class="journey-editor-layout">
       <AgentLibrary v-if="session.activeTab === 'agent'" :templates="agentTemplates" :loading="lifecycle.templateStatus === 'loading'" :disabled="lifecycle.operationStatus === 'loading'" :error="lifecycle.templateStatus === 'error' ? lifecycle.error?.code : null" @choose="chooseTemplate" @drag-start="beginDrag" />
-      <CurrentPatternSummary v-else-if="session.activeTab === 'pattern'" :pattern="document.pattern" />
-      <aside v-else class="journey-library"><h2>{{ session.activeTab }}</h2><p>This configuration panel is reserved for its M2 milestone.</p></aside>
-      <div class="journey-canvas-stack" @dragover.prevent="store.evaluateDrag({ kind: 'system-canvas' })" @drop.prevent="dropOnCanvas">
-        <SystemCanvas :model="canvasModel" :disabled="lifecycle.operationStatus === 'loading'" :over-slot-id="overSlotId" :over-order="overOrder" :feedback="interactionFeedback" @select-slot="selectSlot" @open-menu="openMenu" @drag-start="beginDrag" @reorder-drag-start="beginDrag" @drag-over-slot="dragOverSlot" @drag-over-order="dragOverOrder" @drop-payload="dropOnSlot" @drop-order-payload="dropOrder" @drop-rejected="store.rejectDragBoundary" @drop-unsupported="store.rejectDrop('TARGET_KIND_UNSUPPORTED')" @drag-end="store.endDrag" @reorder="reorder" />
+      <ExecutionTemplateLibrary v-else-if="session.activeTab === 'execution'" />
+      <aside v-else class="journey-library behavior-coming-soon"><h2>Behavior templates</h2><p>Reusable policy components for your Journey.</p><div class="library-empty"><strong>Coming soon</strong><span>Behavior templates will let you reuse policies and observability rules.</span><small>Planned</small></div></aside>
+      <div class="journey-canvas-stack" :class="{ 'is-drop-forbidden': isDropForbidden }" @dragover.prevent="dragOverCanvas" @drop.prevent="dropOnCanvas">
+        <SystemCanvas :model="canvasModel" :input-guardrail="document.inputGuardrail" :output-guardrail="document.outputGuardrail" :agents="document.agents" :guardrail-pending-side="guardrailPendingSide" :disabled="lifecycle.operationStatus === 'loading'" :over-slot-id="overSlotId" :over-order="overOrder" :feedback="interactionFeedback" @select-slot="selectSlot" @open-menu="openMenu" @add-guardrail="addGuardrail" @select-guardrail="selectGuardrail" @open-guardrail-menu="openGuardrailMenu" @resize-pattern-stage="resizePatternStage" @drag-start="beginDrag" @reorder-drag-start="beginDrag" @drag-over-slot="dragOverSlot" @drag-over-order="dragOverOrder" @drop-payload="dropOnSlot" @drop-order-payload="dropOrder" @drop-rejected="store.rejectDragBoundary" @drop-unsupported="store.rejectDrop('TARGET_KIND_UNSUPPORTED')" @drag-end="store.endDrag" @reorder="reorder" />
+        <WorkflowPreview
+          v-if="previewState.type !== 'closed' && session.previewAgentId"
+          :agent-id="session.previewAgentId"
+          :agent-name="previewDocument?.agent.name ?? document.agents.find((agent) => agent.id === session.previewAgentId)?.name ?? 'Agent'"
+          :status="previewState.type"
+          :document="previewDocument"
+          :error="previewState.type === 'error' ? previewState.error : null"
+          @close="store.closeWorkflowPreview"
+          @retry="retryWorkflowPreview"
+          @open="openPreviewCanvas"
+        />
         <p v-if="session.lastDropError" class="journey-feedback" role="alert">{{ session.lastDropError }}</p>
         <p v-if="session.lastDragBoundaryError" class="journey-feedback" role="alert">{{ session.lastDragBoundaryError }}</p>
         <p v-if="lifecycle.operationStatus === 'error'" class="journey-feedback" role="alert">{{ lifecycle.error?.code }}</p>
+        <p v-if="guardrailOperation.type === 'failed' || guardrailOperation.type === 'conflict'" class="journey-feedback" role="alert">Guardrail {{ guardrailOperation.operation }} failed: {{ guardrailOperation.error.code }}</p>
       </div>
     </div>
-    <AgentSlotContextMenu v-if="session.interaction.type === 'menu-open' && lifecycle.operationStatus !== 'loading'" class="journey-context-menu" :style="{ left: `${session.interaction.anchor.x}px`, top: `${session.interaction.anchor.y}px` }" :slot-id="session.interaction.slotId" :configured="selectedSlot?.assignment === 'configured'" :can-add-sibling="selectedSlot?.canAddSibling" :can-remove-slot="selectedSlot?.canRemove" :can-reorder="selectedSlot?.canReorder" :can-move-earlier="(selectedSlot?.order ?? 0) > 0" :can-move-later="selectedSlot?.order !== null && selectedSlot?.order !== undefined && selectedSlot.order < canvasModel.slots.length - 1" @action="menuAction" @close="store.cancelInteraction" />
+    <Teleport to="body">
+      <AgentSlotContextMenu v-if="session.interaction.type === 'menu-open' && lifecycle.operationStatus !== 'loading'" class="journey-context-menu" :style="{ left: `${session.interaction.anchor.x}px`, top: `${session.interaction.anchor.y}px` }" :slot-id="session.interaction.slotId" :configured="selectedSlot?.assignment === 'configured'" :can-add-sibling="selectedSlot?.canAddSibling" :can-remove-slot="selectedSlot?.canRemove" :can-reorder="selectedSlot?.canReorder" :can-move-earlier="(selectedSlot?.order ?? 0) > 0" :can-move-later="selectedSlot?.order !== null && selectedSlot?.order !== undefined && selectedSlot.order < canvasModel.slots.length - 1" @action="menuAction" @close="store.cancelInteraction" />
+      <GuardrailContextMenu v-if="session.guardrailInteraction.type === 'menu-open'" class="journey-context-menu" :style="{ position: 'fixed', left: `${session.guardrailInteraction.anchor.x}px`, top: `${session.guardrailInteraction.anchor.y}px` }" :side="session.guardrailInteraction.side" :agent-id="session.guardrailInteraction.agentId" @open="openGuardrailWorkflow" @remove="confirmGuardrailRemoval" @close="store.cancelInteraction" />
+    </Teleport>
     <SaveAgentTemplateDialog v-if="session.interaction.type === 'naming-template'" :loading="lifecycle.operationStatus === 'loading'" :error="lifecycle.operationStatus === 'error' ? lifecycle.error?.code : null" @submit="(name, description) => { templateDraft.name = name; templateDraft.description = description ?? ''; void saveTemplate() }" @close="store.cancelInteraction" />
-    <section v-if="session.interaction.type === 'confirming-slot-removal'" class="journey-staged-dialog" role="dialog" aria-modal="true" aria-labelledby="remove-slot-title">
-      <h2 id="remove-slot-title">Remove occupied Slot?</h2><p>The Slot and its Agent will be removed atomically. Optionally save the Agent as a reusable Template first.</p>
-      <input v-model="removalTemplateDraft.name" aria-label="Template name before removal" placeholder="Template name (optional)">
-      <textarea v-model="removalTemplateDraft.description" aria-label="Template description before removal" placeholder="Template description (optional)" />
-      <button :disabled="lifecycle.operationStatus === 'loading'" @click="removeOccupiedSlot(false)">Discard Agent and Slot</button>
-      <button :disabled="!removalTemplateDraft.name.trim() || lifecycle.operationStatus === 'loading'" @click="removeOccupiedSlot(true)">Save Template and remove</button>
-      <button :disabled="lifecycle.operationStatus === 'loading'" @click="store.cancelInteraction">Cancel</button>
-    </section>
+    <div v-if="session.interaction.type === 'confirming-slot-removal'" class="journey-dialog-backdrop">
+      <section class="journey-staged-dialog journey-slot-removal-dialog" role="dialog" aria-modal="true" aria-labelledby="remove-slot-title">
+        <header class="journey-slot-removal-dialog__header">
+          <span class="journey-slot-removal-dialog__icon" aria-hidden="true">!</span>
+          <div><h2 id="remove-slot-title">Remove occupied Slot?</h2><p>The Slot and its Agent will be removed atomically.</p></div>
+        </header>
+        <div class="journey-slot-removal-dialog__template">
+          <strong>Save Agent as a Template first</strong>
+          <span>Optional · preserve this Agent for reuse before removing the Slot.</span>
+          <label>Template name<input v-model="removalTemplateDraft.name" aria-label="Template name before removal" placeholder="e.g. Research reviewer"></label>
+          <label>Description <small>Optional</small><textarea v-model="removalTemplateDraft.description" aria-label="Template description before removal" placeholder="Describe when this Agent should be reused" /></label>
+        </div>
+        <footer class="journey-slot-removal-dialog__actions">
+          <button class="is-quiet" :disabled="lifecycle.operationStatus === 'loading'" @click="store.cancelInteraction">Cancel</button>
+          <button class="is-secondary" :disabled="!removalTemplateDraft.name.trim() || lifecycle.operationStatus === 'loading'" @click="removeOccupiedSlot(true)">Save Template and remove</button>
+          <button class="is-danger" :disabled="lifecycle.operationStatus === 'loading'" @click="removeOccupiedSlot(false)">Discard Agent and Slot</button>
+        </footer>
+      </section>
+    </div>
+    <div v-if="session.guardrailInteraction.type === 'confirming-removal'" class="journey-dialog-backdrop">
+      <section class="journey-staged-dialog" role="dialog" aria-modal="true" aria-labelledby="remove-guardrail-title">
+        <h2 id="remove-guardrail-title">Remove {{ session.guardrailInteraction.side }} Guardrail?</h2>
+        <p>This permanently deletes its Agent and Workflow. The Guardrail will return to its optional inactive state.</p>
+        <button :disabled="guardrailOperation.type === 'removing'" @click="removeGuardrail">Remove guardrail</button>
+        <button :disabled="guardrailOperation.type === 'removing'" @click="store.cancelInteraction">Cancel</button>
+      </section>
+    </div>
     <section v-if="session.interaction.type === 'confirming-agent-replacement'" class="journey-staged-dialog" role="dialog" aria-modal="true" aria-labelledby="agent-replace-title">
       <h2 id="agent-replace-title">Replace Agent?</h2><p>Confirmation stages the selected Template and occupied Slot for an atomic replacement transaction.</p><button @click="store.requestAgentReplacement">Continue</button><button @click="store.cancelInteraction">Cancel</button>
     </section>

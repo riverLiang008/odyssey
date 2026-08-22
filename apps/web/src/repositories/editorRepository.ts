@@ -1,11 +1,14 @@
 import type {
   AgentTemplate,
+  AddGuardrailInput,
+  AddGuardrailSuccess,
   AgentWorkflowEditorDocument,
   CreateJourneyAgentInput,
   CreateOrInstantiateAgentSuccess,
   InstantiateAgentTemplateInput,
   RemoveOccupiedSlotInput,
   RemoveOccupiedSlotSuccess,
+  RemoveGuardrailInput,
   JourneyEditorDocument,
   RepositoryResult,
   SaveAgentAsTemplateInput,
@@ -75,4 +78,15 @@ export interface AgentLifecycleRepository {
   ): Promise<RepositoryResult<RemoveOccupiedSlotSuccess>>
 }
 
-export type OdysseyEditorRepository = EditorRepository & AgentLifecycleRepository & JourneyLifecycleRepository
+export interface GuardrailLifecycleRepository {
+  addGuardrail(
+    input: AddGuardrailInput,
+    options?: RepositoryOperationOptions,
+  ): Promise<RepositoryResult<AddGuardrailSuccess>>
+  removeGuardrail(
+    input: RemoveGuardrailInput,
+    options?: RepositoryOperationOptions,
+  ): Promise<RepositoryResult<JourneyEditorDocument>>
+}
+
+export type OdysseyEditorRepository = EditorRepository & AgentLifecycleRepository & GuardrailLifecycleRepository & JourneyLifecycleRepository

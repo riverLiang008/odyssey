@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     LargeBinary,
@@ -89,6 +90,7 @@ class AgentWorkflow(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "agent_workflow"
     __table_args__ = (
         UniqueConstraint("ody_journey_id", "normalized_name"),
+        UniqueConstraint("id", "ody_journey_id", name="uq_agent_workflow_id_journey"),
         CheckConstraint("revision >= 1", name="revision_positive"),
     )
 
@@ -103,6 +105,29 @@ class AgentWorkflow(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     canvas_layout: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=JSON_OBJECT_DEFAULT)
     revision: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+
+
+class JourneyGuardrail(Base):
+    __tablename__ = "journey_guardrail"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["agent_workflow_id", "ody_journey_id"],
+            ["agent_workflow.id", "agent_workflow.ody_journey_id"],
+            name="fk_journey_guardrail_agent_journey",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint("side IN ('input', 'output')", name="side_values"),
+        CheckConstraint("structure = 'single'", name="structure_single"),
+        UniqueConstraint("agent_workflow_id", name="uq_journey_guardrail_agent"),
+    )
+
+    ody_journey_id: Mapped[UUID] = mapped_column(
+        ForeignKey("ody_journey.id", ondelete="CASCADE"), primary_key=True
+    )
+    side: Mapped[str] = mapped_column(String(16), primary_key=True)
+    agent_workflow_id: Mapped[UUID] = mapped_column(index=True)
+    structure: Mapped[str] = mapped_column(String(16), server_default=text("'single'"))
+    created_at: Mapped[Any] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
 
 
 class ToolDefinition(UUIDPrimaryKeyMixin, TimestampMixin, Base):

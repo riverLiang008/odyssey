@@ -76,7 +76,7 @@ function accessibleLabel(model: SystemCanvasSlotViewModel, disabled = false): st
 </script>
 <template>
   <div
-    class="agent-slot" :class="[`is-${model.assignment}`, `label-${model.labelPlacement ?? 'below'}`, { 'is-selected': model.selected, 'is-disabled': disabled, [`is-${feedback?.tone}`]: feedback }]"
+    class="agent-slot" :class="[`is-${model.assignment}`, `label-${model.labelPlacement ?? 'bottom'}`, { 'is-selected': model.selected, 'is-disabled': disabled, [`is-${feedback?.tone}`]: feedback }]"
     @dragover.prevent.stop="model.canReorder && model.order !== null ? emit('dragOverOrder', model.order) : !disabled && emit('dragOver', model.id)"
     @drop.prevent.stop="model.canReorder ? dropOrder($event) : drop($event)"
   >
@@ -92,8 +92,10 @@ function accessibleLabel(model: SystemCanvasSlotViewModel, disabled = false): st
     >
       <span class="agent-slot__orb">{{ model.agent ? model.agent.name.charAt(0) : '+' }}</span>
       <span v-if="model.isEntry" class="agent-slot__entry">Entry</span>
-      <strong>{{ model.agent?.name ?? model.label }}</strong>
-      <small>{{ model.assignment === 'configured' ? 'Configured' : model.assignment === 'empty' ? 'Empty slot' : 'Agent unavailable' }}</small>
+      <span class="agent-slot__label">
+        <strong>{{ model.agent?.name ?? model.label }}</strong>
+        <small>{{ model.assignment === 'configured' ? 'Configured' : model.assignment === 'empty' ? 'Empty slot' : 'Agent unavailable' }}</small>
+      </span>
     </button>
     <span
       v-if="model.canReorder"

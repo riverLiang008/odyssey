@@ -1,10 +1,11 @@
 import {
   apiErrorEnvelopeSchema,
+  addGuardrailInputSchema,
+  addGuardrailSuccessSchema,
   createAgentLifecycleResponseSchemas,
   agentWorkflowEditorDocumentSchema,
   createJourneyAgentInputSchema,
   createJourneyInputSchema,
-  createOrInstantiateAgentSuccessSchema,
   deleteJourneyInputSchema,
   deleteJourneySuccessSchema,
   instantiateAgentTemplateInputSchema,
@@ -12,6 +13,7 @@ import {
   journeySummaryListSchema,
   removeOccupiedSlotInputSchema,
   removeOccupiedSlotSuccessSchema,
+  removeGuardrailInputSchema,
   revisionConflictDetailsSchema,
   saveAgentAsTemplateInputSchema,
   saveAgentWorkflowInputSchema,
@@ -21,6 +23,8 @@ import {
   stateConflictDetailsSchema,
   validationErrorDetailsSchema,
   type AgentTemplate,
+  type AddGuardrailInput,
+  type AddGuardrailSuccess,
   type AgentWorkflowEditorDocument,
   type CreateJourneyAgentInput,
   type CreateJourneyInput,
@@ -32,6 +36,7 @@ import {
   type JourneySummary,
   type RemoveOccupiedSlotInput,
   type RemoveOccupiedSlotSuccess,
+  type RemoveGuardrailInput,
   type RepositoryError,
   type RepositoryResult,
   type SaveAgentAsTemplateInput,
@@ -192,7 +197,7 @@ export class HttpEditorRepository implements OdysseyEditorRepository {
     if (!request.success) return failure({ code: 'REQUEST_INVALID' })
     const result = await this.#request(`/journeys/${encodeURIComponent(request.data.journeyId)}/slots/${encodeURIComponent(request.data.slotId)}/agent`, this.#json('POST', { expectedRevision: request.data.expectedRevision }), options)
     if (!result.ok) return result
-    const parsed = createOrInstantiateAgentSuccessSchema.safeParse(result.value)
+    const parsed = this.#agentSchemas.createOrInstantiate.safeParse(result.value)
     return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
   }
 
@@ -210,7 +215,7 @@ export class HttpEditorRepository implements OdysseyEditorRepository {
     if (!request.success) return failure({ code: 'REQUEST_INVALID' })
     const result = await this.#request(`/journeys/${encodeURIComponent(request.data.journeyId)}/slots/${encodeURIComponent(request.data.slotId)}/agent-template/${encodeURIComponent(request.data.templateId)}`, this.#json('POST', { expectedRevision: request.data.expectedRevision }), options)
     if (!result.ok) return result
-    const parsed = createOrInstantiateAgentSuccessSchema.safeParse(result.value)
+    const parsed = this.#agentSchemas.createOrInstantiate.safeParse(result.value)
     return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
   }
 
@@ -222,5 +227,35 @@ export class HttpEditorRepository implements OdysseyEditorRepository {
     if (!result.ok) return result
     const parsed = removeOccupiedSlotSuccessSchema.safeParse(result.value)
     return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async addGuardrail(input: AddGuardrailInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<AddGuardrailSuccess>> {
+    const request = addGuardrailInputSchema.safeParse(input)
+    if (!request.success) return failure({ code: 'REQUEST_INVALID' })
+    const { journeyId, side, expectedRevision } = request.data
+    const result = await this.#request(
+      `/journeys/${encodeURIComponent(journeyId)}/guardrails/${side}/commands/add`,
+      this.#json('POST', { expectedRevision }),
+      options,
+    )
+    if (!result.ok) return result
+    const parsed = addGuardrailSuccessSchema.safeParse(result.value)
+    return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async removeGuardrail(input: RemoveGuardrailInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<JourneyEditorDocument>> {
+    const request = removeGuardrailInputSchema.safeParse(input)
+    if (!request.success) return failure({ code: 'REQUEST_INVALID' })
+    const { journeyId, side, expectedRevision, expectedAgentId } = request.data
+    const result = await this.#request(
+      `/journeys/${encodeURIComponent(journeyId)}/guardrails/${side}/commands/remove`,
+      this.#json('POST', { expectedRevision, expectedAgentId }),
+      options,
+    )
+    if (!result.ok) return result
+    const parsed = journeyEditorDocumentSchema.safeParse(result.value)
+    return parsed.success && parsed.data.journey.id === journeyId
+      ? { ok: true, value: parsed.data }
+      : failure({ code: 'RESPONSE_INVALID' })
   }
 }

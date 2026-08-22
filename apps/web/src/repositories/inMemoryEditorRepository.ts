@@ -1,9 +1,12 @@
 import {
   createAgentLifecycleResponseSchemas,
+  addGuardrailInputSchema,
+  addGuardrailSuccessSchema,
   createJourneyAgentInputSchema,
   instantiateAgentTemplateInputSchema,
   removeOccupiedSlotInputSchema,
   removeOccupiedSlotSuccessSchema,
+  removeGuardrailInputSchema,
   saveAgentAsTemplateInputSchema,
   uuidSchema,
   createAgentWorkflowEditorDocumentSchema,
@@ -17,12 +20,15 @@ import {
   deleteJourneySuccessSchema,
   journeySummaryListSchema,
   type AgentTemplate,
+  type AddGuardrailInput,
+  type AddGuardrailSuccess,
   type AgentWorkflowEditorDocument,
   type CreateJourneyAgentInput,
   type CreateOrInstantiateAgentSuccess,
   type InstantiateAgentTemplateInput,
   type RemoveOccupiedSlotInput,
   type RemoveOccupiedSlotSuccess,
+  type RemoveGuardrailInput,
   type JourneyEditorDocument,
   type JourneySummary,
   type CreateJourneyInput,
@@ -46,7 +52,7 @@ import {
   type AgentLifecycleIdFactory,
 } from '@/domain/agent-template'
 import { instantiatePattern, removeSlot as removePatternSlot, unassignAgent, type PatternIdFactory } from '@/domain/pattern'
-import type { AgentLifecycleRepository, EditorRepository, JourneyLifecycleRepository, OdysseyEditorRepository, RepositoryOperationOptions } from './editorRepository'
+import type { AgentLifecycleRepository, EditorRepository, GuardrailLifecycleRepository, JourneyLifecycleRepository, OdysseyEditorRepository, RepositoryOperationOptions } from './editorRepository'
 
 type InjectableFailure = 'NETWORK_FAILED' | 'RESPONSE_INVALID' | 'REVISION_CONFLICT'
 
@@ -109,7 +115,7 @@ function waitForLatency(latencyMs: number, signal?: AbortSignal): Promise<'compl
   })
 }
 
-export class InMemoryEditorRepository implements EditorRepository, AgentLifecycleRepository, JourneyLifecycleRepository {
+export class InMemoryEditorRepository implements EditorRepository, AgentLifecycleRepository, GuardrailLifecycleRepository, JourneyLifecycleRepository {
   readonly #journeys = new Map<string, JourneyEditorDocument>()
   readonly #agentWorkflows = new Map<string, AgentWorkflowEditorDocument>()
   readonly #agentTemplates = new Map<string, AgentTemplate>()
@@ -213,6 +219,8 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
       },
       pattern: instantiatePattern(parsedInput.data.patternTemplateKey, this.#patternIdFactory),
       agents: [],
+      inputGuardrail: { state: 'inactive' },
+      outputGuardrail: { state: 'inactive' },
     }
     const parsed = journeyEditorDocumentSchema.safeParse(candidate)
     if (!parsed.success) return failure({ code: 'RESPONSE_INVALID' })
@@ -356,6 +364,61 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
     this.#agentWorkflows.delete(agent.agent.id)
     if (template) this.#agentTemplates.set(template.id, structuredClone(template))
     return { ok: true, value: response.data }
+  }
+
+  async addGuardrail(input: AddGuardrailInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<AddGuardrailSuccess>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const parsedInput = addGuardrailInputSchema.safeParse(input)
+    if (!parsedInput.success) return failure({ code: 'REQUEST_INVALID' })
+    const journey = this.#journeys.get(parsedInput.data.journeyId)
+    if (!journey) return failure({ code: 'NOT_FOUND' })
+    if (journey.journey.revision !== parsedInput.data.expectedRevision) return failure({ code: 'REVISION_CONFLICT', expectedRevision: parsedInput.data.expectedRevision, currentRevision: journey.journey.revision })
+    const field = parsedInput.data.side === 'input' ? 'inputGuardrail' : 'outputGuardrail'
+    if (journey[field].state === 'active') return failure({ code: 'STATE_CONFLICT', reason: 'GUARDRAIL_ALREADY_ACTIVE' })
+    const timestamp = this.#now()
+    const agentId = this.#idFactory.agentId()
+    const startId = this.#idFactory.workflowNodeId()
+    const endId = this.#idFactory.workflowNodeId()
+    const edgeId = this.#idFactory.workflowEdgeId()
+    const agent = this.#agentDocumentSchema.parse({
+      agent: { id: agentId, journeyId: journey.journey.id, name: `${parsedInput.data.side === 'input' ? 'Input' : 'Output'} Guardrail Agent`, description: null, revision: 1, createdAt: timestamp, updatedAt: timestamp },
+      workflow: { schemaVersion: '1.0.0', nodes: [{ id: startId, type: 'start', name: 'Start', config: {} }, { id: endId, type: 'end', name: 'End', config: {} }], edges: [{ id: edgeId, sourceNodeId: startId, targetNodeId: endId }] },
+      layout: { schemaVersion: '1.0.0', nodePlacements: [{ nodeId: startId, x: 120, y: 180 }, { nodeId: endId, x: 420, y: 180 }], viewport: { x: 0, y: 0, zoom: 1 } },
+      variables: [], reusableTools: [],
+    })
+    const candidate = structuredClone(journey)
+    candidate.journey.revision += 1
+    candidate.journey.updatedAt = timestamp
+    candidate.agents.push({ id: agent.agent.id, name: agent.agent.name, description: agent.agent.description, revision: agent.agent.revision, updatedAt: agent.agent.updatedAt })
+    candidate[field] = { state: 'active', structure: 'single', agentId }
+    const response = addGuardrailSuccessSchema.safeParse({ journey: candidate, agent })
+    if (!response.success) return failure({ code: 'RESPONSE_INVALID' })
+    this.#journeys.set(journey.journey.id, structuredClone(response.data.journey))
+    this.#agentWorkflows.set(agentId, structuredClone(response.data.agent))
+    return { ok: true, value: response.data }
+  }
+
+  async removeGuardrail(input: RemoveGuardrailInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<JourneyEditorDocument>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const parsedInput = removeGuardrailInputSchema.safeParse(input)
+    if (!parsedInput.success) return failure({ code: 'REQUEST_INVALID' })
+    const journey = this.#journeys.get(parsedInput.data.journeyId)
+    if (!journey) return failure({ code: 'NOT_FOUND' })
+    if (journey.journey.revision !== parsedInput.data.expectedRevision) return failure({ code: 'REVISION_CONFLICT', expectedRevision: parsedInput.data.expectedRevision, currentRevision: journey.journey.revision })
+    const field = parsedInput.data.side === 'input' ? 'inputGuardrail' : 'outputGuardrail'
+    const projection = journey[field]
+    if (projection.state !== 'active') return failure({ code: 'STATE_CONFLICT', reason: 'GUARDRAIL_ALREADY_INACTIVE' })
+    if (projection.agentId !== parsedInput.data.expectedAgentId) return failure({ code: 'STATE_CONFLICT', reason: 'GUARDRAIL_AGENT_MISMATCH' })
+    const candidate = structuredClone(journey)
+    candidate.journey.revision += 1
+    candidate.journey.updatedAt = this.#now()
+    candidate.agents = candidate.agents.filter((agent) => agent.id !== projection.agentId)
+    candidate[field] = { state: 'inactive' }
+    const parsed = journeyEditorDocumentSchema.safeParse(candidate)
+    if (!parsed.success) return failure({ code: 'RESPONSE_INVALID' })
+    this.#journeys.set(journey.journey.id, structuredClone(parsed.data))
+    this.#agentWorkflows.delete(projection.agentId)
+    return { ok: true, value: parsed.data }
   }
 
   async loadJourney(

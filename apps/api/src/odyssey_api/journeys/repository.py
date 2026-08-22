@@ -10,18 +10,21 @@ from odyssey_api.db.models import (
     AgentReusableTool,
     AgentVariable,
     AgentWorkflow,
+    JourneyGuardrail,
     OdyJourney,
 )
 from odyssey_api.db.models import (
     AgentTemplate as AgentTemplateRow,
 )
 from odyssey_api.journeys.dto import (
+    ActiveGuardrail,
     AgentMetadata,
     AgentSummary,
     AgentTemplate,
     AgentTemplateSnapshot,
     AgentWorkflowEditorDocument,
     CanvasLayout,
+    InactiveGuardrail,
     JourneyEditorDocument,
     JourneyMetadata,
     JourneyStatus,
@@ -35,12 +38,19 @@ from odyssey_api.journeys.dto import (
 from odyssey_api.journeys.dto import (
     AgentVariable as AgentVariableDto,
 )
+from odyssey_api.journeys.guardrail_domain import GuardrailSide
 
 
 @dataclass(frozen=True, slots=True)
 class RevisionResult:
     revision: int
     updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class GuardrailBindingRecord:
+    side: GuardrailSide
+    agent_id: UUID
 
 
 def _scoped_journey_statement(journey_id: UUID, workspace_id: UUID) -> Select[tuple[OdyJourney]]:
@@ -106,6 +116,8 @@ async def get_journey_document(
         .scalars()
         .all()
     )
+    guardrails = await list_guardrail_bindings(session, journey.id)
+    guardrail_by_side = {binding.side: binding.agent_id for binding in guardrails}
     return JourneyEditorDocument(
         journey=JourneyMetadata(
             id=journey.id,
@@ -129,6 +141,24 @@ async def get_journey_document(
             )
             for agent in agents
         ],
+        input_guardrail=(
+            ActiveGuardrail(
+                state="active",
+                structure="single",
+                agent_id=guardrail_by_side[GuardrailSide.INPUT],
+            )
+            if GuardrailSide.INPUT in guardrail_by_side
+            else InactiveGuardrail(state="inactive")
+        ),
+        output_guardrail=(
+            ActiveGuardrail(
+                state="active",
+                structure="single",
+                agent_id=guardrail_by_side[GuardrailSide.OUTPUT],
+            )
+            if GuardrailSide.OUTPUT in guardrail_by_side
+            else InactiveGuardrail(state="inactive")
+        ),
     )
 
 
@@ -181,6 +211,80 @@ async def cas_update_pattern(
     )
     row = result.one_or_none()
     return None if row is None else RevisionResult(revision=row.revision, updated_at=row.updated_at)
+
+
+async def cas_advance_journey_revision(
+    session: AsyncSession,
+    *,
+    journey_id: UUID,
+    workspace_id: UUID,
+    expected_revision: int,
+) -> RevisionResult | None:
+    result = await session.execute(
+        update(OdyJourney)
+        .where(
+            OdyJourney.id == journey_id,
+            OdyJourney.workspace_id == workspace_id,
+            OdyJourney.revision == expected_revision,
+        )
+        .values(revision=OdyJourney.revision + 1, updated_at=func.now())
+        .returning(OdyJourney.revision, OdyJourney.updated_at)
+    )
+    row = result.one_or_none()
+    return None if row is None else RevisionResult(revision=row.revision, updated_at=row.updated_at)
+
+
+async def list_guardrail_bindings(
+    session: AsyncSession, journey_id: UUID
+) -> list[GuardrailBindingRecord]:
+    rows = (
+        await session.execute(
+            select(JourneyGuardrail.side, JourneyGuardrail.agent_workflow_id)
+            .where(JourneyGuardrail.ody_journey_id == journey_id)
+            .order_by(JourneyGuardrail.side)
+        )
+    ).all()
+    return [
+        GuardrailBindingRecord(side=GuardrailSide(row.side), agent_id=row.agent_workflow_id)
+        for row in rows
+    ]
+
+
+async def insert_guardrail_binding(
+    session: AsyncSession,
+    *,
+    journey_id: UUID,
+    side: GuardrailSide,
+    agent_id: UUID,
+) -> None:
+    session.add(
+        JourneyGuardrail(
+            ody_journey_id=journey_id,
+            side=side.value,
+            agent_workflow_id=agent_id,
+            structure="single",
+        )
+    )
+    await session.flush()
+
+
+async def delete_guardrail_binding(
+    session: AsyncSession,
+    *,
+    journey_id: UUID,
+    side: GuardrailSide,
+    expected_agent_id: UUID,
+) -> bool:
+    result = await session.execute(
+        delete(JourneyGuardrail)
+        .where(
+            JourneyGuardrail.ody_journey_id == journey_id,
+            JourneyGuardrail.side == side.value,
+            JourneyGuardrail.agent_workflow_id == expected_agent_id,
+        )
+        .returning(JourneyGuardrail.agent_workflow_id)
+    )
+    return result.scalar_one_or_none() is not None
 
 
 async def cas_delete_journey(

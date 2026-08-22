@@ -324,6 +324,8 @@ export function createJourneyEditorDocumentFixture(): JourneyEditorDocument {
       revision: document.agent.revision,
       updatedAt: document.agent.updatedAt,
     })),
+    inputGuardrail: { state: 'inactive' },
+    outputGuardrail: { state: 'inactive' },
   })
 }
 

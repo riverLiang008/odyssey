@@ -54,6 +54,14 @@ def test_openapi_documents_all_existing_operations(monkeypatch) -> None:
             "/api/v1/journeys/{journey_id}/slots/{slot_id}/commands/remove",
             "post",
         ): "removeOccupiedSlot",
+        (
+            "/api/v1/journeys/{journey_id}/guardrails/{side}/commands/add",
+            "post",
+        ): "addGuardrail",
+        (
+            "/api/v1/journeys/{journey_id}/guardrails/{side}/commands/remove",
+            "post",
+        ): "removeGuardrail",
         ("/api/v1/agent-templates", "get"): "listAgentTemplates",
         ("/api/v1/agent-templates/{template_id}", "get"): "loadAgentTemplate",
     }
@@ -100,3 +108,19 @@ def test_openapi_never_exposes_settings_or_secrets() -> None:
                 continue
             body_schema = request_body["content"]["application/json"]["schema"]
             assert body_schema.get("$ref") != "#/components/schemas/Settings"
+
+
+def test_openapi_exposes_strict_guardrail_projection_and_commands() -> None:
+    schema = create_app().openapi()
+    document = schema["components"]["schemas"]["JourneyEditorDocument"]
+    assert {"inputGuardrail", "outputGuardrail"} <= set(document["required"])
+    add = schema["paths"]["/api/v1/journeys/{journey_id}/guardrails/{side}/commands/add"]["post"]
+    remove = schema["paths"]["/api/v1/journeys/{journey_id}/guardrails/{side}/commands/remove"][
+        "post"
+    ]
+    assert add["responses"]["201"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/AddGuardrailResponse"
+    }
+    assert remove["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/JourneyEditorDocument"
+    }

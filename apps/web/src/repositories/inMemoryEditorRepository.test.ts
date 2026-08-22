@@ -64,6 +64,8 @@ function createJourneyDocument(): JourneyEditorDocument {
         updatedAt: INITIAL_TIME,
       },
     ],
+    inputGuardrail: { state: 'inactive' },
+    outputGuardrail: { state: 'inactive' },
   })
 }
 

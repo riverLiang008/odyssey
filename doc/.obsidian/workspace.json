@@ -27,12 +27,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "planning/implementation/frontend/m2.4b-http-repository-backend-integration-plan.md",
+                "file": "planning/implementation/frontend/m2-interaction-proof-frontend-implementation.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "m2.4b-http-repository-backend-integration-plan"
+              "title": "m2-interaction-proof-frontend-implementation"
             }
           }
         ],
@@ -95,7 +95,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 200
+    "width": 398.16668701171875
   },
   "right": {
     "id": "cd3f254184518573",
@@ -202,7 +202,20 @@
   },
   "active": "cf1f489a032510d6",
   "lastOpenFiles": [
+    "planning/implementation/frontend/m2.6-workflow-domain-commands-graph-validation-implementation-plan.md",
+    "planning/implementation/frontend/m2.5-acceptance-checklist.md",
+    "planning/implementation/frontend/m2.5-completion-report.md",
+    "planning/implementation/frontend/Tip.md",
+    "planning/implementation/frontend/m2.5-read-only-workflow-preview-nested-navigation-implementation-plan.md",
+    "planning/implementation/frontend/m2.4-acceptance-checklist.md",
+    "planning/implementation/backend/optional-guardrail-persistence-contract-handoff.md",
+    "planning/implementation/frontend/guardrail-single-agent-interaction-implementation-plan.md",
+    "planning/implementation/frontend/hub-and-spoke-topology-layout-implementation-plan.md",
+    "planning/implementation/frontend/system-configuration-grid-behavior-boundary-implementation-plan.md",
+    "product/OdyJourney.md",
     "planning/implementation/frontend/m2.4b-new-journey-pattern-selection-implementation-plan.md",
+    "planning/implementation/frontend/m2.4b-http-repository-backend-integration-plan.md",
+    "planning/implementation/frontend/m2.4-slot-open-workflow-http-only-interaction-remediation-plan.md",
     "planning/implementation/backend/m2.4b-journey-persistence-api-implementation-plan.md",
     "architecture/data/database/reviews/v1-database-design-review-draft.md",
     "planning/implementation/frontend/m2.4b-create-journey-modal-redesign-implementation-plan.md",
@@ -215,21 +228,8 @@
     "planning/implementation/backend/journey-persistence-contract-review-questions.md",
     "frontend-engineering-guidelines.md",
     "planning/implementation/m2.4-system-canvas-agent-slot-typed-dnd-implementation-plan.md",
-    "planning/implementation/frontend/m2.4-system-canvas-agent-slot-typed-dnd-implementation-plan.md",
-    "planning/implementation/frontend/m2.4-pattern-presentation-dynamic-slot-remediation-plan.md",
-    "planning/implementation/frontend/m2.3-pattern-domain-strategies-commands-implementation-plan.md",
-    "planning/implementation/frontend/m2.3-completion-report.md",
-    "planning/implementation/frontend/m2.2-completion-report.md",
-    "planning/implementation/frontend/m2.2-app-shell-router-store-boundaries-implementation-plan.md",
-    "planning/implementation/frontend/m2.1-contracts-fixtures-repository-implementation-plan.md",
-    "planning/implementation/frontend/m2.1-completion-report.md",
-    "planning/implementation/frontend/m2-interaction-proof-frontend-implementation.md",
     "planning/implementation/backend",
     "planning/implementation/frontend",
-    "architecture/domain/diamond-loop-pattern-decision.md",
-    "planning/implementation/m2.4-pattern-presentation-dynamic-slot-remediation-plan.md",
-    "architecture/data/contracts/v1-contract-source-mapping.md",
-    "architecture/data/contracts/canonical-json-contracts-draft.md",
     "Pasted image 20260814224049.png",
     "Pasted image 20260814223443.png",
     "temp/odyssey-mark-animation/odyssey-mark-animation-scenes-01-04-no-subtitles-1920x1080-30fps.mp4",

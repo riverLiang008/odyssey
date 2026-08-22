@@ -40,11 +40,23 @@ export const agentSummarySchema = z.strictObject({
   updatedAt: utcTimestampSchema,
 })
 
+export const guardrailSideSchema = z.enum(['input', 'output'])
+export const guardrailProjectionSchema = z.discriminatedUnion('state', [
+  z.strictObject({ state: z.literal('inactive') }),
+  z.strictObject({
+    state: z.literal('active'),
+    structure: z.literal('single'),
+    agentId: uuidSchema,
+  }),
+])
+
 export const journeyEditorDocumentSchema = z
   .strictObject({
     journey: journeyEditorMetadataSchema,
     pattern: patternConfigSchema,
     agents: z.array(agentSummarySchema),
+    inputGuardrail: guardrailProjectionSchema,
+    outputGuardrail: guardrailProjectionSchema,
   })
   .superRefine((document, context) => {
     const agentIds = new Set<string>()
@@ -66,6 +78,27 @@ export const journeyEditorDocumentSchema = z
         context.addIssue({ code: 'custom', message: 'Occupied Pattern slots must reference an Agent summary', path: ['pattern', 'slots', index, 'agentId'] })
       }
     })
+
+    const activeGuardrails = [
+      ['inputGuardrail', document.inputGuardrail],
+      ['outputGuardrail', document.outputGuardrail],
+    ] as const
+    const guardrailAgentIds = activeGuardrails.flatMap(([, guardrail]) =>
+      guardrail.state === 'active' ? [guardrail.agentId] : [],
+    )
+    activeGuardrails.forEach(([field, guardrail]) => {
+      if (guardrail.state !== 'active') return
+      const agentId = guardrail.agentId
+      if (!agentIds.has(agentId)) {
+        context.addIssue({ code: 'custom', message: 'Active Guardrails must reference an Agent summary', path: [field, 'agentId'] })
+      }
+      if (occupiedAgentIds.has(agentId)) {
+        context.addIssue({ code: 'custom', message: 'A Guardrail Agent cannot occupy a Pattern Slot', path: [field, 'agentId'] })
+      }
+    })
+    if (guardrailAgentIds.length !== new Set(guardrailAgentIds).size) {
+      context.addIssue({ code: 'custom', message: 'Input and Output Guardrails require distinct Agents', path: ['outputGuardrail', 'agentId'] })
+    }
   })
 
 export const agentEditorMetadataSchema = z.strictObject({
@@ -392,6 +425,8 @@ export const agentTemplateSchema = createAgentTemplateSchema()
 export type JourneyStatus = z.infer<typeof journeyStatusSchema>
 export type JourneyEditorMetadata = z.infer<typeof journeyEditorMetadataSchema>
 export type AgentSummary = z.infer<typeof agentSummarySchema>
+export type GuardrailSide = z.infer<typeof guardrailSideSchema>
+export type GuardrailProjection = z.infer<typeof guardrailProjectionSchema>
 export type JourneyEditorDocument = z.infer<typeof journeyEditorDocumentSchema>
 export type AgentEditorMetadata = z.infer<typeof agentEditorMetadataSchema>
 export type AgentWorkflowEditorDocument = z.infer<typeof agentWorkflowEditorDocumentSchema>

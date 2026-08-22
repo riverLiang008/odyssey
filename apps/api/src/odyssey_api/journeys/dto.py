@@ -5,6 +5,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
+from odyssey_api.journeys.guardrail_domain import (
+    validate_guardrail_agent_ids,
+)
+
 
 class ApiModel(BaseModel):
     model_config = ConfigDict(
@@ -109,10 +113,28 @@ class AgentSummary(ApiModel):
     updated_at: datetime
 
 
+class InactiveGuardrail(ApiModel):
+    state: Literal["inactive"]
+
+
+class ActiveGuardrail(ApiModel):
+    state: Literal["active"]
+    structure: Literal["single"]
+    agent_id: UUID
+
+
+GuardrailProjection = Annotated[
+    InactiveGuardrail | ActiveGuardrail,
+    Field(discriminator="state"),
+]
+
+
 class JourneyEditorDocument(ApiModel):
     journey: JourneyMetadata
     pattern: PatternConfig
     agents: list[AgentSummary]
+    input_guardrail: GuardrailProjection
+    output_guardrail: GuardrailProjection
 
     @model_validator(mode="after")
     def validate_agent_references(self) -> "JourneyEditorDocument":
@@ -124,6 +146,24 @@ class JourneyEditorDocument(ApiModel):
             raise ValueError("An Agent may occupy only one Pattern slot")
         if not set(assigned_ids).issubset(agent_ids):
             raise ValueError("Occupied slots must reference an Agent summary")
+        issues = validate_guardrail_agent_ids(
+            input_agent_id=(
+                self.input_guardrail.agent_id
+                if isinstance(self.input_guardrail, ActiveGuardrail)
+                else None
+            ),
+            output_agent_id=(
+                self.output_guardrail.agent_id
+                if isinstance(self.output_guardrail, ActiveGuardrail)
+                else None
+            ),
+            journey_agent_ids=set(agent_ids),
+            pattern_agent_ids=set(assigned_ids),
+        )
+        if issues:
+            raise ValueError(
+                "Invalid Guardrail state: " + ",".join(issue.value for issue in issues)
+            )
         return self
 
 
@@ -166,6 +206,28 @@ class CreateMinimumAgentRequest(ApiModel):
     model_config = ConfigDict(json_schema_extra={"examples": [{"expectedRevision": 3}]})
 
     expected_revision: Revision
+
+
+class AddGuardrailRequest(ApiModel):
+    model_config = ConfigDict(json_schema_extra={"examples": [{"expectedRevision": 3}]})
+
+    expected_revision: Revision
+
+
+class RemoveGuardrailRequest(ApiModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "expectedRevision": 4,
+                    "expectedAgentId": "0195f076-b6e6-7ef0-98db-d721990f8002",
+                }
+            ]
+        }
+    )
+
+    expected_revision: Revision
+    expected_agent_id: UUID
 
 
 class WorkflowNode(ApiModel):
@@ -355,5 +417,10 @@ class RemoveOccupiedSlotResponse(ApiModel):
 
 
 class CreateMinimumAgentResponse(ApiModel):
+    journey: JourneyEditorDocument
+    agent: AgentWorkflowEditorDocument
+
+
+class AddGuardrailResponse(ApiModel):
     journey: JourneyEditorDocument
     agent: AgentWorkflowEditorDocument

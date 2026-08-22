@@ -255,6 +255,14 @@ describe('Workflow and Layout schemas', () => {
     expect(workflowGraphSchema.safeParse(workflow).success).toBe(false)
   })
 
+  it('normalizes nullable HTTP source handles to the canonical omitted form', () => {
+    const workflow = createWorkflow()
+    const candidate = structuredClone(workflow) as unknown as { edges: Array<Record<string, unknown>> }
+    candidate.edges[0]!.sourceHandleId = null
+    const parsed = workflowGraphSchema.parse(candidate)
+    expect(parsed.edges[0]?.sourceHandleId).toBeUndefined()
+  })
+
   it('requires sourceHandleId to belong to its source Branch', () => {
     const caseId = '0195f076-b6e6-7ef0-98db-d721990f88b1'
     const defaultId = '0195f076-b6e6-7ef0-98db-d721990f88b5'

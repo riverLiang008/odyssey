@@ -52,6 +52,7 @@ doc/
 | Knowledge Space 产品规格 | [`product/feature-specifications/knowledge-space/knowledge-space-specification.md`](product/feature-specifications/knowledge-space/knowledge-space-specification.md) | Product specification；已确认的 V1 database/storage 决策可覆盖其中的旧持久化建议 |
 | 前端工程规范 | [`frontend-engineering-guidelines.md`](frontend-engineering-guidelines.md) | Authoritative |
 | M2 前端实施计划 | [`planning/implementation/frontend/m2-interaction-proof-frontend-implementation.md`](planning/implementation/frontend/m2-interaction-proof-frontend-implementation.md) | Active frontend planning |
+| M2.4 Slot Workflow 交互纠偏计划 | [`planning/implementation/frontend/m2.4-slot-open-workflow-http-only-interaction-remediation-plan.md`](planning/implementation/frontend/m2.4-slot-open-workflow-http-only-interaction-remediation-plan.md) | Ready for implementation；覆盖旧的“点击空 Slot 即创建”行为 |
 | M2.4B 创建 Journey 前端计划 | [`planning/implementation/frontend/m2.4b-new-journey-pattern-selection-implementation-plan.md`](planning/implementation/frontend/m2.4b-new-journey-pattern-selection-implementation-plan.md) | Ready for implementation |
 | Journey 后端纵向切片交接 | [`planning/implementation/backend/journey-persistence-vertical-slice-handoff.md`](planning/implementation/backend/journey-persistence-vertical-slice-handoff.md) | Backend planning handoff |
 | M2.4B Journey 后端计划 | [`planning/implementation/backend/m2.4b-journey-persistence-api-implementation-plan.md`](planning/implementation/backend/m2.4b-journey-persistence-api-implementation-plan.md) | Ready for implementation |

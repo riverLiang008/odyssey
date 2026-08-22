@@ -143,7 +143,7 @@ export const loopBodyNodeSchema = z.discriminatedUnion('type', [
 export const workflowEdgeSchema = z.strictObject({
   id: uuidSchema,
   sourceNodeId: uuidSchema,
-  sourceHandleId: uuidSchema.optional(),
+  sourceHandleId: z.preprocess((value) => value === null ? undefined : value, uuidSchema.optional()),
   targetNodeId: uuidSchema,
 })
 

@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     development_workspace_id: UUID | None = None
     development_workspace_name: str = "Odyssey Development"
     cors_origins: list[AnyHttpUrl] = [
+        AnyHttpUrl("http://localhost:4173"),
+        AnyHttpUrl("http://127.0.0.1:4173"),
         AnyHttpUrl("http://localhost:5173"),
         AnyHttpUrl("http://127.0.0.1:5173"),
     ]

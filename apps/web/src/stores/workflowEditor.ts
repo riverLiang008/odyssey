@@ -1,4 +1,4 @@
-import { computed, reactive, ref, toRaw } from 'vue'
+import { computed, reactive, shallowRef, toRaw } from 'vue'
 import { defineStore } from 'pinia'
 import type {
   AgentWorkflowEditorDocument,
@@ -32,7 +32,10 @@ function createSaveInput(document: AgentWorkflowEditorDocument): SaveAgentWorkfl
 }
 
 export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
-  const document = ref<AgentWorkflowEditorDocument | null>(null)
+  // The repository returns a validated aggregate snapshot. Store actions
+  // replace it as a unit, so deep proxy unwrapping adds no useful behavior and
+  // makes the recursive Workflow JSON types exceed TypeScript's depth limit.
+  const document = shallowRef<AgentWorkflowEditorDocument | null>(null)
   const session = reactive({
     selectedNodeId: null as UUID | null,
     panel: { type: 'tools' } as WorkflowPanel,

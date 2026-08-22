@@ -1,7 +1,12 @@
 import type { PatternConfig, UUID } from '@odyssey/schemas'
 
 export interface PatternPresentation {
-  readonly slots: readonly { readonly slotId: UUID; readonly x: number; readonly y: number }[]
+  readonly slots: readonly {
+    readonly slotId: UUID
+    readonly x: number
+    readonly y: number
+    readonly labelPlacement?: 'top' | 'right' | 'bottom' | 'left'
+  }[]
   readonly routes: readonly {
     readonly routeId: UUID
     readonly sourceSlotId: UUID
@@ -11,6 +16,24 @@ export interface PatternPresentation {
 
 const CENTER_X = 360
 const CENTER_Y = 210
+const HUB_SPOKE_RADIUS_X = 280
+const HUB_SPOKE_RADIUS_Y = 180
+
+function hubSpokeAngle(index: number, count: number): number {
+  if (count === 1) return 0
+  if (count === 2) return index === 0 ? Math.PI : 0
+  if (count === 3) return [-Math.PI / 2, 5 * Math.PI / 6, Math.PI / 6][index] ?? 0
+  return -Math.PI / 2 + index * 2 * Math.PI / count
+}
+
+function hubSpokeLabelPlacement(angle: number, index: number, count: number): 'top' | 'bottom' {
+  if (count === 1) return 'top'
+  if (count === 2) return index === 0 ? 'bottom' : 'top'
+  const verticalDirection = Math.sin(angle)
+  if (verticalDirection < -0.2) return 'top'
+  if (verticalDirection > 0.2) return 'bottom'
+  return Math.cos(angle) < 0 ? 'bottom' : 'top'
+}
 
 export function derivePatternPresentation(pattern: PatternConfig): PatternPresentation {
   let slots: PatternPresentation['slots']
@@ -24,15 +47,16 @@ export function derivePatternPresentation(pattern: PatternConfig): PatternPresen
   } else if (pattern.kind === 'hub_and_spoke') {
     const hub = pattern.slots.find((slot) => slot.topologyRole === 'hub')
     const spokes = pattern.slots.filter((slot) => slot.topologyRole === 'spoke')
-    const columns = Math.ceil(spokes.length / 2)
     slots = [
-      ...(hub ? [{ slotId: hub.id, x: 120, y: CENTER_Y }] : []),
+      ...(hub ? [{ slotId: hub.id, x: CENTER_X, y: CENTER_Y, labelPlacement: 'bottom' as const }] : []),
       ...spokes.map((slot, index) => {
-        if (spokes.length === 1) return { slotId: slot.id, x: 500, y: CENTER_Y }
-        const column = index % columns
-        const row = Math.floor(index / columns)
-        const x = columns === 1 ? 500 : 330 + column * (320 / (columns - 1))
-        return { slotId: slot.id, x, y: row === 0 ? 95 : 305 }
+        const angle = hubSpokeAngle(index, spokes.length)
+        return {
+          slotId: slot.id,
+          x: Math.round(CENTER_X + Math.cos(angle) * HUB_SPOKE_RADIUS_X),
+          y: Math.round(CENTER_Y + Math.sin(angle) * HUB_SPOKE_RADIUS_Y),
+          labelPlacement: hubSpokeLabelPlacement(angle, index, spokes.length),
+        }
       }),
     ]
   } else {

@@ -4,6 +4,7 @@ from odyssey_api.db.base import Base
 from odyssey_api.db.models import (
     AgentTemplate,
     AgentWorkflow,
+    JourneyGuardrail,
     KnowledgeResourceArtifact,
     PatternTemplate,
     StorageObjectDeletionOutbox,
@@ -32,6 +33,7 @@ def test_v1_baseline_contains_all_first_class_tables() -> None:
         "knowledge_space_category",
         "ody_journey",
         "agent_workflow",
+        "journey_guardrail",
         "tool_definition",
         "pattern_template",
         "agent_template",
@@ -53,6 +55,12 @@ def test_v1_baseline_contains_all_first_class_tables() -> None:
         "tool_template_knowledge_space_reference",
         "storage_object_deletion_outbox",
     }
+
+
+def test_guardrail_binding_is_side_scoped_and_agent_unique() -> None:
+    table = JourneyGuardrail.__table__
+    assert set(table.primary_key.columns.keys()) == {"ody_journey_id", "side"}
+    assert any(constraint.name == "uq_journey_guardrail_agent" for constraint in table.constraints)
 
 
 def test_agent_workflow_uses_current_revision_without_version_pointer() -> None:

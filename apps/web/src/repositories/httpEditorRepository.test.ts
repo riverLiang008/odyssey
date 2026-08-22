@@ -62,6 +62,32 @@ describe('HttpEditorRepository', () => {
     expect(JSON.parse(String((fetchImplementation.mock.calls[0]?.[1] as RequestInit).body))).toEqual({ expectedRevision: journey.journey.revision })
   })
 
+  it('maps atomic Guardrail add and remove commands with runtime-validated aggregates', async () => {
+    const journey = createJourneyEditorDocumentFixture()
+    const agent = createAgentWorkflowEditorDocumentFixture('minimal')
+    agent.agent.journeyId = journey.journey.id
+    agent.agent.id = uuidSchema.parse('0195f076-b6e6-7ef0-98db-666666666666')
+    const active = structuredClone(journey)
+    active.journey.revision += 1
+    active.agents.push({ id: agent.agent.id, name: agent.agent.name, description: agent.agent.description, revision: agent.agent.revision, updatedAt: agent.agent.updatedAt })
+    active.inputGuardrail = { state: 'active', structure: 'single', agentId: agent.agent.id }
+    const inactive = structuredClone(active)
+    inactive.journey.revision += 1
+    inactive.agents = inactive.agents.filter((summary) => summary.id !== agent.agent.id)
+    inactive.inputGuardrail = { state: 'inactive' }
+    const fetchImplementation = vi.fn()
+      .mockResolvedValueOnce(json({ journey: active, agent }, 201))
+      .mockResolvedValueOnce(json(inactive))
+    const repository = new HttpEditorRepository({ baseUrl: 'http://localhost:8000/api/v1', fetchImplementation })
+
+    expect((await repository.addGuardrail({ journeyId: journey.journey.id, side: 'input', expectedRevision: journey.journey.revision })).ok).toBe(true)
+    expect((await repository.removeGuardrail({ journeyId: journey.journey.id, side: 'input', expectedRevision: active.journey.revision, expectedAgentId: agent.agent.id })).ok).toBe(true)
+    expect(fetchImplementation.mock.calls[0]?.[0]).toBe(`http://localhost:8000/api/v1/journeys/${journey.journey.id}/guardrails/input/commands/add`)
+    expect(JSON.parse(String((fetchImplementation.mock.calls[0]?.[1] as RequestInit).body))).toEqual({ expectedRevision: journey.journey.revision })
+    expect(fetchImplementation.mock.calls[1]?.[0]).toBe(`http://localhost:8000/api/v1/journeys/${journey.journey.id}/guardrails/input/commands/remove`)
+    expect(JSON.parse(String((fetchImplementation.mock.calls[1]?.[1] as RequestInit).body))).toEqual({ expectedRevision: active.journey.revision, expectedAgentId: agent.agent.id })
+  })
+
   it('normalizes revision conflicts and fails closed for malformed error envelopes', async () => {
     const journey = createJourneyEditorDocumentFixture()
     const fetchImplementation = vi.fn()

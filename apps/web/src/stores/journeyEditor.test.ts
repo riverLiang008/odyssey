@@ -4,7 +4,7 @@ import { journeyEditorDocumentSchema, uuidSchema, type CreateOrInstantiateAgentS
 
 import { createAgentWorkflowEditorDocumentFixture, createJourneyEditorDocumentFixture, FIXTURE_IDS } from '@/fixtures'
 import { createInMemoryEditorRepositoryScenario, InMemoryEditorRepository } from '@/repositories'
-import type { AgentLifecycleRepository } from '@/repositories'
+import type { AgentLifecycleRepository, EditorRepository } from '@/repositories'
 import { useJourneyEditorStore } from './journeyEditor'
 
 function patternIdFactory(start = 9000) {
@@ -45,7 +45,7 @@ describe('journeyEditor store', () => {
       latencyMs: 20,
     })
     const store = useJourneyEditorStore()
-    const pending = store.load(uuidSchema.parse(FIXTURE_IDS.journey), 'pattern', repository)
+    const pending = store.load(uuidSchema.parse(FIXTURE_IDS.journey), 'execution', repository)
     store.dispose()
     await pending
     expect(store.document).toBeNull()
@@ -59,11 +59,11 @@ describe('journeyEditor store', () => {
     const store = useJourneyEditorStore()
     const journeyId = uuidSchema.parse(FIXTURE_IDS.journey)
     controls.failNext('NETWORK_FAILED')
-    await store.load(journeyId, 'pattern', repository)
+    await store.load(journeyId, 'execution', repository)
     expect(store.persistence.loadStatus).toBe('error')
     expect(store.persistence.error?.code).toBe('NETWORK_FAILED')
 
-    await store.load(journeyId, 'pattern', repository)
+    await store.load(journeyId, 'execution', repository)
     expect(store.persistence.loadStatus).toBe('ready')
     expect(store.persistence.error).toBeNull()
     expect(store.document?.journey.id).toBe(journeyId)
@@ -87,7 +87,7 @@ describe('journeyEditor store', () => {
     } satisfies import('@/repositories').EditorRepository
     const store = useJourneyEditorStore()
 
-    const oldLoad = store.load(firstId, 'pattern', repository)
+    const oldLoad = store.load(firstId, 'execution', repository)
     const newLoad = store.load(secondId, 'agent', repository)
     second.resolve({ ok: true, value: secondDocument })
     await newLoad
@@ -105,7 +105,7 @@ describe('journeyEditor store', () => {
       ...repository,
       loadJourney: (id: typeof firstId) => id === firstId ? staleSuccess.promise : currentSuccess.promise,
     }
-    const staleSuccessLoad = store.load(firstId, 'pattern', successRepository)
+    const staleSuccessLoad = store.load(firstId, 'execution', successRepository)
     const currentSuccessLoad = store.load(secondId, 'execution', successRepository)
     currentSuccess.resolve({ ok: true, value: secondDocument })
     await currentSuccessLoad
@@ -116,7 +116,7 @@ describe('journeyEditor store', () => {
 
     const late = deferred<RepositoryResult<JourneyEditorDocument>>()
     const lateRepository = { ...repository, loadJourney: () => late.promise }
-    const disposedLoad = store.load(firstId, 'pattern', lateRepository)
+    const disposedLoad = store.load(firstId, 'execution', lateRepository)
     store.dispose()
     late.resolve({ ok: true, value: firstDocument })
     await disposedLoad
@@ -128,7 +128,7 @@ describe('journeyEditor store', () => {
     const fixture = createJourneyEditorDocumentFixture()
     const repository = new InMemoryEditorRepository({ journeys: [fixture] })
     const store = useJourneyEditorStore()
-    await store.load(uuidSchema.parse(FIXTURE_IDS.journey), 'pattern', repository)
+    await store.load(uuidSchema.parse(FIXTURE_IDS.journey), 'execution', repository)
     const firstSlotId = store.document!.pattern.slots[0]!.id
     const secondSlotId = store.document!.pattern.slots[1]!.id
     const firstAgentId = store.document!.pattern.slots[0]!.agentId!
@@ -159,7 +159,7 @@ describe('journeyEditor store', () => {
     const fixture = createJourneyEditorDocumentFixture()
     const repository = new InMemoryEditorRepository({ journeys: [fixture] })
     const store = useJourneyEditorStore()
-    await store.load(fixture.journey.id, 'pattern', repository)
+    await store.load(fixture.journey.id, 'execution', repository)
     const source = fixture.pattern.slots[0]!
     const target = fixture.pattern.slots[1]!
     const before = JSON.parse(JSON.stringify(store.document))
@@ -177,7 +177,9 @@ describe('journeyEditor store', () => {
     const afterExchange = JSON.parse(JSON.stringify(store.document))
     store.beginDrag({ version: 1, kind: 'assigned-agent', agentId: target.agentId!, sourceSlotId: source.id })
     expect(store.evaluateDrag({ kind: 'agent-slot', slotId: source.id })?.status).toBe('duplicate')
+    expect(store.session.lastDropError).toBeNull()
     expect(await store.dispatchDrop(repository, patternIdFactory())).toBe(false)
+    expect(store.session.lastDropError).toBe('SAME_SLOT')
     expect(store.document).toEqual(afterExchange)
     expect(store.persistence.mutationSeq).toBe(1)
     expect(store.session.interaction.type).toBe('idle')
@@ -191,7 +193,7 @@ describe('journeyEditor store', () => {
     const fixture = createJourneyEditorDocumentFixture()
     const repository = new InMemoryEditorRepository({ journeys: [fixture] })
     const store = useJourneyEditorStore()
-    await store.load(fixture.journey.id, 'pattern', repository)
+    await store.load(fixture.journey.id, 'execution', repository)
     const lastSlot = fixture.pattern.slots[2]!
     store.selectSlot(lastSlot.id)
     store.openMenu(lastSlot.id, { x: 10, y: 20 })
@@ -233,6 +235,131 @@ describe('journeyEditor store', () => {
     expect(await store.instantiateTemplate(templateId, targetSlotId, repository)).toBe(true)
     expect(store.document?.pattern.slots[2]?.agentId).toBeTruthy()
     expect(store.persistence.mutationSeq).toBe(2)
+  })
+
+  it('orchestrates Guardrail add/remove as server-owned aggregate replacements', async () => {
+    const fixture = createJourneyEditorDocumentFixture()
+    const repository = new InMemoryEditorRepository({ journeys: [fixture] })
+    const store = useJourneyEditorStore()
+    await store.load(fixture.journey.id, 'execution', repository)
+
+    const agentId = await store.addGuardrail('input', repository)
+    expect(agentId).toBeTruthy()
+    expect(store.document?.inputGuardrail).toEqual({ state: 'active', structure: 'single', agentId })
+    expect(store.document?.agents.some((agent) => agent.id === agentId)).toBe(true)
+    expect(store.guardrailOperation).toEqual({ type: 'idle' })
+    expect(store.persistence.mutationSeq).toBe(1)
+
+    if (!agentId) throw new Error('Guardrail Agent is missing')
+    store.openGuardrailMenu('input', { x: 12, y: 24 })
+    expect(store.session.guardrailInteraction).toEqual({ type: 'menu-open', side: 'input', agentId, anchor: { x: 12, y: 24 } })
+    store.stageGuardrailRemoval('input', agentId)
+    expect(await store.removeGuardrail('input', agentId, repository)).toBe(true)
+    expect(store.document?.inputGuardrail).toEqual({ state: 'inactive' })
+    expect(store.document?.agents.some((agent) => agent.id === agentId)).toBe(false)
+    expect(store.session.previewAgentId).toBeNull()
+    expect(store.persistence.mutationSeq).toBe(2)
+  })
+
+  it('loads one read-only Workflow Preview and closes it when an empty Slot is selected', async () => {
+    const fixture = createJourneyEditorDocumentFixture()
+    fixture.pattern.slots[1]!.agentId = null
+    const repository = new InMemoryEditorRepository({
+      journeys: [fixture],
+      agentWorkflows: [createAgentWorkflowEditorDocumentFixture('research')],
+    })
+    const loadAgentWorkflow = vi.spyOn(repository, 'loadAgentWorkflow')
+    const store = useJourneyEditorStore()
+    await store.load(fixture.journey.id, 'execution', repository)
+
+    expect(await store.selectSlotForPreview(fixture.pattern.slots[0]!.id, repository)).toBe(true)
+    expect(store.previewState).toEqual({ type: 'ready', agentId: fixture.pattern.slots[0]!.agentId })
+    expect(store.previewDocument?.agent.id).toBe(fixture.pattern.slots[0]!.agentId)
+    expect(loadAgentWorkflow).toHaveBeenCalledOnce()
+
+    expect(await store.selectSlotForPreview(fixture.pattern.slots[1]!.id, repository)).toBe(true)
+    expect(store.session.selectedSlotId).toBe(fixture.pattern.slots[1]!.id)
+    expect(store.session.previewAgentId).toBeNull()
+    expect(store.previewState).toEqual({ type: 'closed' })
+    expect(store.previewDocument).toBeNull()
+    expect(loadAgentWorkflow).toHaveBeenCalledOnce()
+    expect(store.toSaveInput()).not.toHaveProperty('preview')
+  })
+
+  it('persists unassignment before a Template is assigned to the same Slot again', async () => {
+    const fixture = createJourneyEditorDocumentFixture()
+    const workflow = createAgentWorkflowEditorDocumentFixture('research')
+    const { repository } = createInMemoryEditorRepositoryScenario({
+      journeys: [fixture],
+      agentWorkflows: [workflow],
+    })
+    const originalAgentId = fixture.pattern.slots[0]!.agentId
+    if (!originalAgentId) throw new Error('Configured fixture Slot is missing its Agent')
+    const savedTemplate = await repository.saveAgentAsTemplate({
+      journeyId: fixture.journey.id,
+      agentId: originalAgentId,
+      name: 'Reusable research Agent',
+      description: null,
+    })
+    if (!savedTemplate.ok) throw new Error(savedTemplate.error.code)
+
+    const store = useJourneyEditorStore()
+    await store.load(fixture.journey.id, 'execution', repository)
+    const slotId = fixture.pattern.slots[0]!.id
+    const initialRevision = store.document?.journey.revision
+
+    expect(await store.unassignAgentAndSave(slotId, repository)).toBe(true)
+    expect(store.document?.pattern.slots[0]?.agentId).toBeNull()
+    expect(store.document?.journey.revision).toBe((initialRevision ?? 0) + 1)
+    const unassignedRevision = store.document?.journey.revision ?? 0
+
+    expect(await store.instantiateTemplate(savedTemplate.value.id, slotId, repository)).toBe(true)
+    expect(store.document?.pattern.slots[0]?.agentId).not.toBeNull()
+    expect(store.document?.pattern.slots[0]?.agentId).not.toBe(originalAgentId)
+    expect(store.document?.journey.revision).toBeGreaterThanOrEqual(unassignedRevision)
+  })
+
+  it('keeps an occupied Slot unchanged when persisted unassignment fails', async () => {
+    const fixture = createJourneyEditorDocumentFixture()
+    const { repository, controls } = createInMemoryEditorRepositoryScenario({ journeys: [fixture] })
+    const store = useJourneyEditorStore()
+    await store.load(fixture.journey.id, 'execution', repository)
+    const slotId = fixture.pattern.slots[0]!.id
+    const agentId = fixture.pattern.slots[0]!.agentId
+    controls.failNext('NETWORK_FAILED')
+
+    expect(await store.unassignAgentAndSave(slotId, repository)).toBe(false)
+    expect(store.document?.pattern.slots[0]?.agentId).toBe(agentId)
+    expect(store.persistence.saveStatus).toBe('error')
+    expect(store.persistence.error).toEqual({ code: 'NETWORK_FAILED' })
+  })
+
+  it('ignores an older Preview response after switching Agent identity', async () => {
+    const fixture = createJourneyEditorDocumentFixture()
+    const firstAgent = createAgentWorkflowEditorDocumentFixture('research')
+    const secondAgent = createAgentWorkflowEditorDocumentFixture('minimal')
+    const first = deferred<RepositoryResult<typeof firstAgent>>()
+    const second = deferred<RepositoryResult<typeof secondAgent>>()
+    const base = new InMemoryEditorRepository({ journeys: [fixture] })
+    const repository = {
+      loadJourney: base.loadJourney.bind(base),
+      saveJourney: base.saveJourney.bind(base),
+      loadAgentWorkflow: (_journeyId: typeof fixture.journey.id, agentId: typeof firstAgent.agent.id) =>
+        agentId === firstAgent.agent.id ? first.promise : second.promise,
+      saveAgentWorkflow: base.saveAgentWorkflow.bind(base),
+    } satisfies EditorRepository
+    const store = useJourneyEditorStore()
+    await store.load(fixture.journey.id, 'execution', repository)
+
+    const firstLoad = store.openWorkflowPreview(firstAgent.agent.id, repository)
+    const secondLoad = store.openWorkflowPreview(secondAgent.agent.id, repository)
+    second.resolve({ ok: true, value: secondAgent })
+    expect(await secondLoad).toBe(true)
+    first.resolve({ ok: true, value: firstAgent })
+    expect(await firstLoad).toBe(false)
+
+    expect(store.previewState).toEqual({ type: 'ready', agentId: secondAgent.agent.id })
+    expect(store.previewDocument?.agent.id).toBe(secondAgent.agent.id)
   })
 
   it('invalidates lifecycle ownership on dispose and blocks concurrent operations', async () => {
@@ -279,7 +406,7 @@ describe('journeyEditor store', () => {
     store.lifecycle.operationStatus = 'error'
     store.lifecycle.templateStatus = 'error'
     store.lifecycle.error = { code: 'NETWORK_FAILED' }
-    await store.load(secondId, 'pattern', repository)
+    await store.load(secondId, 'execution', repository)
     expect(store.lifecycle).toEqual({ templateStatus: 'idle', operationStatus: 'idle', error: null })
   })
 })

@@ -10,6 +10,8 @@ from odyssey_api.dependencies.workspace import CurrentWorkspace, get_current_wor
 from odyssey_api.errors import ApplicationError, ErrorCode
 from odyssey_api.errors.openapi import documented_responses
 from odyssey_api.journeys.dto import (
+    AddGuardrailRequest,
+    AddGuardrailResponse,
     AgentTemplate,
     AgentWorkflowEditorDocument,
     CreateJourneyRequest,
@@ -19,13 +21,16 @@ from odyssey_api.journeys.dto import (
     InstantiateAgentTemplateResponse,
     JourneyEditorDocument,
     JourneySummary,
+    RemoveGuardrailRequest,
     RemoveOccupiedSlotRequest,
     RemoveOccupiedSlotResponse,
     SaveAgentAsTemplateRequest,
     SaveAgentWorkflowRequest,
     SaveJourneyRequest,
 )
+from odyssey_api.journeys.guardrail_domain import GuardrailSide
 from odyssey_api.journeys.service import (
+    add_guardrail,
     create_journey,
     create_minimum_agent_and_assign,
     delete_journey,
@@ -33,6 +38,7 @@ from odyssey_api.journeys.service import (
     list_journeys,
     load_agent_workflow,
     load_journey,
+    remove_guardrail,
     remove_occupied_slot,
     save_agent_as_template,
     save_agent_workflow,
@@ -200,6 +206,62 @@ async def create_minimum_agent_route(
         slot_id=slot_id,
         workspace_id=workspace.id,
         expected_revision=request.expected_revision,
+    )
+
+
+@router.post(
+    "/{journey_id}/guardrails/{side}/commands/add",
+    response_model=AddGuardrailResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add an optional Guardrail",
+    description=(
+        "Atomically create a fixed single-Agent Guardrail and minimal workflow, bind it to "
+        "the requested side, and advance the Journey revision."
+    ),
+    operation_id="addGuardrail",
+    responses=documented_responses(not_found=True, conflict=True),
+)
+async def add_guardrail_route(
+    journey_id: UUID,
+    side: GuardrailSide,
+    request: AddGuardrailRequest,
+    session: SessionDependency,
+    workspace: WorkspaceDependency,
+) -> AddGuardrailResponse:
+    return await add_guardrail(
+        session,
+        journey_id=journey_id,
+        side=side,
+        workspace_id=workspace.id,
+        expected_revision=request.expected_revision,
+    )
+
+
+@router.post(
+    "/{journey_id}/guardrails/{side}/commands/remove",
+    response_model=JourneyEditorDocument,
+    summary="Remove an optional Guardrail",
+    description=(
+        "Atomically remove a Guardrail binding, permanently delete its owned Agent workflow, "
+        "and advance the Journey revision."
+    ),
+    operation_id="removeGuardrail",
+    responses=documented_responses(not_found=True, conflict=True),
+)
+async def remove_guardrail_route(
+    journey_id: UUID,
+    side: GuardrailSide,
+    request: RemoveGuardrailRequest,
+    session: SessionDependency,
+    workspace: WorkspaceDependency,
+) -> JourneyEditorDocument:
+    return await remove_guardrail(
+        session,
+        journey_id=journey_id,
+        side=side,
+        workspace_id=workspace.id,
+        expected_revision=request.expected_revision,
+        expected_agent_id=request.expected_agent_id,
     )
 
 
