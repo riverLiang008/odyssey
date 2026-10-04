@@ -18,12 +18,15 @@ import SystemCanvas from '@/features/journey-editor/SystemCanvas.vue'
 import SaveAgentTemplateDialog from '@/features/journey-editor/SaveAgentTemplateDialog.vue'
 import GuardrailContextMenu from '@/features/journey-editor/GuardrailContextMenu.vue'
 import WorkflowPreview from '@/features/journey-editor/WorkflowPreview.vue'
+import { useUnsavedChangesGuard } from '@/composables/useUnsavedChangesGuard'
+import RevisionConflictDialog from '@/features/editor-persistence/RevisionConflictDialog.vue'
+import UnsavedChangesDialog from '@/features/editor-persistence/UnsavedChangesDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
 const repository = useEditorRepository()
 const store = useJourneyEditorStore()
-const { agentTemplates, document, guardrailOperation, lifecycle, persistence, previewDocument, previewState, session } = storeToRefs(store)
+const { agentTemplates, document, guardrailOperation, lifecycle, persistence, hasUnsavedChanges, previewDocument, previewState, session } = storeToRefs(store)
 const patternStageBounds = ref<CanvasBounds>(SYSTEM_PATTERN_BOUNDS)
 const identity = computed(() => parseJourneyRoute(route.params.journeyId, route.query.tab))
 const canvasModel = computed(() => document.value
@@ -39,9 +42,21 @@ const overOrder = computed(() => session.value.interaction.type === 'dragging' &
 const templateDraft = reactive({ name: '', description: '' })
 const duplicateDraft = reactive({ name: '', targetSlotId: '' })
 const removalTemplateDraft = reactive({ name: '', description: '' })
+const conflictDialogOpen = ref(false)
 const guardrailPendingSide = computed(() => guardrailOperation.value.type === 'adding' || guardrailOperation.value.type === 'removing'
   ? guardrailOperation.value.side
   : null)
+const saveLabel = computed(() => {
+  if (persistence.value.saveStatus === 'saving') return 'Saving…'
+  if (persistence.value.saveStatus === 'saved') return 'Saved'
+  if (persistence.value.saveStatus === 'error') return 'Save failed'
+  if (persistence.value.saveStatus === 'conflict') return 'Conflict'
+  return persistence.value.mutationSeq > persistence.value.savedMutationSeq ? 'Unsaved changes' : 'Ready'
+})
+watch(() => persistence.value.saveStatus, (status) => {
+  if (status === 'conflict') conflictDialogOpen.value = true
+  else conflictDialogOpen.value = false
+})
 
 watch(identity, (next) => {
   if (!next) {
@@ -52,6 +67,7 @@ watch(identity, (next) => {
     void store.load(next.journeyId, next.tab, repository).then(() => store.loadAgentTemplates(repository))
   }
 }, { immediate: true })
+const unsavedChangesGuard = useUnsavedChangesGuard(hasUnsavedChanges, () => store.save(repository))
 function keydown(event: globalThis.KeyboardEvent) { if (event.key === 'Escape') store.cancelInteraction() }
 onMounted(() => globalThis.document?.addEventListener('keydown', keydown))
 onUnmounted(() => {
@@ -69,6 +85,15 @@ function selectTab(tab: JourneyTab) {
 function retry() {
   const current = identity.value
   if (current) void store.load(current.journeyId, current.tab, repository).then(() => store.loadAgentTemplates(repository))
+}
+function retrySave() { void store.retrySave() }
+function reloadServerVersion() {
+  conflictDialogOpen.value = false
+  void store.reloadAfterConflict()
+}
+function overwriteServerVersion() {
+  conflictDialogOpen.value = false
+  void store.overwriteAfterConflict()
 }
 
 function beginDrag(payload: PatternDragPayload) { store.beginDrag(payload) }
@@ -262,7 +287,11 @@ async function saveTemplate() {
     <nav class="editor-tabs" aria-label="Journey sections">
       <button v-for="tab in journeyTabs" :key="tab" type="button" :class="{ 'is-active': session.activeTab === tab }" @click="selectTab(tab)">{{ tab }}</button>
     </nav>
-    <header class="editor-page__heading"><h1>OdyJourney · {{ document.journey.name }}</h1><span>Revision {{ document.journey.revision }}</span></header>
+    <header class="editor-page__heading"><h1>OdyJourney · {{ document.journey.name }}</h1><span role="status">{{ saveLabel }} · Revision {{ document.journey.revision }}</span><button v-if="persistence.saveStatus === 'conflict'" type="button" @click="conflictDialogOpen = true">Resolve conflict</button></header>
+    <div v-if="persistence.error && persistence.error.code !== 'REVISION_CONFLICT'" class="journey-feedback" role="alert">
+      <span>The Journey could not be saved. Your local pattern is preserved.</span>
+      <button type="button" @click="retrySave">Retry save</button>
+    </div>
     <div class="journey-editor-layout">
       <AgentLibrary v-if="session.activeTab === 'agent'" :templates="agentTemplates" :loading="lifecycle.templateStatus === 'loading'" :disabled="lifecycle.operationStatus === 'loading'" :error="lifecycle.templateStatus === 'error' ? lifecycle.error?.code : null" @choose="chooseTemplate" @drag-start="beginDrag" />
       <ExecutionTemplateLibrary v-else-if="session.activeTab === 'execution'" />
@@ -330,5 +359,7 @@ async function saveTemplate() {
     <section v-if="session.interaction.type === 'agent-replacement-requested' || session.interaction.type === 'duplicate-requested' || session.interaction.type === 'slot-removal-requested'" class="journey-staged-dialog" role="status">
       <h2>Transaction request ready</h2><p>The canonical document is unchanged. A future trusted transaction boundary can consume this typed request.</p><button @click="store.cancelInteraction">Close</button>
     </section>
+    <RevisionConflictDialog v-if="conflictDialogOpen" subject="Journey" @stay="conflictDialogOpen = false" @reload="reloadServerVersion" @overwrite="overwriteServerVersion" />
+    <UnsavedChangesDialog v-if="unsavedChangesGuard.confirmationOpen.value" @stay="unsavedChangesGuard.stay" @leave="unsavedChangesGuard.leave" />
   </section>
 </template>

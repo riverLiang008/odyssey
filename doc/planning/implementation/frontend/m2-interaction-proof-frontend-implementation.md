@@ -642,6 +642,8 @@ lint / typecheck / test / build 结果
 
 ### M2.8 — Modes、Nested Loop 与 Resource DnD Arbitration
 
+Detailed execution plan: [`m2.8-modes-nested-loop-resource-dnd-implementation-plan.md`](./m2.8-modes-nested-loop-resource-dnd-implementation-plan.md)
+
 **目标**
 
 验证最容易产生交互串扰的组合：Flow/Configure、Focus Mode、Loop 子画布以及 node/resource drag。
@@ -656,7 +658,8 @@ lint / typecheck / test / build 结果
 - 实现 Focus Mode，隐藏 shell 后保持 viewport、selection 和 panel session。
 - 建立 Loop body 的独立 graph/layout/viewport/selection adapter context。
 - nested Loop 返回稳定禁止错误。
-- 使用 Tool/Knowledge Space fixture 建立最小 Agent Action resource zones。
+- Tool inventory 只使用真实 Agent aggregate 的 `reusableTools`；Knowledge Space inventory 只使用真实 Workspace-scoped Web API，不以 fixture/mock 组成产品路径。
+- Knowledge Space summary list API 是完整 Resource DnD 验收的前置条件；缺失时必须展示 unavailable state，M2.8 只能标记 partial/blocked。
 - 将 `resource` drag 纳入 M2.4 的中央 `InteractionState` 与 typed payload。
 - 合法 resource zone 高亮；非法类型和 duplicate 被 preflight 拒绝。
 - nested drop zone 正确消费 resource drop，Canvas pane 不创建 workflow node。

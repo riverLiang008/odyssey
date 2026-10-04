@@ -4,8 +4,12 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, select
 
-from odyssey_api.bootstrap import bootstrap_development_workspace
-from odyssey_api.db.models import Workspace
+from odyssey_api.bootstrap import (
+    BUILTIN_TOOL_DEFINITIONS,
+    bootstrap_builtin_tool_definitions,
+    bootstrap_development_workspace,
+)
+from odyssey_api.db.models import ToolDefinition, Workspace
 from odyssey_api.db.session import async_session_factory
 from odyssey_api.dependencies.workspace import CurrentWorkspaceUnavailableError
 from odyssey_api.main import create_app
@@ -46,6 +50,28 @@ async def test_development_workspace_bootstrap_fails_closed_in_production() -> N
     async with async_session_factory() as session:
         with pytest.raises(CurrentWorkspaceUnavailableError):
             await bootstrap_development_workspace(session, settings)
+
+
+@pytest.mark.integration
+async def test_builtin_tool_definition_bootstrap_is_complete_and_idempotent() -> None:
+    settings = Settings(environment="development")
+    expected_kinds = {definition.kind for definition in BUILTIN_TOOL_DEFINITIONS}
+    created_kinds: set[str] = set()
+    try:
+        async with async_session_factory() as session:
+            first = await bootstrap_builtin_tool_definitions(session, settings)
+            created_kinds.update(first.created_kinds)
+        async with async_session_factory() as session:
+            second = await bootstrap_builtin_tool_definitions(session, settings)
+        assert set(first.available_kinds) == expected_kinds
+        assert set(second.available_kinds) == expected_kinds
+        assert second.created_kinds == ()
+    finally:
+        if created_kinds:
+            async with async_session_factory() as session, session.begin():
+                await session.execute(
+                    delete(ToolDefinition).where(ToolDefinition.kind.in_(created_kinds))
+                )
 
 
 @pytest.mark.integration

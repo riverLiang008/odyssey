@@ -19,6 +19,7 @@ import {
   deleteJourneyInputSchema,
   deleteJourneySuccessSchema,
   journeySummaryListSchema,
+  type SystemToolDefinition,
   type AgentTemplate,
   type AddGuardrailInput,
   type AddGuardrailSuccess,
@@ -31,6 +32,8 @@ import {
   type RemoveGuardrailInput,
   type JourneyEditorDocument,
   type JourneySummary,
+  type KnowledgeSpaceSummary,
+  type KnowledgeSpaceSummaryPage,
   type CreateJourneyInput,
   type DeleteJourneyInput,
   type DeleteJourneySuccess,
@@ -47,6 +50,8 @@ import {
 
 import {
   createMinimalAgent,
+  MINIMUM_WORKFLOW_END_POSITION,
+  MINIMUM_WORKFLOW_START_POSITION,
   instantiateAgentTemplate,
   saveAgentAsTemplate,
   type AgentLifecycleIdFactory,
@@ -60,6 +65,7 @@ export interface InMemoryEditorRepositoryOptions {
   journeys?: JourneyEditorDocument[]
   agentWorkflows?: AgentWorkflowEditorDocument[]
   agentTemplates?: AgentTemplate[]
+  knowledgeSpaces?: KnowledgeSpaceSummary[]
   latencyMs?: number
   now?: () => string
   systemVariableIds?: readonly string[]
@@ -119,6 +125,7 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
   readonly #journeys = new Map<string, JourneyEditorDocument>()
   readonly #agentWorkflows = new Map<string, AgentWorkflowEditorDocument>()
   readonly #agentTemplates = new Map<string, AgentTemplate>()
+  readonly #knowledgeSpaces: KnowledgeSpaceSummary[]
   readonly #latencyMs: number
   readonly #now: () => string
   readonly #scenario: ScenarioState
@@ -140,6 +147,7 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
     this.#agentDocumentSchema = createAgentWorkflowEditorDocumentSchema({
       systemVariableIds: options.systemVariableIds,
     })
+    this.#knowledgeSpaces = structuredClone(options.knowledgeSpaces ?? [])
     this.#lifecycleSchemas = createAgentLifecycleResponseSchemas(options.systemVariableIds)
     this.#systemVariableIds = (options.systemVariableIds ?? []).map((id) => uuidSchema.parse(id))
     const nextUuid = () => uuidSchema.parse(crypto.randomUUID())
@@ -174,6 +182,24 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
       const parsed = this.#lifecycleSchemas.agentTemplate.safeParse(template)
       if (parsed.success) this.#agentTemplates.set(parsed.data.id, structuredClone(parsed.data))
     }
+  }
+
+  async listSystemToolDefinitions(): Promise<RepositoryResult<SystemToolDefinition[]>> {
+    return { ok: true, value: [] }
+  }
+
+  async listKnowledgeSpaces(
+    input: { query?: string; page?: number; pageSize?: number } = {},
+    options?: RepositoryOperationOptions,
+  ): Promise<RepositoryResult<KnowledgeSpaceSummaryPage>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const failureResult = this.#consumeSimpleFailure()
+    if (failureResult) return failureResult
+    const query = input.query?.trim().toLocaleLowerCase() ?? ''
+    const page = input.page ?? 1
+    const pageSize = input.pageSize ?? 20
+    const matched = this.#knowledgeSpaces.filter((space) => !query || space.name.toLocaleLowerCase().includes(query) || space.description?.toLocaleLowerCase().includes(query))
+    return { ok: true, value: { items: structuredClone(matched.slice((page - 1) * pageSize, page * pageSize)), page, pageSize, total: matched.length } }
   }
 
   async listJourneys(options?: RepositoryOperationOptions): Promise<RepositoryResult<JourneySummary[]>> {
@@ -383,7 +409,14 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
     const agent = this.#agentDocumentSchema.parse({
       agent: { id: agentId, journeyId: journey.journey.id, name: `${parsedInput.data.side === 'input' ? 'Input' : 'Output'} Guardrail Agent`, description: null, revision: 1, createdAt: timestamp, updatedAt: timestamp },
       workflow: { schemaVersion: '1.0.0', nodes: [{ id: startId, type: 'start', name: 'Start', config: {} }, { id: endId, type: 'end', name: 'End', config: {} }], edges: [{ id: edgeId, sourceNodeId: startId, targetNodeId: endId }] },
-      layout: { schemaVersion: '1.0.0', nodePlacements: [{ nodeId: startId, x: 120, y: 180 }, { nodeId: endId, x: 420, y: 180 }], viewport: { x: 0, y: 0, zoom: 1 } },
+      layout: {
+        schemaVersion: '1.0.0',
+        nodePlacements: [
+          { nodeId: startId, ...MINIMUM_WORKFLOW_START_POSITION },
+          { nodeId: endId, ...MINIMUM_WORKFLOW_END_POSITION },
+        ],
+        viewport: { x: 0, y: 0, zoom: 1 },
+      },
       variables: [], reusableTools: [],
     })
     const candidate = structuredClone(journey)

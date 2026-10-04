@@ -30,7 +30,7 @@ const postgresPort = useLocalCompose ? '55432' : '5432'
 const databaseUrl =
   process.env.ODYSSEY_DATABASE_URL ??
   `postgresql+asyncpg://odyssey:odyssey@127.0.0.1:${postgresPort}/odyssey`
-const apiPort = Number.parseInt(process.env.ODYSSEY_DEV_API_PORT ?? '8000', 10)
+const apiPort = Number.parseInt(process.env.ODYSSEY_DEV_API_PORT ?? '8200', 10)
 const webPort = Number.parseInt(process.env.ODYSSEY_DEV_WEB_PORT ?? '4173', 10)
 const children = new Set()
 const runtimeDir = join(rootDir, '.odyssey-dev')

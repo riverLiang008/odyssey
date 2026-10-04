@@ -10,7 +10,7 @@ import type {
   UUID,
 } from '@odyssey/schemas'
 
-import type { AgentLifecycleRepository, EditorRepository, GuardrailLifecycleRepository } from '@/repositories'
+import type { AgentLifecycleRepository, JourneyEditorRepository, GuardrailLifecycleRepository } from '@/repositories'
 import type { JourneyTab } from '@/router/routeContracts'
 import {
   addSlot as addPatternSlot,
@@ -33,9 +33,21 @@ import {
   type PatternDropTarget,
   type PatternInteractionState,
 } from '@/canvas/interaction'
+import {
+  applyPersistenceFailure,
+  applyPersistenceSuccess,
+  beginPersistenceSave,
+  createCleanPersistenceState,
+  hasUnsavedPersistenceChanges,
+  markPersistenceDirty,
+  preparePersistenceConflictOverwrite,
+  type EditorPersistenceState,
+} from '@/domain/persistence/editorPersistenceState'
 import type { LoadStatus, SaveStatus } from './editorStatus'
+import { AutosaveCoordinator } from './persistence/autosaveCoordinator'
 
 export type { LoadStatus, SaveStatus } from './editorStatus'
+export const JOURNEY_AUTOSAVE_DELAY_MS = 800
 
 export type GuardrailOperationState =
   | { type: 'idle' }
@@ -77,11 +89,24 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     operationStatus: 'idle' as 'idle' | 'loading' | 'success' | 'error',
     error: null as RepositoryError | null,
   })
+  const loadState = reactive({ status: 'idle' as LoadStatus, error: null as RepositoryError | null })
+  const persistenceState = shallowRef<EditorPersistenceState | null>(null)
   const persistence = reactive({
-    loadStatus: 'idle' as LoadStatus,
-    saveStatus: 'idle' as SaveStatus,
-    error: null as RepositoryError | null,
-    mutationSeq: 0,
+    get loadStatus(): LoadStatus { return loadState.status },
+    get saveStatus(): SaveStatus {
+      const state = persistenceState.value
+      if (!state || state.type === 'dirty') return 'idle'
+      if (state.type === 'saving') return 'saving'
+      if (state.type === 'failed') return 'error'
+      if (state.type === 'conflict') return 'conflict'
+      return 'saved'
+    },
+    get error(): RepositoryError | null {
+      const state = persistenceState.value
+      return state?.type === 'failed' || state?.type === 'conflict' ? state.error : loadState.error
+    },
+    get mutationSeq(): number { return persistenceState.value?.mutationSeq ?? 0 },
+    get savedMutationSeq(): number { return persistenceState.value?.savedMutationSeq ?? 0 },
   })
   const guardrailOperation = ref<GuardrailOperationState>({ type: 'idle' })
   let activeRequest = 0
@@ -94,8 +119,41 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   let guardrailController: AbortController | null = null
   let previewRequest = 0
   let previewController: AbortController | null = null
+  let activeRepository: JourneyEditorRepository | null = null
+  let saveController: AbortController | null = null
+  let saveRequestSeq = 0
+  const autosaveCoordinator = new AutosaveCoordinator()
 
-  const isReady = computed(() => persistence.loadStatus === 'ready' && document.value !== null)
+  const isReady = computed(() => loadState.status === 'ready' && document.value !== null)
+  const hasUnsavedChanges = computed(() => hasUnsavedPersistenceChanges(persistenceState.value))
+
+  function clearAutosaveTimer() {
+    autosaveCoordinator.cancelScheduled()
+  }
+
+  function scheduleAutosave(delay = JOURNEY_AUTOSAVE_DELAY_MS) {
+    clearAutosaveTimer()
+    if (!activeRepository || persistenceState.value?.type !== 'dirty') return
+    autosaveCoordinator.schedule(() => save(), delay)
+  }
+
+  function markDirty() {
+    const state = persistenceState.value
+    if (!state) return
+    persistenceState.value = markPersistenceDirty(state, Date.now() + JOURNEY_AUTOSAVE_DELAY_MS)
+    if (persistenceState.value.type === 'dirty') scheduleAutosave()
+  }
+
+  function acceptServerAggregate(next: JourneyEditorDocument, recordMutation = true) {
+    document.value = structuredClone(next)
+    const mutationSeq = recordMutation ? (persistenceState.value?.mutationSeq ?? 0) + 1 : 0
+    persistenceState.value = {
+      ...createCleanPersistenceState(next.journey.revision),
+      mutationSeq,
+      savedMutationSeq: mutationSeq,
+    }
+    clearAutosaveTimer()
+  }
 
   function resetSession(tab: JourneyTab = 'execution') {
     session.activeTab = tab
@@ -132,7 +190,12 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     guardrailOperation.value = { type: 'idle' }
   }
 
-  async function load(journeyId: UUID, tab: JourneyTab, repository: EditorRepository) {
+  async function load(journeyId: UUID, tab: JourneyTab, repository: JourneyEditorRepository) {
+    clearAutosaveTimer()
+    saveRequestSeq += 1
+    saveController?.abort()
+    autosaveCoordinator.dispose()
+    activeRepository = repository
     loadController?.abort()
     invalidateLifecycleRequests()
     const controller = new AbortController()
@@ -142,19 +205,19 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     agentTemplates.value = []
     resetSession(tab)
     resetLifecycle()
-    persistence.loadStatus = 'loading'
-    persistence.error = null
-    persistence.mutationSeq = 0
+    loadState.status = 'loading'
+    loadState.error = null
+    persistenceState.value = null
 
     const result = await repository.loadJourney(journeyId, { signal: controller.signal })
     if (request !== activeRequest || controller.signal.aborted) return
     if (result.ok) {
-      document.value = result.value
-      persistence.loadStatus = 'ready'
+      acceptServerAggregate(result.value, false)
+      loadState.status = 'ready'
       return
     }
-    persistence.error = result.error
-    persistence.loadStatus = result.error.code === 'NOT_FOUND' ? 'not-found' : 'error'
+    loadState.error = result.error
+    loadState.status = result.error.code === 'NOT_FOUND' ? 'not-found' : 'error'
   }
 
   function setActiveTab(tab: JourneyTab) {
@@ -176,7 +239,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     session.previewAgentId = null
   }
 
-  async function openWorkflowPreview(agentId: UUID, repository: EditorRepository): Promise<boolean> {
+  async function openWorkflowPreview(agentId: UUID, repository: JourneyEditorRepository): Promise<boolean> {
     const current = document.value
     if (!current || !current.agents.some((agent) => agent.id === agentId)) return false
     if (previewState.value.type === 'ready' && previewDocument.value?.agent.id === agentId) return true
@@ -207,7 +270,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     return true
   }
 
-  async function selectSlotForPreview(slotId: UUID, repository: EditorRepository): Promise<boolean> {
+  async function selectSlotForPreview(slotId: UUID, repository: JourneyEditorRepository): Promise<boolean> {
     const slot = document.value?.pattern.slots.find((candidate) => candidate.id === slotId)
     if (!slot) return false
     session.selectedSlotId = slotId
@@ -219,14 +282,14 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     return openWorkflowPreview(slot.agentId, repository)
   }
 
-  async function selectGuardrailForPreview(side: GuardrailSide, repository: EditorRepository): Promise<boolean> {
+  async function selectGuardrailForPreview(side: GuardrailSide, repository: JourneyEditorRepository): Promise<boolean> {
     const guardrail = side === 'input' ? document.value?.inputGuardrail : document.value?.outputGuardrail
     if (guardrail?.state !== 'active') return false
     session.selectedSlotId = null
     return openWorkflowPreview(guardrail.agentId, repository)
   }
 
-  async function retryWorkflowPreview(repository: EditorRepository): Promise<boolean> {
+  async function retryWorkflowPreview(repository: JourneyEditorRepository): Promise<boolean> {
     const agentId = session.previewAgentId
     return agentId ? openWorkflowPreview(agentId, repository) : false
   }
@@ -263,6 +326,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   }
 
   async function addGuardrail(side: GuardrailSide, repository: GuardrailLifecycleRepository): Promise<UUID | false> {
+    if (!(await flushLocalChanges())) return false
     const current = document.value
     const projection = side === 'input' ? current?.inputGuardrail : current?.outputGuardrail
     if (!current || projection?.state !== 'inactive' || guardrailOperation.value.type === 'adding' || guardrailOperation.value.type === 'removing') return false
@@ -278,19 +342,19 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
       guardrailOperation.value = guardrailFailure(side, 'add', result.error)
       return false
     }
-    document.value = structuredClone(result.value.journey)
+    acceptServerAggregate(result.value.journey)
     session.selectedSlotId = null
     closeWorkflowPreview()
     session.previewAgentId = result.value.agent.agent.id
     previewDocument.value = structuredClone(result.value.agent)
     previewState.value = { type: 'ready', agentId: result.value.agent.agent.id }
     session.guardrailInteraction = { type: 'idle' }
-    persistence.mutationSeq += 1
     guardrailOperation.value = { type: 'idle' }
     return result.value.agent.agent.id
   }
 
   async function removeGuardrail(side: GuardrailSide, expectedAgentId: UUID, repository: GuardrailLifecycleRepository): Promise<boolean> {
+    if (!(await flushLocalChanges())) return false
     const current = document.value
     const projection = side === 'input' ? current?.inputGuardrail : current?.outputGuardrail
     if (!current || projection?.state !== 'active' || projection.agentId !== expectedAgentId || guardrailOperation.value.type === 'adding' || guardrailOperation.value.type === 'removing') return false
@@ -306,11 +370,10 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
       guardrailOperation.value = guardrailFailure(side, 'remove', result.error)
       return false
     }
-    document.value = structuredClone(result.value)
+    acceptServerAggregate(result.value)
     if (session.previewAgentId === expectedAgentId) closeWorkflowPreview()
     session.selectedSlotId = null
     session.guardrailInteraction = { type: 'idle' }
-    persistence.mutationSeq += 1
     guardrailOperation.value = { type: 'idle' }
     return true
   }
@@ -385,7 +448,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
 
   function applyPatternCommand(command: (pattern: JourneyEditorDocument['pattern']) => PatternCommandResult): PatternCommandResult | null {
     const current = document.value
-    if (!current) return null
+    if (!current || lifecycle.operationStatus === 'loading' || guardrailOperation.value.type === 'adding' || guardrailOperation.value.type === 'removing') return null
     const result = command(structuredClone(toRaw(current.pattern)))
     if (!result.ok) {
       session.lastPatternError = result.error
@@ -393,7 +456,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     }
     current.pattern = structuredClone(result.value)
     session.lastPatternError = null
-    persistence.mutationSeq += 1
+    markDirty()
     reconcileSession()
     return result
   }
@@ -467,6 +530,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   }
 
   async function createAgent(slotId: UUID, repository: AgentLifecycleRepository): Promise<UUID | false> {
+    if (!(await flushLocalChanges())) return false
     const current = document.value
     if (!current || lifecycle.operationStatus === 'loading') return false
     const controller = new AbortController()
@@ -483,15 +547,15 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     if (!result.ok) {
       lifecycle.operationStatus = 'error'; lifecycle.error = result.error; return false
     }
-    document.value = structuredClone(result.value.journey)
+    acceptServerAggregate(result.value.journey)
     session.selectedSlotId = slotId
     cancelInteraction()
-    persistence.mutationSeq += 1
     lifecycle.operationStatus = 'success'
     return result.value.agent.agent.id
   }
 
   async function instantiateTemplate(templateId: UUID, slotId: UUID, repository: AgentLifecycleRepository) {
+    if (!(await flushLocalChanges())) return false
     const current = document.value
     if (!current || lifecycle.operationStatus === 'loading') return false
     const controller = new AbortController()
@@ -508,15 +572,14 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     if (!result.ok) {
       lifecycle.operationStatus = 'error'; lifecycle.error = result.error; return false
     }
-    document.value = structuredClone(result.value.journey)
+    acceptServerAggregate(result.value.journey)
     session.selectedSlotId = slotId
     cancelInteraction()
-    persistence.mutationSeq += 1
     lifecycle.operationStatus = 'success'
     return true
   }
 
-  async function unassignAgentAndSave(slotId: UUID, repository: EditorRepository): Promise<boolean> {
+  async function unassignAgentAndSave(slotId: UUID, repository: JourneyEditorRepository): Promise<boolean> {
     const current = document.value
     if (!current || lifecycle.operationStatus === 'loading') return false
     const candidate = unassignPatternAgent(structuredClone(toRaw(current.pattern)), slotId)
@@ -524,43 +587,23 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
       session.lastPatternError = candidate.error
       return false
     }
-    const persistedPattern = structuredClone(toRaw(candidate.value))
-
-    const controller = new AbortController()
-    lifecycleController = controller
-    const request = ++lifecycleRequest
-    const journeyId = current.journey.id
-    const expectedRevision = current.journey.revision
     lifecycle.operationStatus = 'loading'
     lifecycle.error = null
-    persistence.saveStatus = 'saving'
-    persistence.error = null
     cancelInteraction()
-
-    const result = await repository.saveJourney({
-      journeyId,
-      expectedRevision,
-      pattern: persistedPattern,
-    }, { signal: controller.signal })
-    if (request !== lifecycleRequest || controller.signal.aborted || document.value?.journey.id !== journeyId) return false
-    if (!result.ok) {
+    activeRepository = repository
+    const previousPattern = structuredClone(toRaw(current.pattern))
+    current.pattern = structuredClone(toRaw(candidate.value))
+    markDirty()
+    const saved = await save(repository)
+    if (!saved) {
+      const saveError = persistence.error
+      if (document.value?.journey.id === current.journey.id) document.value.pattern = previousPattern
       lifecycle.operationStatus = 'error'
-      lifecycle.error = result.error
-      persistence.saveStatus = result.error.code === 'REVISION_CONFLICT' ? 'conflict' : 'error'
-      persistence.error = result.error
+      lifecycle.error = saveError ?? { code: 'NETWORK_FAILED' }
       return false
     }
-
-    const latest = document.value
-    if (!latest || latest.journey.revision !== expectedRevision) return false
-    latest.pattern = persistedPattern
-    latest.journey.revision = result.value.revision
-    latest.journey.updatedAt = result.value.updatedAt
     session.selectedSlotId = slotId
     session.lastPatternError = null
-    persistence.mutationSeq += 1
-    persistence.saveStatus = 'saved'
-    persistence.error = null
     lifecycle.operationStatus = 'success'
     reconcileSession()
     return true
@@ -601,6 +644,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     agentAction: { type: 'discard' } | { type: 'save_as_template_and_discard'; template: { name: string; description: string | null } },
     repository: AgentLifecycleRepository,
   ) {
+    if (!(await flushLocalChanges())) return false
     const current = document.value
     if (!current || lifecycle.operationStatus === 'loading') return false
     const controller = new AbortController()
@@ -622,7 +666,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
       lifecycle.error = result.error
       return false
     }
-    document.value = structuredClone(result.value.journey)
+    acceptServerAggregate(result.value.journey)
     if (result.value.template) {
       agentTemplates.value = [
         ...agentTemplates.value.filter((template) => template.id !== result.value.template?.id),
@@ -631,7 +675,6 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     }
     session.selectedSlotId = null
     reconcileSession()
-    persistence.mutationSeq += 1
     lifecycle.operationStatus = 'success'
     cancelInteraction()
     return true
@@ -672,18 +715,90 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     } : null
   }
 
+  async function save(repository?: JourneyEditorRepository): Promise<boolean> {
+    if (repository) activeRepository = repository
+    return autosaveCoordinator.run(async () => {
+      const current = document.value
+      const state = persistenceState.value
+      const targetRepository = activeRepository
+      if (!current || !state || !targetRepository) return false
+      const request = ++saveRequestSeq
+      const savingState = beginPersistenceSave(state, request)
+      if (!savingState) return false
+      const snapshot: SaveJourneyInput = {
+        journeyId: current.journey.id,
+        expectedRevision: state.serverRevision,
+        pattern: structuredClone(toRaw(current.pattern)),
+      }
+      const controller = new AbortController()
+      saveController = controller
+      persistenceState.value = savingState
+      const result = await targetRepository.saveJourney(snapshot, { signal: controller.signal })
+      const latestState = persistenceState.value
+      if (controller.signal.aborted || !latestState || !document.value) return false
+      if (!result.ok) {
+        persistenceState.value = applyPersistenceFailure(latestState, request, result.error)
+        return false
+      }
+      document.value.journey.revision = result.value.revision
+      document.value.journey.updatedAt = result.value.updatedAt
+      persistenceState.value = applyPersistenceSuccess(latestState, request, result.value.revision, Date.now())
+      if (persistenceState.value.type === 'dirty') scheduleAutosave(0)
+      if (saveController === controller) saveController = null
+      return true
+    })
+  }
+
+  async function flushLocalChanges(): Promise<boolean> {
+    const state = persistenceState.value
+    if (!state || state.type === 'clean') return true
+    if (state.type === 'conflict') return false
+    if (state.type === 'saving') return autosaveCoordinator.inFlight ?? false
+    return save()
+  }
+
+  async function retrySave(): Promise<boolean> { return save() }
+
+  async function reloadAfterConflict(): Promise<boolean> {
+    const current = document.value
+    const repository = activeRepository
+    if (!current || !repository || persistenceState.value?.type !== 'conflict') return false
+    await load(current.journey.id, session.activeTab, repository)
+    return loadState.status === 'ready'
+  }
+
+  async function overwriteAfterConflict(): Promise<boolean> {
+    const current = document.value
+    const repository = activeRepository
+    const state = persistenceState.value
+    if (!current || !repository || state?.type !== 'conflict') return false
+    const result = await repository.loadJourney(current.journey.id)
+    if (!result.ok || !document.value || persistenceState.value?.type !== 'conflict') return false
+    const prepared = preparePersistenceConflictOverwrite(persistenceState.value, result.value.journey.revision, Date.now())
+    if (!prepared) return false
+    document.value.journey.revision = result.value.journey.revision
+    document.value.journey.updatedAt = result.value.journey.updatedAt
+    persistenceState.value = prepared
+    return save()
+  }
+
   function dispose() {
     activeRequest += 1
+    saveRequestSeq += 1
+    autosaveCoordinator.dispose()
     invalidateLifecycleRequests()
     loadController?.abort()
+    saveController?.abort()
     loadController = null
+    saveController = null
+    activeRepository = null
     document.value = null
     resetSession()
     agentTemplates.value = []
     resetLifecycle()
-    persistence.loadStatus = 'idle'
-    persistence.error = null
-    persistence.mutationSeq = 0
+    loadState.status = 'idle'
+    loadState.error = null
+    persistenceState.value = null
   }
 
   return {
@@ -693,9 +808,11 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     previewState,
     session,
     persistence,
+    persistenceState,
     lifecycle,
     guardrailOperation,
     isReady,
+    hasUnsavedChanges,
     load,
     setActiveTab,
     selectSlot,
@@ -739,6 +856,11 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     addSlot,
     removeSlot,
     reorderSlot,
+    save,
+    flushLocalChanges,
+    retrySave,
+    reloadAfterConflict,
+    overwriteAfterConflict,
     toSaveInput,
     dispose,
   }

@@ -4,7 +4,7 @@ import { journeyEditorDocumentSchema, uuidSchema, type CreateOrInstantiateAgentS
 
 import { createAgentWorkflowEditorDocumentFixture, createJourneyEditorDocumentFixture, FIXTURE_IDS } from '@/fixtures'
 import { createInMemoryEditorRepositoryScenario, InMemoryEditorRepository } from '@/repositories'
-import type { AgentLifecycleRepository, EditorRepository } from '@/repositories'
+import type { AgentLifecycleRepository } from '@/repositories'
 import { useJourneyEditorStore } from './journeyEditor'
 
 function patternIdFactory(start = 9000) {
@@ -83,8 +83,7 @@ describe('journeyEditor store', () => {
       loadJourney: (id: typeof firstId) => id === firstId ? first.promise : second.promise,
       saveJourney: async () => { throw new Error('Unexpected save') },
       loadAgentWorkflow: async () => { throw new Error('Unexpected Agent load') },
-      saveAgentWorkflow: async () => { throw new Error('Unexpected Agent save') },
-    } satisfies import('@/repositories').EditorRepository
+    } satisfies import('@/repositories').JourneyEditorRepository
     const store = useJourneyEditorStore()
 
     const oldLoad = store.load(firstId, 'execution', repository)
@@ -153,6 +152,48 @@ describe('journeyEditor store', () => {
     expect(returned?.ok).toBe(true)
     if (returned?.ok) returned.value.slots[0]!.label = 'external mutation'
     expect(store.document?.pattern.slots[0]?.label).not.toBe('external mutation')
+  })
+
+  it('debounces Pattern edits and autosaves the latest Journey snapshot', async () => {
+    vi.useFakeTimers()
+    try {
+      const fixture = createJourneyEditorDocumentFixture()
+      const repository = new InMemoryEditorRepository({ journeys: [fixture] })
+      const saveSpy = vi.spyOn(repository, 'saveJourney')
+      const store = useJourneyEditorStore()
+      await store.load(fixture.journey.id, 'execution', repository)
+      store.addSlot('Autosaved stage', patternIdFactory())
+
+      await vi.advanceTimersByTimeAsync(799)
+      expect(saveSpy).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(saveSpy).toHaveBeenCalledTimes(1)
+      expect(store.persistence.saveStatus).toBe('saved')
+      expect(store.document?.journey.revision).toBe(fixture.journey.revision + 1)
+      store.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('flushes local Pattern edits before a server-authoritative lifecycle command', async () => {
+    const fixture = createJourneyEditorDocumentFixture()
+    const repository = new InMemoryEditorRepository({ journeys: [fixture] })
+    const saveSpy = vi.spyOn(repository, 'saveJourney')
+    const createSpy = vi.spyOn(repository, 'createJourneyAgent')
+    const store = useJourneyEditorStore()
+    await store.load(fixture.journey.id, 'execution', repository)
+    const result = store.addSlot('New Agent', patternIdFactory())
+    if (!result?.ok) throw new Error('Expected Slot creation to succeed')
+    const emptySlot = result.value.slots.at(-1)!
+
+    expect(await store.createAgent(emptySlot.id, repository)).not.toBe(false)
+    expect(saveSpy).toHaveBeenCalledTimes(1)
+    expect(createSpy).toHaveBeenCalledTimes(1)
+    expect(saveSpy.mock.invocationCallOrder[0]).toBeLessThan(createSpy.mock.invocationCallOrder[0]!)
+    expect(store.persistence.saveStatus).toBe('saved')
+    expect(store.document?.journey.revision).toBeGreaterThanOrEqual(fixture.journey.revision + 1)
+    store.dispose()
   })
 
   it('preflights and dispatches valid drops while keeping invalid dragover atomic', async () => {
@@ -346,8 +387,7 @@ describe('journeyEditor store', () => {
       saveJourney: base.saveJourney.bind(base),
       loadAgentWorkflow: (_journeyId: typeof fixture.journey.id, agentId: typeof firstAgent.agent.id) =>
         agentId === firstAgent.agent.id ? first.promise : second.promise,
-      saveAgentWorkflow: base.saveAgentWorkflow.bind(base),
-    } satisfies EditorRepository
+    } satisfies import('@/repositories').JourneyEditorRepository
     const store = useJourneyEditorStore()
     await store.load(fixture.journey.id, 'execution', repository)
 

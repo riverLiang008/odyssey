@@ -3,7 +3,13 @@ import { describe, expect, it } from 'vitest'
 
 import { createAgentWorkflowEditorDocumentFixture, createJourneyEditorDocumentFixture, FIXTURE_IDS } from '@/fixtures'
 import type { AgentLifecycleIdFactory } from './agentTemplateLifecycle'
-import { createMinimalAgent, instantiateAgentTemplate, saveAgentAsTemplate } from './agentTemplateLifecycle'
+import {
+  createMinimalAgent,
+  instantiateAgentTemplate,
+  MINIMUM_WORKFLOW_END_POSITION,
+  MINIMUM_WORKFLOW_START_POSITION,
+  saveAgentAsTemplate,
+} from './agentTemplateLifecycle'
 
 function factory(start = 40000): AgentLifecycleIdFactory {
   let sequence = start
@@ -32,6 +38,10 @@ describe('Agent template lifecycle', () => {
     if (!result.ok) throw new Error(result.error.code)
     expect(result.value.agent.workflow.nodes.map((node) => node.type)).toEqual(['start', 'end'])
     expect(result.value.agent.workflow.edges).toHaveLength(1)
+    expect(result.value.agent.layout.nodePlacements).toEqual([
+      { nodeId: result.value.agent.workflow.nodes[0]!.id, ...MINIMUM_WORKFLOW_START_POSITION },
+      { nodeId: result.value.agent.workflow.nodes[1]!.id, ...MINIMUM_WORKFLOW_END_POSITION },
+    ])
     expect(result.value.journey.pattern.slots.find((candidate) => candidate.id === slot.id)?.agentId).toBe(result.value.agent.agent.id)
   })
 

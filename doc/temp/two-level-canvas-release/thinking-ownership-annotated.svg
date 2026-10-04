@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1440 960" role="img" aria-labelledby="title desc">
+  <title id="title">Thinking Ownership in Agent Variables</title>
+  <desc id="desc">The Agent Variables panel with numbered emphasis on System, User-managed, Shared, and Agent-managed variable groups.</desc>
+  <defs>
+    <mask id="focus-mask">
+      <rect width="1440" height="960" fill="white"/>
+      <rect x="1018" y="142" width="373" height="716" rx="14" fill="black"/>
+    </mask>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#172033" flood-opacity="0.24"/>
+    </filter>
+  </defs>
+  <image x="0" y="0" width="1440" height="960" xlink:href="../../assets/thinking-ownership.png"/>
+  <rect width="1440" height="960" fill="#172033" opacity="0.12" mask="url(#focus-mask)"/>
+  <rect x="1018" y="142" width="373" height="716" rx="14" fill="none" stroke="#4C6FFF" stroke-width="4"/>
+  <g font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700" text-anchor="middle" fill="white" filter="url(#shadow)">
+    <circle cx="1039" cy="260" r="16" fill="#68758A"/><text x="1039" y="266">1</text>
+    <circle cx="1039" cy="397" r="16" fill="#36B985"/><text x="1039" y="403">2</text>
+    <circle cx="1039" cy="510" r="16" fill="#E5AA22"/><text x="1039" y="516">3</text>
+    <circle cx="1039" cy="627" r="16" fill="#EF6470"/><text x="1039" y="633">4</text>
+  </g>
+</svg>

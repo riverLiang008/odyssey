@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
+from pydantic import TypeAdapter
 from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +13,8 @@ from odyssey_api.db.models import (
     AgentWorkflow,
     JourneyGuardrail,
     OdyJourney,
+    ToolDefinition,
+    WorkflowKnowledgeSpaceReference,
 )
 from odyssey_api.db.models import (
     AgentTemplate as AgentTemplateRow,
@@ -39,6 +42,9 @@ from odyssey_api.journeys.dto import (
     AgentVariable as AgentVariableDto,
 )
 from odyssey_api.journeys.guardrail_domain import GuardrailSide
+from odyssey_api.journeys.workflow_domain import WorkflowKnowledgeReference
+
+AGENT_REUSABLE_TOOL_ADAPTER = TypeAdapter(AgentReusableToolDto)
 
 
 @dataclass(frozen=True, slots=True)
@@ -386,9 +392,16 @@ async def insert_agent_children(
                 source_template_id=item.source_template_id,
                 kind=item.kind,
                 label=item.name,
-                configuration=item.configuration,
-                input_bindings=item.input_bindings,
-                output_mapping=item.output_binding,
+                configuration=item.configuration.model_dump(mode="json", by_alias=True),
+                input_bindings=[
+                    binding.model_dump(mode="json", by_alias=True)
+                    for binding in item.input_bindings
+                ],
+                output_mapping=(
+                    item.output_binding.model_dump(mode="json", by_alias=True)
+                    if item.output_binding is not None
+                    else None
+                ),
                 failure_behavior={},
             )
             for item in reusable_tools
@@ -461,14 +474,16 @@ async def get_agent_workflow_document(
             for variable in variables
         ],
         reusable_tools=[
-            AgentReusableToolDto(
-                id=tool.id,
-                name=tool.label or tool.kind,
-                source_template_id=tool.source_template_id,
-                kind=tool.kind,
-                configuration=tool.configuration,
-                input_bindings=tool.input_bindings,
-                output_binding=tool.output_mapping,
+            AGENT_REUSABLE_TOOL_ADAPTER.validate_python(
+                {
+                    "id": tool.id,
+                    "name": tool.label or tool.kind,
+                    "sourceTemplateId": tool.source_template_id,
+                    "kind": tool.kind,
+                    "configuration": tool.configuration,
+                    "inputBindings": tool.input_bindings,
+                    "outputBinding": tool.output_mapping,
+                }
             )
             for tool in reusable_tools
         ],
@@ -537,9 +552,16 @@ async def cas_save_agent_workflow(
                 source_template_id=item.source_template_id,
                 kind=item.kind,
                 label=item.name,
-                configuration=item.configuration,
-                input_bindings=item.input_bindings,
-                output_mapping=item.output_binding,
+                configuration=item.configuration.model_dump(mode="json", by_alias=True),
+                input_bindings=[
+                    binding.model_dump(mode="json", by_alias=True)
+                    for binding in item.input_bindings
+                ],
+                output_mapping=(
+                    item.output_binding.model_dump(mode="json", by_alias=True)
+                    if item.output_binding is not None
+                    else None
+                ),
                 failure_behavior={},
             )
             for item in reusable_tools
@@ -547,6 +569,31 @@ async def cas_save_agent_workflow(
     )
     await session.flush()
     return RevisionResult(revision=row.revision, updated_at=row.updated_at)
+
+
+async def synchronize_workflow_knowledge_references(
+    session: AsyncSession,
+    *,
+    agent_workflow_id: UUID,
+    references: list[WorkflowKnowledgeReference],
+) -> None:
+    await session.execute(
+        delete(WorkflowKnowledgeSpaceReference).where(
+            WorkflowKnowledgeSpaceReference.agent_workflow_id == agent_workflow_id
+        )
+    )
+    session.add_all(
+        [
+            WorkflowKnowledgeSpaceReference(
+                agent_workflow_id=agent_workflow_id,
+                knowledge_space_id=reference.knowledge_space_id,
+                owner_kind=reference.owner_kind.value,
+                owner_id=reference.owner_id,
+            )
+            for reference in references
+        ]
+    )
+    await session.flush()
 
 
 async def get_agent_revision(
@@ -563,6 +610,20 @@ async def get_agent_revision(
             )
         )
     ).scalar_one_or_none()
+
+
+async def get_available_tool_definition_kinds(
+    session: AsyncSession, requested_kinds: set[str]
+) -> set[str]:
+    if not requested_kinds:
+        return set()
+    return set(
+        (
+            await session.scalars(
+                select(ToolDefinition.kind).where(ToolDefinition.kind.in_(requested_kinds))
+            )
+        ).all()
+    )
 
 
 def _template_document(row: AgentTemplateRow) -> AgentTemplate:

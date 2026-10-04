@@ -26,6 +26,10 @@
 .product-header { height: var(--odyssey-header-height); display: flex; align-items: center; padding: 0 32px; background: var(--odyssey-surface); border-bottom: 1px solid #eef1f7; }
 .product-header__back { color: var(--odyssey-muted); font-size: 10px; }
 .app-shell__content { min-height: calc(100vh - var(--odyssey-header-height)); }
+.app-shell.is-focus-mode { grid-template-columns: minmax(0,1fr); }
+.app-shell.is-focus-mode > .global-navigation,
+.app-shell.is-focus-mode > .app-shell__workspace > .product-header { display:none; }
+.app-shell.is-focus-mode .app-shell__content { min-height:100vh; }
 .journey-list-page { padding: 25px 32px 64px; }
 .journey-list-page__heading { display: flex; align-items: center; justify-content: space-between; gap: 30px; }
 .page-eyebrow { color: var(--odyssey-muted); font-size: 11px; }

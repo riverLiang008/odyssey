@@ -1,4 +1,6 @@
 import {
+  systemToolDefinitionListSchema,
+  type SystemToolDefinition,
   apiErrorEnvelopeSchema,
   addGuardrailInputSchema,
   addGuardrailSuccessSchema,
@@ -11,6 +13,7 @@ import {
   instantiateAgentTemplateInputSchema,
   journeyEditorDocumentSchema,
   journeySummaryListSchema,
+  knowledgeSpaceSummaryPageSchema,
   removeOccupiedSlotInputSchema,
   removeOccupiedSlotSuccessSchema,
   removeGuardrailInputSchema,
@@ -34,6 +37,7 @@ import {
   type InstantiateAgentTemplateInput,
   type JourneyEditorDocument,
   type JourneySummary,
+  type KnowledgeSpaceSummaryPage,
   type RemoveOccupiedSlotInput,
   type RemoveOccupiedSlotSuccess,
   type RemoveGuardrailInput,
@@ -48,6 +52,7 @@ import {
   type UUID,
 } from '@odyssey/schemas'
 import type { OdysseyEditorRepository, RepositoryOperationOptions } from './editorRepository'
+import { consumeDevelopmentSaveFailure } from './developmentSaveFault'
 
 type FetchImplementation = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
@@ -115,10 +120,32 @@ export class HttpEditorRepository implements OdysseyEditorRepository {
     return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
   }
 
+  async listSystemToolDefinitions(options?: RepositoryOperationOptions): Promise<RepositoryResult<SystemToolDefinition[]>> {
+    const result = await this.#request('/tool-definitions', { method: 'GET' }, options)
+    if (!result.ok) return result
+    const parsed = systemToolDefinitionListSchema.safeParse(result.value)
+    return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
   async listJourneys(options?: RepositoryOperationOptions): Promise<RepositoryResult<JourneySummary[]>> {
     const result = await this.#request('/journeys', { method: 'GET' }, options)
     if (!result.ok) return result
     const parsed = journeySummaryListSchema.safeParse(result.value)
+    return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async listKnowledgeSpaces(
+    input: { query?: string; page?: number; pageSize?: number } = {},
+    options?: RepositoryOperationOptions,
+  ): Promise<RepositoryResult<KnowledgeSpaceSummaryPage>> {
+    const parameters = new URLSearchParams()
+    if (input.query !== undefined) parameters.set('query', input.query)
+    if (input.page !== undefined) parameters.set('page', String(input.page))
+    if (input.pageSize !== undefined) parameters.set('pageSize', String(input.pageSize))
+    const suffix = parameters.size ? `?${parameters.toString()}` : ''
+    const result = await this.#request(`/knowledge-spaces${suffix}`, { method: 'GET' }, options)
+    if (!result.ok) return result
+    const parsed = knowledgeSpaceSummaryPageSchema.safeParse(result.value)
     return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
   }
 
@@ -141,6 +168,7 @@ export class HttpEditorRepository implements OdysseyEditorRepository {
   async saveJourney(input: SaveJourneyInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<SaveJourneySuccess>> {
     const request = saveJourneyInputSchema.safeParse(input)
     if (!request.success) return failure({ code: 'REQUEST_INVALID' })
+    if (consumeDevelopmentSaveFailure()) return failure({ code: 'NETWORK_FAILED' })
     const result = await this.#request(`/journeys/${encodeURIComponent(request.data.journeyId)}`, this.#json('PUT', { expectedRevision: request.data.expectedRevision, pattern: request.data.pattern }), options)
     if (!result.ok) return result
     const document = journeyEditorDocumentSchema.safeParse(result.value)
@@ -169,6 +197,7 @@ export class HttpEditorRepository implements OdysseyEditorRepository {
   async saveAgentWorkflow(input: SaveAgentWorkflowInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<SaveAgentWorkflowSuccess>> {
     const request = saveAgentWorkflowInputSchema.safeParse(input)
     if (!request.success) return failure({ code: 'REQUEST_INVALID' })
+    if (consumeDevelopmentSaveFailure()) return failure({ code: 'NETWORK_FAILED' })
     const { journeyId, agentId, ...body } = request.data
     const result = await this.#request(`/journeys/${encodeURIComponent(journeyId)}/agents/${encodeURIComponent(agentId)}`, this.#json('PUT', body), options)
     if (!result.ok) return result

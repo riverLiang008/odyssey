@@ -1,4 +1,5 @@
 @import '../features/journey-editor/journey-editor.css';
+@import '../features/workflow-editor/workflow-editor.css';
 
 :root {
   color: #17202a;

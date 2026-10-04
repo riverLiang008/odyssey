@@ -9,6 +9,27 @@ const json = (value: unknown, status = 200) => new Response(JSON.stringify(value
 })
 
 describe('HttpEditorRepository', () => {
+  it('loads a runtime-validated paged Knowledge Space inventory', async () => {
+    const page = {
+      items: [{
+        id: '0195f076-b6e6-7ef0-98db-d721990f8996',
+        name: 'Product knowledge',
+        description: null,
+        knowledgeSpaceCategoryId: '0195f076-b6e6-7ef0-98db-d721990f8995',
+        lifecycleStatus: 'ready',
+        graphStatus: 'healthy',
+        updatedAt: '2025-02-01T00:00:00.000Z',
+      }],
+      page: 1,
+      pageSize: 20,
+      total: 1,
+    }
+    const fetchImplementation = vi.fn().mockResolvedValue(json(page))
+    const repository = new HttpEditorRepository({ baseUrl: 'http://localhost:8000/api/v1', fetchImplementation })
+    expect(await repository.listKnowledgeSpaces({ query: 'product', page: 1, pageSize: 20 })).toEqual({ ok: true, value: page })
+    expect(fetchImplementation.mock.calls[0]?.[0]).toBe('http://localhost:8000/api/v1/knowledge-spaces?query=product&page=1&pageSize=20')
+  })
+
   it('maps Journey list, save, and quoted If-Match delete contracts', async () => {
     const journey = createJourneyEditorDocumentFixture()
     const summary = {

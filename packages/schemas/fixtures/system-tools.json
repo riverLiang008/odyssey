@@ -1,0 +1,259 @@
+{
+  "valid": [
+    {
+      "id": "00000000-0000-4000-8000-000000000100",
+      "kind": "knowledge_retrieval",
+      "label": "knowledge_retrieval",
+      "configuration": {
+        "knowledgeSpaceId": "00000000-0000-4000-8000-000000000010",
+        "query": {
+          "kind": "literal",
+          "value": "evidence"
+        },
+        "topK": 5
+      },
+      "failureBehavior": {
+        "kind": "retry",
+        "maxAttempts": 2
+      },
+      "outputMapping": {
+        "sourceKey": "retrieved_documents",
+        "targetVariableId": "00000000-0000-4000-8000-000000000002"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000101",
+      "kind": "script_execution",
+      "label": "script_execution",
+      "configuration": {
+        "language": "python",
+        "inputs": [
+          {
+            "alias": "source",
+            "variableId": "00000000-0000-4000-8000-000000000002"
+          }
+        ],
+        "script": "result = source"
+      },
+      "failureBehavior": {
+        "kind": "retry",
+        "maxAttempts": 2
+      },
+      "outputMapping": {
+        "sourceKey": "result",
+        "targetVariableId": "00000000-0000-4000-8000-000000000002"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000102",
+      "kind": "api_request",
+      "label": "api_request",
+      "configuration": {
+        "method": "POST",
+        "url": {
+          "kind": "literal",
+          "value": "https://example.com"
+        },
+        "headers": [],
+        "body": {
+          "kind": "json",
+          "value": {
+            "kind": "literal",
+            "value": {
+              "query": "hello"
+            }
+          }
+        }
+      },
+      "failureBehavior": {
+        "kind": "retry",
+        "maxAttempts": 2
+      },
+      "outputMapping": {
+        "sourceKey": "response.data",
+        "targetVariableId": "00000000-0000-4000-8000-000000000002"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000103",
+      "kind": "set_variable",
+      "label": "set_variable",
+      "configuration": {
+        "targetVariableId": "00000000-0000-4000-8000-000000000002",
+        "operation": "assign",
+        "value": {
+          "kind": "literal",
+          "value": "done"
+        }
+      },
+      "failureBehavior": {
+        "kind": "retry",
+        "maxAttempts": 2
+      },
+      "outputMapping": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000104",
+      "kind": "llm_call",
+      "label": "llm_call",
+      "configuration": {
+        "model": "configured-model",
+        "prompt": {
+          "kind": "variable",
+          "variableId": "00000000-0000-4000-8000-000000000002"
+        },
+        "systemPrompt": {
+          "kind": "literal",
+          "value": "Summarize"
+        }
+      },
+      "failureBehavior": {
+        "kind": "retry",
+        "maxAttempts": 2
+      },
+      "outputMapping": {
+        "sourceKey": "response.text",
+        "targetVariableId": "00000000-0000-4000-8000-000000000002"
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "id": "00000000-0000-4000-8000-000000000100",
+      "kind": "knowledge_retrieval",
+      "label": "knowledge_retrieval",
+      "configuration": {
+        "knowledgeSpaceId": "00000000-0000-4000-8000-000000000010",
+        "query": {
+          "kind": "literal",
+          "value": "evidence"
+        },
+        "topK": 0
+      },
+      "failureBehavior": {
+        "kind": "retry",
+        "maxAttempts": 2
+      },
+      "outputMapping": {
+        "sourceKey": "retrieved_documents",
+        "targetVariableId": "00000000-0000-4000-8000-000000000002"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000101",
+      "kind": "script_execution",
+      "label": "script_execution",
+      "configuration": {
+        "language": "python",
+        "inputs": [
+          {
+            "alias": "source",
+            "variableId": "00000000-0000-4000-8000-000000000002"
+          },
+          {
+            "alias": "source",
+            "variableId": "00000000-0000-4000-8000-000000000002"
+          }
+        ],
+        "script": "result = source"
+      },
+      "failureBehavior": {
+        "kind": "retry",
+        "maxAttempts": 2
+      },
+      "outputMapping": {
+        "sourceKey": "result",
+        "targetVariableId": "00000000-0000-4000-8000-000000000002"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000102",
+      "kind": "api_request",
+      "label": "api_request",
+      "configuration": {
+        "method": "POST",
+        "url": {
+          "kind": "literal",
+          "value": "https://example.com"
+        },
+        "headers": [
+          {
+            "id": "00000000-0000-4000-8000-000000000500",
+            "name": "X-Test",
+            "value": {
+              "kind": "literal",
+              "value": "x"
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000501",
+            "name": "x-test",
+            "value": {
+              "kind": "literal",
+              "value": "x"
+            }
+          }
+        ],
+        "body": {
+          "kind": "json",
+          "value": {
+            "kind": "literal",
+            "value": {
+              "query": "hello"
+            }
+          }
+        }
+      },
+      "failureBehavior": {
+        "kind": "retry",
+        "maxAttempts": 2
+      },
+      "outputMapping": {
+        "sourceKey": "response.data",
+        "targetVariableId": "00000000-0000-4000-8000-000000000002"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000103",
+      "kind": "set_variable",
+      "label": "set_variable",
+      "configuration": {
+        "targetVariableId": "00000000-0000-4000-8000-000000000002",
+        "operation": "delete",
+        "value": {
+          "kind": "literal",
+          "value": "done"
+        }
+      },
+      "failureBehavior": {
+        "kind": "retry",
+        "maxAttempts": 2
+      },
+      "outputMapping": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000104",
+      "kind": "llm_call",
+      "label": "llm_call",
+      "configuration": {
+        "model": "",
+        "prompt": {
+          "kind": "variable",
+          "variableId": "00000000-0000-4000-8000-000000000002"
+        },
+        "systemPrompt": {
+          "kind": "literal",
+          "value": "Summarize"
+        }
+      },
+      "failureBehavior": {
+        "kind": "retry",
+        "maxAttempts": 2
+      },
+      "outputMapping": {
+        "sourceKey": "response.text",
+        "targetVariableId": "00000000-0000-4000-8000-000000000002"
+      }
+    }
+  ]
+}

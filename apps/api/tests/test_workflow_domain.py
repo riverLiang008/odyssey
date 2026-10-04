@@ -22,4 +22,8 @@ def test_minimum_workflow_is_start_to_end_with_separate_layout() -> None:
     assert {placement.node_id for placement in layout.node_placements} == {
         node.id for node in graph.nodes
     }
+    assert [(placement.x, placement.y) for placement in layout.node_placements] == [
+        (0.0, 0.0),
+        (200.0, 0.0),
+    ]
     assert "x" not in graph.model_dump_json()

@@ -7,10 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from odyssey_api.errors.handlers import register_error_handlers
 from odyssey_api.journeys.router import router as journeys_router
 from odyssey_api.journeys.template_router import router as agent_templates_router
+from odyssey_api.knowledge.router import router as knowledge_spaces_router
 from odyssey_api.routers.health import router as health_router
 from odyssey_api.settings import get_settings
+from odyssey_api.tools.router import router as tool_definitions_router
 
 OPENAPI_TAGS = [
+    {"name": "tool-definitions", "description": "Read-only System Tool inventory."},
     {
         "name": "system",
         "description": "Service availability and operational endpoints.",
@@ -23,6 +26,7 @@ OPENAPI_TAGS = [
         ),
     },
     {"name": "agent-templates", "description": "Visible reusable Agent Templates."},
+    {"name": "knowledge-spaces", "description": "Workspace-scoped Knowledge Space inventory."},
 ]
 
 
@@ -63,6 +67,8 @@ def create_app() -> FastAPI:
     app.include_router(health_router, prefix=settings.api_v1_prefix)
     app.include_router(journeys_router, prefix=settings.api_v1_prefix)
     app.include_router(agent_templates_router, prefix=settings.api_v1_prefix)
+    app.include_router(knowledge_spaces_router, prefix=settings.api_v1_prefix)
+    app.include_router(tool_definitions_router, prefix=settings.api_v1_prefix)
     return app
 
 

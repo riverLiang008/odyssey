@@ -1,4 +1,5 @@
 import type {
+  SystemToolDefinition,
   AgentTemplate,
   AddGuardrailInput,
   AddGuardrailSuccess,
@@ -19,6 +20,7 @@ import type {
   SaveJourneySuccess,
   UUID,
   JourneySummary,
+  KnowledgeSpaceSummaryPage,
   CreateJourneyInput,
   DeleteJourneyInput,
   DeleteJourneySuccess,
@@ -28,7 +30,14 @@ export interface RepositoryOperationOptions {
   signal?: AbortSignal
 }
 
-export interface EditorRepository {
+export interface KnowledgeSpaceInventoryRepository {
+  listKnowledgeSpaces(
+    input?: { query?: string; page?: number; pageSize?: number },
+    options?: RepositoryOperationOptions,
+  ): Promise<RepositoryResult<KnowledgeSpaceSummaryPage>>
+}
+
+export interface JourneyEditorRepository {
   loadJourney(
     journeyId: UUID,
     options?: RepositoryOperationOptions,
@@ -42,11 +51,26 @@ export interface EditorRepository {
     agentId: UUID,
     options?: RepositoryOperationOptions,
   ): Promise<RepositoryResult<AgentWorkflowEditorDocument>>
+}
+
+export interface WorkflowEditorRepository extends KnowledgeSpaceInventoryRepository {
+  listSystemToolDefinitions(options?: RepositoryOperationOptions): Promise<RepositoryResult<SystemToolDefinition[]>>
+  loadJourney(
+    journeyId: UUID,
+    options?: RepositoryOperationOptions,
+  ): Promise<RepositoryResult<JourneyEditorDocument>>
+  loadAgentWorkflow(
+    journeyId: UUID,
+    agentId: UUID,
+    options?: RepositoryOperationOptions,
+  ): Promise<RepositoryResult<AgentWorkflowEditorDocument>>
   saveAgentWorkflow(
     input: SaveAgentWorkflowInput,
     options?: RepositoryOperationOptions,
   ): Promise<RepositoryResult<SaveAgentWorkflowSuccess>>
 }
+
+export type EditorRepository = JourneyEditorRepository & WorkflowEditorRepository
 
 export interface JourneyLifecycleRepository {
   listJourneys(options?: RepositoryOperationOptions): Promise<RepositoryResult<JourneySummary[]>>

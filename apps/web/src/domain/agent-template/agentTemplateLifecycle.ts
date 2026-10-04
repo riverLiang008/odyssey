@@ -23,6 +23,9 @@ export interface AgentLifecycleIdFactory extends AgentDuplicationIdFactory {
   agentTemplateId(): UUID
 }
 
+export const MINIMUM_WORKFLOW_START_POSITION = { x: 0, y: 0 } as const
+export const MINIMUM_WORKFLOW_END_POSITION = { x: 200, y: 0 } as const
+
 export type AgentLifecycleError =
   | { readonly code: 'INVALID_JOURNEY' }
   | { readonly code: 'INVALID_AGENT' }
@@ -138,7 +141,10 @@ export function createMinimalAgent(
     },
     layout: {
       schemaVersion: '1.0.0',
-      nodePlacements: [{ nodeId: startId, x: 120, y: 180 }, { nodeId: endId, x: 420, y: 180 }],
+      nodePlacements: [
+        { nodeId: startId, ...MINIMUM_WORKFLOW_START_POSITION },
+        { nodeId: endId, ...MINIMUM_WORKFLOW_END_POSITION },
+      ],
       viewport: { x: 0, y: 0, zoom: 1 },
     },
     variables: [],

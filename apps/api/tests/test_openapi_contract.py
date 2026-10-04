@@ -18,12 +18,15 @@ def test_openapi_documents_all_existing_operations(monkeypatch) -> None:
     assert schema["info"]["title"] == "Odyssey API"
     assert schema["info"]["summary"] == "Workspace-scoped Journey configuration API"
     assert [tag["name"] for tag in schema["tags"]] == [
+        "tool-definitions",
         "system",
         "journeys",
         "agent-templates",
+        "knowledge-spaces",
     ]
 
     expected_operations = {
+        ("/api/v1/tool-definitions", "get"): "listToolDefinitions",
         ("/api/v1/health", "get"): "getHealth",
         ("/api/v1/journeys", "post"): "createJourney",
         ("/api/v1/journeys", "get"): "listJourneys",
@@ -64,6 +67,7 @@ def test_openapi_documents_all_existing_operations(monkeypatch) -> None:
         ): "removeGuardrail",
         ("/api/v1/agent-templates", "get"): "listAgentTemplates",
         ("/api/v1/agent-templates/{template_id}", "get"): "loadAgentTemplate",
+        ("/api/v1/knowledge-spaces", "get"): "listKnowledgeSpaces",
     }
     actual_operations = {
         (path, method): operation["operationId"]
@@ -123,4 +127,14 @@ def test_openapi_exposes_strict_guardrail_projection_and_commands() -> None:
     }
     assert remove["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/JourneyEditorDocument"
+    }
+
+
+def test_openapi_script_execution_inputs_is_optional_non_nullable_array() -> None:
+    schema = create_app().openapi()["components"]["schemas"]["ScriptExecutionConfiguration"]
+    assert "inputs" not in schema["required"]
+    assert schema["properties"]["inputs"] == {
+        "items": {"$ref": "#/components/schemas/ScriptInput"},
+        "type": "array",
+        "title": "Inputs",
     }

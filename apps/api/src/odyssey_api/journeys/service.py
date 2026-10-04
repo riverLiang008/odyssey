@@ -26,7 +26,11 @@ from odyssey_api.journeys.dto import (
 )
 from odyssey_api.journeys.guardrail_domain import GuardrailSide
 from odyssey_api.journeys.pattern_domain import instantiate_pattern, remove_slot, validate_pattern
-from odyssey_api.journeys.workflow_domain import create_minimum_workflow
+from odyssey_api.journeys.workflow_domain import (
+    create_minimum_workflow,
+    extract_knowledge_space_references,
+)
+from odyssey_api.knowledge.repository import get_visible_knowledge_space_ids
 
 
 def _validation_error(codes: list[str]) -> ApplicationError:
@@ -430,7 +434,25 @@ async def save_agent_workflow(
         reusable_tools=request.reusable_tools,
     )
     del candidate
+    references = extract_knowledge_space_references(request.workflow, request.reusable_tools)
     async with session.begin():
+        requested_tool_kinds = {tool.kind for tool in request.reusable_tools}
+        available_tool_kinds = await repository.get_available_tool_definition_kinds(
+            session, requested_tool_kinds
+        )
+        missing_tool_kinds = sorted(requested_tool_kinds - available_tool_kinds)
+        if missing_tool_kinds:
+            raise ApplicationError(
+                ErrorCode.STATE_CONFLICT,
+                details={
+                    "reason": "TOOL_DEFINITION_UNAVAILABLE",
+                    "toolKinds": missing_tool_kinds,
+                },
+            )
+        referenced_ids = {reference.knowledge_space_id for reference in references}
+        visible_ids = await get_visible_knowledge_space_ids(session, workspace_id, referenced_ids)
+        if visible_ids != referenced_ids:
+            raise ApplicationError(ErrorCode.NOT_FOUND)
         updated = await repository.cas_save_agent_workflow(
             session,
             journey_id=journey_id,
@@ -449,6 +471,9 @@ async def save_agent_workflow(
             if current is None:
                 raise ApplicationError(ErrorCode.NOT_FOUND)
             raise _revision_error(request.expected_revision, current)
+        await repository.synchronize_workflow_knowledge_references(
+            session, agent_workflow_id=agent_id, references=references
+        )
         document = await repository.get_agent_workflow_document(
             session, journey_id=journey_id, agent_id=agent_id, workspace_id=workspace_id
         )

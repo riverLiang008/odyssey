@@ -131,24 +131,24 @@ Set-Location ../..
 
 ```powershell
 Set-Location apps/api
-uv run uvicorn odyssey_api.main:app --host 127.0.0.1 --port 8000
+uv run uvicorn odyssey_api.main:app --host 127.0.0.1 --port 8200
 ```
 
 API 地址：
 
-- 健康检查：<http://localhost:8000/api/v1/health>
-- Swagger API 文档：<http://localhost:8000/docs>
-- OpenAPI 3.1 JSON：<http://localhost:8000/openapi.json>
+- 健康检查：<http://localhost:8200/api/v1/health>
+- Swagger API 文档：<http://localhost:8200/docs>
+- OpenAPI 3.1 JSON：<http://localhost:8200/openapi.json>
 
 Swagger 文档由 FastAPI 路由和 Pydantic DTO 自动生成，包含请求/响应 schema、错误 envelope、
 示例与可直接发起请求的 **Try it out**。生产环境默认同时关闭 Swagger UI 和 OpenAPI JSON；
 如需向外部分发合同，请在受控构建流程中导出 development/test 环境的 OpenAPI JSON，而不是
 在生产服务上开放文档入口。
 
-需要 `--reload` 时，先确认 8000 端口没有残留监听进程。Windows 上必须先识别 PID 与命令行：
+需要 `--reload` 时，先确认 8200 端口没有残留监听进程。Windows 上必须先识别 PID 与命令行：
 
 ```powershell
-Get-NetTCPConnection -LocalPort 8000 -State Listen |
+Get-NetTCPConnection -LocalPort 8200 -State Listen |
   Select-Object LocalAddress,LocalPort,OwningProcess
 Get-CimInstance Win32_Process -Filter "ProcessId = <PID>" |
   Select-Object ProcessId,Name,CommandLine
