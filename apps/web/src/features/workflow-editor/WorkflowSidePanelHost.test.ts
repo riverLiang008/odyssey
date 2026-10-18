@@ -47,6 +47,8 @@ describe('WorkflowSidePanelHost Loop configuration', () => {
     })
     expect(wrapper.text()).toContain('2 nodes · 1 edges')
     expect(wrapper.text()).toContain('Focus Loop Body')
+    expect(wrapper.text()).not.toContain('Remove Loop')
+    expect(wrapper.text()).not.toContain('Delete node')
   })
 
   it('keeps an invalid draft local', async () => {

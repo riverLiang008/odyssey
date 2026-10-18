@@ -290,6 +290,29 @@ Important ownership rules:
 - A Tool Instance stores per-use configuration; a reusable Tool Definition remains independently manageable.
 - A document belongs to one Knowledge Space in v1, while Knowledge Family membership is graph-derived and may change after stewardship/indexing.
 
+### 6.1 Reusable Tool interaction decision
+
+The Reusable Tools Figma states distinguish the Agent-owned saved Tool from a configured use of that Tool. V1 freezes the following behavior:
+
+- an Agent Action binds an Agent Reusable Tool by stable ID and therefore reads the canonical saved configuration;
+- dropping an Agent Reusable Tool into a Task creates a new Task-owned `ToolStep` snapshot with a new ID;
+- the new Task step copies the Tool kind and the configuration available at drop time, after which it may be edited independently or left unchanged;
+- later edits or deletion of the source Agent Reusable Tool do not update or invalidate existing Task steps;
+- Task-step edits never update the source Agent Reusable Tool;
+- the `Linked`, `Detach`, and `Update source` controls shown in `Agent Workflow Canvas — Reusable Tool Instance` (`195:33`) are not part of the V1 contract and must not be rendered without an explicit provenance/synchronization contract;
+- `Remove from Task` remains a local Task-step operation.
+
+The Figma frame remains the visual reference for the configuration panel, but the canonical domain rules above override its continuous-link wording.
+
+### 6.2 Configured Task Tool reuse decision
+
+- In the current V1 editor, right-clicking a configured Task Tool step exposes `Save to Reusable Tools`.
+- This action creates a new `AgentReusableTool` owned by the current Agent Workflow. It does not create a Workspace `ToolTemplate`.
+- The new Agent reusable Tool copies the step's current kind, label/name, and configuration as an independent snapshot with a new ID. Task-host bindings such as a Task-local output mapping are not copied; each consumer chooses bindings valid in its own host context.
+- Saving does not mutate the source Task step and does not establish synchronization in either direction.
+- The saved result appears immediately in the current Agent's Reusable Tools panel and may be bound to Agent Actions or copied into Tasks.
+- Workspace-level `ToolTemplate`, `Save as Template`, and a cross-Agent Tool Template library remain future product capabilities. They must not be implied by the current Reusable Tools UI until their placement, API, visibility, ownership, and dependency rules are separately designed.
+
 ## 7. Recommended Frontend Component Boundaries
 
 ```text

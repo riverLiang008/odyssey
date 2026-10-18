@@ -59,4 +59,17 @@ describe('workflow resource drag payload', () => {
     expect(evaluateWorkflowResourceDrop({ kind: 'knowledge-space', resourceId }, { kind: 'task-tool-sequence', nodeId }, { node, availableReusableToolIds: new Set([resourceId]) }))
       .toEqual({ status: 'invalid', reason: 'WRONG_RESOURCE_TYPE' })
   })
+
+  it('opens System Tool configuration for an Agent Action Toolbox without binding a Definition ID', () => {
+    const graph = createWorkflowGraphFixture('research')
+    const node = graph.nodes.find((candidate) => candidate.type === 'agent_action')
+    if (!node || node.type !== 'agent_action') throw new Error('Expected Agent Action')
+    const definitionId = uuidSchema.parse('0195f076-b6e6-7ef0-98db-000000000950')
+    const definition = { id: definitionId, kind: 'script_execution' as const, source: 'built_in' as const, name: 'Script Execution', category: 'Computation', description: null, configurationSchema: {}, inputSchema: {}, outputSchema: {} }
+    expect(evaluateWorkflowResourceDrop(
+      { kind: 'system-tool-definition', toolDefinitionId: definition.id, toolKind: definition.kind },
+      { kind: 'agent-action-tools', nodeId: node.id },
+      { node, mode: 'configure', systemTools: [definition], availableReusableToolIds: new Set() },
+    )).toEqual({ status: 'valid', action: { type: 'configure-system-tool', nodeId: node.id, toolDefinitionId: definition.id, toolKind: definition.kind } })
+  })
 })

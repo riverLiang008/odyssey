@@ -24,27 +24,38 @@ import {
   type LoopDraftValues,
   type WorkflowDraftErrorCode,
 } from '@/domain/workflow'
-import { InlineLoopCanvas, WorkflowCanvas, WorkflowNodeCreationDialog, WorkflowNodePalette, WorkflowResourceBrowser, WorkflowSidePanelHost } from '@/features/workflow-editor'
+import { InlineLoopCanvas, ReusableToolsPanel, WorkflowCanvas, WorkflowNodeCreationDialog, WorkflowNodePalette, WorkflowResourceBrowser, WorkflowSidePanelHost } from '@/features/workflow-editor'
 import { parseAgentWorkflowRoute, routeLocations } from '@/router/routeContracts'
-import { useWorkflowEditorStore, type WorkflowResourceCategory } from '@/stores/workflowEditor'
+import { useWorkflowEditorStore, type WorkflowCanvasContext, type WorkflowResourceCategory } from '@/stores/workflowEditor'
 import { useUnsavedChangesGuard } from '@/composables/useUnsavedChangesGuard'
 import RevisionConflictDialog from '@/features/editor-persistence/RevisionConflictDialog.vue'
 import UnsavedChangesDialog from '@/features/editor-persistence/UnsavedChangesDialog.vue'
 import SystemToolPanel from '@/features/workflow-editor/SystemToolPanel.vue'
+import AgentReusableToolPanel from '@/features/workflow-editor/AgentReusableToolPanel.vue'
+import AgentVariablesPanel from '@/features/workflow-editor/AgentVariablesPanel.vue'
 import enterFocusModeIcon from '@/assets/enter-focus-mode.svg'
 
 const route = useRoute()
 const repository = useEditorRepository()
 const store = useWorkflowEditorStore()
 const appShellPresentation = inject(appShellPresentationKey, null)
-const { document, persistence, session, hasUnsavedChanges, knowledgeSpaces, knowledgeInventory, systemTools, systemToolStatus, systemToolDraft, toolError, toolKnowledgeSpaces, toolKnowledgeStatus } = storeToRefs(store)
+const { document, persistence, session, hasUnsavedChanges, knowledgeSpaces, knowledgeInventory, systemTools, systemToolStatus, systemToolDraft, toolError, toolKnowledgeSpaces, toolKnowledgeStatus, variableError } = storeToRefs(store)
 const identity = computed(() => parseAgentWorkflowRoute(route.params.journeyId, route.params.agentId))
 const workflowCanvas = ref<{ createFromClientPoint: (nodeType: WorkflowPaletteNodeType, clientX: number, clientY: number) => boolean } | null>(null)
 const focusReturnTarget = ref<globalThis.HTMLElement | null>(null)
 const draftError = ref<string | null>(null)
 const activeResourceDrag = ref<WorkflowResourceDragPayload | null>(null)
+type CanvasContextMenu =
+  | { type: 'node'; nodeId: UUID; context: WorkflowCanvasContext; x: number; y: number }
+  | { type: 'edge'; edgeId: UUID; context: WorkflowCanvasContext; x: number; y: number }
+  | { type: 'task-tool-step'; nodeId: UUID; stepId: UUID; context: WorkflowCanvasContext; x: number; y: number }
+const canvasContextMenu = ref<CanvasContextMenu | null>(null)
 const conflictDialogOpen = ref(false)
+const saveErrorToastVisible = ref(false)
+const reusableToolSavedToastVisible = ref(false)
 let interactionToastTimer: ReturnType<typeof globalThis.setTimeout> | null = null
+let saveErrorToastTimer: ReturnType<typeof globalThis.setTimeout> | null = null
+let reusableToolSavedToastTimer: ReturnType<typeof globalThis.setTimeout> | null = null
 const activeLoop = computed<LoopNode | null>(() => {
   const context = session.value.context
   if (context.kind !== 'loop-body') return null
@@ -67,6 +78,15 @@ const saveLabel = computed(() => {
 watch(() => persistence.value.saveStatus, (status) => {
   if (status === 'conflict') conflictDialogOpen.value = true
   else conflictDialogOpen.value = false
+  if (saveErrorToastTimer) globalThis.clearTimeout(saveErrorToastTimer)
+  saveErrorToastTimer = null
+  saveErrorToastVisible.value = status === 'error'
+  if (status === 'error') {
+    saveErrorToastTimer = globalThis.setTimeout(() => {
+      saveErrorToastVisible.value = false
+      saveErrorToastTimer = null
+    }, 4500)
+  }
 })
 const activeGraph = computed(() => activeLoop.value?.config.body.graph ?? document.value?.workflow ?? null)
 const activeLayout = computed(() => activeLoop.value?.config.body.layout ?? document.value?.layout ?? null)
@@ -78,9 +98,41 @@ const selectedNode = computed(() => {
   }
   return activeGraph.value?.nodes.find((node) => node.id === session.value.selectedNodeId) ?? null
 })
-const toolTask = computed(() => systemToolDraft.value ? store.toolTask(systemToolDraft.value.context, systemToolDraft.value.nodeId) : null)
+const taskToolDraft = computed(() => systemToolDraft.value?.host === 'task' ? systemToolDraft.value : null)
+const reusableToolDraft = computed(() => systemToolDraft.value?.host === 'agent-action' || systemToolDraft.value?.host === 'reusable-tool-library' ? systemToolDraft.value : null)
+const toolTask = computed(() => taskToolDraft.value ? store.toolTask(taskToolDraft.value.context, taskToolDraft.value.nodeId) : null)
 function editTool(nodeId: UUID, stepId: UUID) { store.editSystemTool(session.value.context, nodeId, stepId) }
 function changeTool(nodeId: UUID, stepId: UUID, operation: 'delete' | 'up' | 'down') { store.changeSystemTool(session.value.context, nodeId, operation === 'delete' ? { type: 'delete', stepId } : { type: 'move', stepId, direction: operation === 'up' ? -1 : 1 }) }
+function reorderTool(nodeId: UUID, stepId: UUID, targetIndex: number) { store.changeSystemTool(session.value.context, nodeId, { type: 'reorder', stepId, targetIndex }) }
+function openTaskToolStepContextMenu(nodeId: UUID, stepId: UUID, context: WorkflowCanvasContext, point: { x: number; y: number }) {
+  if (session.value.mode !== 'configure') return
+  canvasContextMenu.value = { type: 'task-tool-step', nodeId, stepId, context, x: point.x, y: point.y }
+}
+function editContextToolStep() {
+  const menu = canvasContextMenu.value
+  if (menu?.type !== 'task-tool-step') return
+  store.editSystemTool(menu.context, menu.nodeId, menu.stepId)
+  canvasContextMenu.value = null
+}
+function saveContextToolStepToReusableTools() {
+  const menu = canvasContextMenu.value
+  if (menu?.type !== 'task-tool-step') return
+  const saved = store.saveTaskToolStepToReusableTools(menu.context, menu.nodeId, menu.stepId)
+  canvasContextMenu.value = null
+  if (!saved) return
+  if (reusableToolSavedToastTimer) globalThis.clearTimeout(reusableToolSavedToastTimer)
+  reusableToolSavedToastVisible.value = true
+  reusableToolSavedToastTimer = globalThis.setTimeout(() => {
+    reusableToolSavedToastVisible.value = false
+    reusableToolSavedToastTimer = null
+  }, 2600)
+}
+function deleteContextToolStep() {
+  const menu = canvasContextMenu.value
+  if (menu?.type !== 'task-tool-step') return
+  store.changeSystemTool(menu.context, menu.nodeId, { type: 'delete', stepId: menu.stepId })
+  canvasContextMenu.value = null
+}
 const selectedEdge = computed<WorkflowEdge | null>(() => activeGraph.value?.edges.find((edge) => edge.id === session.value.selectedEdgeId) ?? null)
 
 watch(identity, (next) => {
@@ -100,6 +152,8 @@ watch(
 )
 onUnmounted(() => {
   if (interactionToastTimer) globalThis.clearTimeout(interactionToastTimer)
+  if (saveErrorToastTimer) globalThis.clearTimeout(saveErrorToastTimer)
+  if (reusableToolSavedToastTimer) globalThis.clearTimeout(reusableToolSavedToastTimer)
 })
 watch(() => session.value.focusMode, (enabled) => appShellPresentation?.setFocusMode(enabled), { immediate: true })
 appShellPresentation?.setProductHeaderVisible(false)
@@ -109,6 +163,7 @@ onUnmounted(() => {
 })
 
 function keyboardDelete(event: globalThis.KeyboardEvent) {
+  if (event.key === 'Escape' && canvasContextMenu.value) { canvasContextMenu.value = null; return }
   if (event.key === 'Escape' && session.value.creationDraft.type !== 'closed') { closeCreationDraft(); return }
   if (event.key === 'Escape' && session.value.focusMode) { void setFocusMode(false); return }
   if (event.key !== 'Delete' && event.key !== 'Backspace') return
@@ -191,6 +246,46 @@ function removeActiveNode(nodeId: UUID) {
   closeInspector()
 }
 
+function openNodeContextMenu(nodeId: UUID, context: WorkflowCanvasContext, point: { x: number; y: number }) {
+  if (session.value.mode !== 'configure') return
+  canvasContextMenu.value = {
+    type: 'node',
+    nodeId,
+    context,
+    x: Math.min(point.x, globalThis.window.innerWidth - 176),
+    y: Math.min(point.y, globalThis.window.innerHeight - 64),
+  }
+}
+function openEdgeContextMenu(edgeId: UUID, context: WorkflowCanvasContext, point: { x: number; y: number }) {
+  if (session.value.mode !== 'configure') return
+  canvasContextMenu.value = {
+    type: 'edge',
+    edgeId,
+    context,
+    x: Math.min(point.x, globalThis.window.innerWidth - 176),
+    y: Math.min(point.y, globalThis.window.innerHeight - 64),
+  }
+}
+function closeCanvasContextMenu() { canvasContextMenu.value = null }
+function deleteContextNode() {
+  const target = canvasContextMenu.value
+  if (!target || target.type !== 'node') return
+  canvasContextMenu.value = null
+  if (target.context.kind === 'root') {
+    store.removeWorkflowNodeWithLayout(target.nodeId)
+    if (expandedLoop.value?.id === target.nodeId) store.collapseInlineLoop()
+    return
+  }
+  store.removeWorkflowLoopBodyNode(target.context.loopNodeId, target.nodeId)
+}
+function deleteContextEdge() {
+  const target = canvasContextMenu.value
+  if (!target || target.type !== 'edge') return
+  canvasContextMenu.value = null
+  if (target.context.kind === 'root') { store.removeWorkflowEdge(target.edgeId); return }
+  store.removeWorkflowLoopBodyEdge(target.context.loopNodeId, target.edgeId)
+}
+
 function removeActiveEdge(edgeId: UUID) {
   if (session.value.mode !== 'configure') return
   const loop = activeLoop.value
@@ -207,14 +302,14 @@ function handleIntent(intent: WorkflowCanvasIntent) {
       if (intent.nodeId) {
         store.selectEdge(null)
         const node = activeGraph.value?.nodes.find((candidate) => candidate.id === intent.nodeId)
-        store.setPanel(node?.type === 'agent_action' ? { type: session.value.resourceBrowser.category } : { type: 'node-inspector', nodeId: intent.nodeId })
+        store.setPanel(node?.type === 'loop' ? { type: 'node-inspector', nodeId: intent.nodeId } : { type: session.value.resourceBrowser.category })
       } else if (!session.value.selectedEdgeId) store.setPanel(null)
       return
     case 'select-edge':
       store.selectEdge(intent.edgeId)
       if (intent.edgeId) {
         store.selectNode(null)
-        store.setPanel({ type: 'edge-inspector', edgeId: intent.edgeId })
+        store.setPanel({ type: session.value.resourceBrowser.category })
       } else if (!session.value.selectedNodeId) store.setPanel(null)
       return
     case 'move-node': {
@@ -255,7 +350,7 @@ function selectRootNode(nodeId: UUID) {
   store.selectNode(nodeId)
   store.selectEdge(null)
   const node = document.value?.workflow.nodes.find((candidate) => candidate.id === nodeId)
-  store.setPanel(node?.type === 'agent_action' ? { type: session.value.resourceBrowser.category } : { type: 'node-inspector', nodeId })
+  store.setPanel(node?.type === 'loop' ? { type: 'node-inspector', nodeId } : { type: session.value.resourceBrowser.category })
 }
 
 function closeInspector() {
@@ -265,7 +360,10 @@ function closeInspector() {
 }
 
 function save() { void store.save(repository) }
-function retrySave() { void store.retrySave() }
+function retrySave() {
+  saveErrorToastVisible.value = false
+  void store.retrySave()
+}
 function reloadServerVersion() {
   conflictDialogOpen.value = false
   void store.reloadAfterConflict()
@@ -315,6 +413,10 @@ function updateAgentActionDetails(nodeId: UUID, details: { name: string; model: 
   if (session.value.mode !== 'configure') return
   store.updateWorkflowAgentActionDetails(session.value.context, nodeId, details)
 }
+function updateNodeName(nodeId: UUID, name: string) {
+  if (session.value.mode !== 'configure') return
+  store.renameWorkflowNode(session.value.context, nodeId, name)
+}
 function handleResourceDrop(action: WorkflowResourceDropAction) {
   if (session.value.mode !== 'configure') return
   switch (action.type) {
@@ -332,6 +434,9 @@ function handleResourceDrop(action: WorkflowResourceDropAction) {
       return
     case 'bind-knowledge-space':
       store.bindWorkflowAgentActionKnowledgeSpace(session.value.context, action.nodeId, action.knowledgeSpaceId)
+      return
+    case 'unbind-knowledge-space':
+      store.unbindWorkflowAgentActionKnowledgeSpace(session.value.context, action.nodeId, action.knowledgeSpaceId)
       return
   }
 }
@@ -380,7 +485,7 @@ async function setFocusMode(enabled: boolean) {
 <template>
   <section v-if="!identity" class="proof-page"><h1>Invalid Agent Workflow</h1><RouterLink to="/journeys">Return to Journeys</RouterLink></section>
   <RouteBoundary v-else-if="persistence.loadStatus !== 'ready'" :status="persistence.loadStatus" subject="Agent workflow" :error="persistence.error" :back-to="routeLocations.journey(identity.journeyId)" back-label="Return to Journey" @retry="retry" />
-  <section v-else-if="document" class="editor-page workflow-editor-page" :class="{ 'is-focus-mode': session.focusMode }">
+  <section v-else-if="document" class="editor-page workflow-editor-page" :class="{ 'is-focus-mode': session.focusMode }" @click="closeCanvasContextMenu">
     <header class="workflow-toolbar">
       <div class="workflow-context-path">
         <RouterLink :to="routeLocations.journey(document.agent.journeyId)">← OdyJourney / {{ document.agent.name }}</RouterLink>
@@ -388,7 +493,7 @@ async function setFocusMode(enabled: boolean) {
         <span v-if="expandedLoop">/ {{ expandedLoop.name }}</span>
       </div>
       <nav class="workflow-resource-nav" aria-label="Agent resource configuration">
-        <button v-for="item in ([['tools', 'Tools'], ['knowledge-spaces', 'Knowledge Spaces'], ['agent-variables', 'Agent Variables'], ['dsl-edit', 'DSL Edit'], ['reusable-tools', 'Reusable Tools']] as const)" :key="item[0]" type="button" :class="{ 'is-active': session.resourceBrowser.category === item[0] && session.panel?.type === item[0] }" @click="selectResourceCategory(item[0])">{{ item[1] }}</button>
+        <button v-for="item in ([['tools', 'Tools'], ['knowledge-spaces', 'Knowledge Spaces'], ['agent-variables', 'Agent Variables'], ['dsl-edit', 'DSL Edit'], ['reusable-tools', 'Reusable Tools']] as const)" :key="item[0]" type="button" :class="{ 'is-active': session.resourceBrowser.category === item[0] && !session.resourceBrowser.collapsed }" @click="selectResourceCategory(item[0])">{{ item[1] }}</button>
       </nav>
       <div class="workflow-toolbar-actions">
         <span class="save-state" role="status">{{ saveLabel }}</span>
@@ -396,10 +501,17 @@ async function setFocusMode(enabled: boolean) {
         <button v-else type="button" class="save-button" :disabled="persistence.saveStatus === 'saving' || persistence.mutationSeq === persistence.savedMutationSeq" @click="save">Save now</button>
       </div>
     </header>
-    <div v-if="persistence.error && persistence.error.code !== 'REVISION_CONFLICT'" class="workflow-error" role="alert">
-      <span>The workflow could not be saved. Your local work is preserved.</span>
-      <button type="button" @click="retrySave">Retry save</button>
-    </div>
+    <Transition name="save-toast">
+      <div v-if="saveErrorToastVisible && persistence.error && persistence.error.code !== 'REVISION_CONFLICT'" class="workflow-save-toast" role="alert" aria-live="assertive">
+        <span><strong>Save failed</strong><small>Your local work is preserved.</small></span>
+        <button type="button" @click="retrySave">Retry</button>
+      </div>
+    </Transition>
+    <Transition name="save-toast">
+      <div v-if="reusableToolSavedToastVisible" class="workflow-save-toast is-success" role="status" aria-live="polite">
+        <span><strong>Saved</strong><small>Added to Reusable Tools.</small></span>
+      </div>
+    </Transition>
     <Transition name="workflow-toast">
       <p v-if="store.lastDomainError" class="workflow-interaction-toast" role="alert">Action rejected: {{ store.lastDomainError.code.replaceAll('_', ' ').toLowerCase() }}.</p>
       <p v-else-if="store.lastCanvasError" class="workflow-interaction-toast" role="alert">{{ canvasErrorMessage(store.lastCanvasError) }}</p>
@@ -411,14 +523,22 @@ async function setFocusMode(enabled: boolean) {
           <div class="mode-toggle"><button type="button" :class="{ 'is-active': session.mode === 'flow' }" @click="store.setMode('flow')">Flow</button><button type="button" :class="{ 'is-active': session.mode === 'configure' }" @click="store.setMode('configure')">Configure</button></div>
           <button type="button" class="focus-button" :aria-label="session.focusMode ? 'Exit focus mode' : 'Enter focus mode'" :title="session.focusMode ? 'Exit focus mode' : 'Enter focus mode'" @click="setFocusMode(!session.focusMode)"><img :src="enterFocusModeIcon" alt="" /></button>
         </div>
-        <InlineLoopCanvas v-if="expandedLoop && document" :key="`inline-${expandedLoop.id}`" ref="workflowCanvas" :canvas-id="`loop-${expandedLoop.id}`" :root-graph="document.workflow" :loop="expandedLoop" :mode="session.mode" :selected-node-id="session.context.kind === 'loop-body' ? session.selectedNodeId : null" :root-selected-node-id="session.context.kind === 'root' ? session.selectedNodeId : null" :variables="document.variables" :system-tools="systemTools" :available-reusable-tool-ids="document.reusableTools.map((tool) => tool.id)" :reusable-tools="document.reusableTools" :active-resource-drag="activeResourceDrag" @edit-tool="(nodeId, stepId) => { ensureExpandedLoopContext(); editTool(nodeId, stepId) }" @change-tool="(nodeId, stepId, op) => { ensureExpandedLoopContext(); changeTool(nodeId, stepId, op) }" @intent="handleChildIntent" @connect="handleChildConnect" @create="createChildNode" @select-root="selectRootNode" @collapse="exitLoop" @clear-error="store.clearWorkflowErrors" @reject="store.rejectCanvasInteraction" @resource-drop="(action) => { ensureExpandedLoopContext(); handleResourceDrop(action) }" @update-agent-action="updateAgentActionDetails" />
-        <WorkflowCanvas v-else-if="activeGraph && activeLayout" :key="activeCanvasId" ref="workflowCanvas" :canvas-id="activeCanvasId" :graph="activeGraph" :layout="activeLayout" :mode="session.mode" :selected-node-id="session.selectedNodeId" :variables="document.variables" :system-tools="systemTools" :available-reusable-tool-ids="document.reusableTools.map((tool) => tool.id)" :reusable-tools="document.reusableTools" :active-resource-drag="activeResourceDrag" @edit-tool="editTool" @change-tool="changeTool" @intent="handleIntent" @connect="handleConnect" @create="createNode" @clear-error="store.clearWorkflowErrors" @reject="store.rejectCanvasInteraction" @resource-drop="handleResourceDrop" @update-agent-action="updateAgentActionDetails" />
+        <InlineLoopCanvas v-if="expandedLoop && document" :key="`inline-${expandedLoop.id}`" ref="workflowCanvas" :canvas-id="`loop-${expandedLoop.id}`" :root-graph="document.workflow" :loop="expandedLoop" :mode="session.mode" :selected-node-id="session.context.kind === 'loop-body' ? session.selectedNodeId : null" :root-selected-node-id="session.context.kind === 'root' ? session.selectedNodeId : null" :variables="document.variables" :system-tools="systemTools" :available-reusable-tool-ids="document.reusableTools.map((tool) => tool.id)" :reusable-tools="document.reusableTools" :knowledge-spaces="knowledgeSpaces" :active-resource-drag="activeResourceDrag" @edit-tool="(nodeId, stepId) => { ensureExpandedLoopContext(); editTool(nodeId, stepId) }" @edit-reusable-tool="(nodeId, toolId) => { ensureExpandedLoopContext(); store.editAgentReusableTool(session.context, nodeId, toolId) }" @change-tool="(nodeId, stepId, op) => { ensureExpandedLoopContext(); changeTool(nodeId, stepId, op) }" @reorder-tool="(nodeId, stepId, targetIndex) => { ensureExpandedLoopContext(); reorderTool(nodeId, stepId, targetIndex) }" @tool-step-context-menu="openTaskToolStepContextMenu" @intent="handleChildIntent" @connect="handleChildConnect" @create="createChildNode" @select-root="selectRootNode" @collapse="exitLoop" @clear-error="store.clearWorkflowErrors" @reject="store.rejectCanvasInteraction" @resource-drop="(action) => { ensureExpandedLoopContext(); handleResourceDrop(action) }" @update-agent-action="updateAgentActionDetails" @update-node-name="updateNodeName" @node-context-menu="openNodeContextMenu" @edge-context-menu="openEdgeContextMenu" />
+        <WorkflowCanvas v-else-if="activeGraph && activeLayout" :key="activeCanvasId" ref="workflowCanvas" :canvas-id="activeCanvasId" :graph="activeGraph" :layout="activeLayout" :mode="session.mode" :selected-node-id="session.selectedNodeId" :variables="document.variables" :system-tools="systemTools" :available-reusable-tool-ids="document.reusableTools.map((tool) => tool.id)" :reusable-tools="document.reusableTools" :knowledge-spaces="knowledgeSpaces" :active-resource-drag="activeResourceDrag" @edit-tool="editTool" @edit-reusable-tool="(nodeId, toolId) => store.editAgentReusableTool(session.context, nodeId, toolId)" @change-tool="changeTool" @reorder-tool="reorderTool" @tool-step-context-menu="(nodeId, stepId, point) => openTaskToolStepContextMenu(nodeId, stepId, session.context, point)" @intent="handleIntent" @connect="handleConnect" @create="createNode" @clear-error="store.clearWorkflowErrors" @reject="store.rejectCanvasInteraction" @resource-drop="handleResourceDrop" @update-agent-action="updateAgentActionDetails" @update-node-name="updateNodeName" @node-context-menu="(nodeId, point) => openNodeContextMenu(nodeId, session.context, point)" @edge-context-menu="(edgeId, point) => openEdgeContextMenu(edgeId, session.context, point)" />
       </main>
       <div class="workflow-right-panel-host">
-        <WorkflowSidePanelHost v-if="!systemToolDraft && (session.panel?.type === 'node-inspector' || session.panel?.type === 'edge-inspector' || session.panel?.type === 'loop-inspector')" :node="selectedNode" :edge="selectedEdge" :tools="document.reusableTools" :variables="document.variables" :knowledge-spaces="knowledgeSpaces" :knowledge-status="knowledgeInventory.status" :loop-expanded="Boolean(expandedLoop)" :read-only="session.mode === 'flow'" @close="closeInspector" @open-loop="openLoop" @update-loop="updateLoop" @bind-tool="updateAgentActionTools($event, true)" @unbind-tool="updateAgentActionTools($event, false)" @bind-knowledge-space="updateAgentActionKnowledgeSpaces($event, true)" @unbind-knowledge-space="updateAgentActionKnowledgeSpaces($event, false)" @reject-resource="store.rejectCanvasInteraction" @delete-node="selectedNode && removeActiveNode(selectedNode.id)" @delete-edge="selectedEdge && removeActiveEdge(selectedEdge.id)" />
-        <SystemToolPanel v-else-if="systemToolDraft && toolTask" :key="`${systemToolDraft.nodeId}-${systemToolDraft.step?.id ?? systemToolDraft.kind}`" :draft="systemToolDraft" :task="toolTask" :variables="document.variables" :knowledge-spaces="toolKnowledgeSpaces" :knowledge-status="toolKnowledgeStatus" :error="toolError" @save="store.saveSystemTool" @cancel="store.cancelSystemTool" />
+        <WorkflowSidePanelHost v-if="!systemToolDraft && (session.panel?.type === 'node-inspector' || session.panel?.type === 'loop-inspector')" :node="selectedNode" :edge="selectedEdge" :tools="document.reusableTools" :variables="document.variables" :knowledge-spaces="knowledgeSpaces" :knowledge-status="knowledgeInventory.status" :loop-expanded="Boolean(expandedLoop)" :read-only="session.mode === 'flow'" @close="closeInspector" @open-loop="openLoop" @update-loop="updateLoop" @bind-tool="updateAgentActionTools($event, true)" @unbind-tool="updateAgentActionTools($event, false)" @bind-knowledge-space="updateAgentActionKnowledgeSpaces($event, true)" @unbind-knowledge-space="updateAgentActionKnowledgeSpaces($event, false)" @reject-resource="store.rejectCanvasInteraction" />
+        <SystemToolPanel v-else-if="taskToolDraft && toolTask" :key="`${taskToolDraft.nodeId}-${taskToolDraft.step?.id ?? taskToolDraft.kind}`" :draft="taskToolDraft" :task="toolTask" :variables="document.variables" :knowledge-spaces="toolKnowledgeSpaces" :knowledge-status="toolKnowledgeStatus" :error="toolError" @save="store.saveSystemTool" @cancel="store.cancelSystemTool" />
+        <AgentReusableToolPanel v-else-if="reusableToolDraft" :key="`${reusableToolDraft.host}-${reusableToolDraft.tool?.id ?? reusableToolDraft.kind}`" :draft="reusableToolDraft" :variables="document.variables" :knowledge-spaces="toolKnowledgeSpaces" :knowledge-status="toolKnowledgeStatus" @save="store.saveAgentReusableTool" @cancel="store.cancelSystemTool" />
+        <AgentVariablesPanel v-else-if="session.resourceBrowser.category === 'agent-variables' && !session.resourceBrowser.collapsed" :variables="document.variables" :read-only="session.mode === 'flow'" :error="variableError" :reference-count="store.variableReferenceCount" @save="store.saveAgentVariable" @delete="store.deleteAgentVariable" @collapse="store.setResourceBrowserCollapsed(true)" />
+        <ReusableToolsPanel v-else-if="session.resourceBrowser.category === 'reusable-tools' && !session.resourceBrowser.collapsed" :agent-name="document.agent.name" :tools="document.reusableTools" :read-only="session.mode === 'flow'" :reference-count="store.reusableToolReferenceCount" @collapse="store.setResourceBrowserCollapsed(true)" @edit="store.editLibraryReusableTool" @delete="store.deleteLibraryReusableTool" @browse-system-tools="selectResourceCategory('tools')" @resource-drag-start="activeResourceDrag = $event" @resource-drag-end="activeResourceDrag = null" />
         <WorkflowResourceBrowser v-else :system-tools="systemTools" :system-tool-status="systemToolStatus" :collapsed="session.resourceBrowser.collapsed" :category="session.resourceBrowser.category" :query="session.resourceBrowser.query" :page="session.resourceBrowser.page" :page-size="session.resourceBrowser.pageSize" :tools="document.reusableTools" :knowledge-spaces="knowledgeSpaces" :knowledge-status="knowledgeInventory.status" :knowledge-total="knowledgeInventory.total" :read-only="session.mode === 'flow'" @collapse="store.setResourceBrowserCollapsed" @category="selectResourceCategory" @search="searchResources" @page="changeResourcePage" @resource-drag-start="activeResourceDrag = $event" @resource-drag-end="activeResourceDrag = null" @resource-activate="activateResource" />
       </div>
+    </div>
+    <div v-if="canvasContextMenu" class="workflow-canvas-context-menu" role="menu" :aria-label="canvasContextMenu.type === 'node' ? 'Node actions' : canvasContextMenu.type === 'edge' ? 'Route actions' : 'Tool step actions'" :style="{ left: `${canvasContextMenu.x}px`, top: `${canvasContextMenu.y}px` }" @click.stop>
+      <button v-if="canvasContextMenu.type === 'node'" type="button" role="menuitem" @click="deleteContextNode">Delete node</button>
+      <button v-else-if="canvasContextMenu.type === 'edge'" type="button" role="menuitem" @click="deleteContextEdge">Delete route</button>
+      <template v-else><button type="button" role="menuitem" class="is-neutral" @click="editContextToolStep">Edit configuration</button><button type="button" role="menuitem" class="is-neutral" @click="saveContextToolStepToReusableTools">Save to Reusable Tools</button><button type="button" role="menuitem" @click="deleteContextToolStep">Delete step</button></template>
     </div>
     <WorkflowNodeCreationDialog v-if="session.creationDraft.type !== 'closed'" :draft="session.creationDraft" :variables="document.variables" :error="draftError" @close="closeCreationDraft" @submit-agent-action="submitAgentActionDraft" @submit-loop="submitLoopDraft" />
     <RevisionConflictDialog v-if="conflictDialogOpen" subject="Workflow" @stay="conflictDialogOpen = false" @reload="reloadServerVersion" @overwrite="overwriteServerVersion" />

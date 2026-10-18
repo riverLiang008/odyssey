@@ -23,6 +23,7 @@ def test_openapi_documents_all_existing_operations(monkeypatch) -> None:
         "journeys",
         "agent-templates",
         "knowledge-spaces",
+        "knowledge-space-categories",
     ]
 
     expected_operations = {
@@ -68,6 +69,79 @@ def test_openapi_documents_all_existing_operations(monkeypatch) -> None:
         ("/api/v1/agent-templates", "get"): "listAgentTemplates",
         ("/api/v1/agent-templates/{template_id}", "get"): "loadAgentTemplate",
         ("/api/v1/knowledge-spaces", "get"): "listKnowledgeSpaces",
+        ("/api/v1/knowledge-spaces", "post"): "createKnowledgeSpace",
+        (
+            "/api/v1/knowledge-spaces/{knowledge_space_id}",
+            "get",
+        ): "loadKnowledgeSpace",
+        (
+            "/api/v1/knowledge-spaces/{knowledge_space_id}",
+            "put",
+        ): "updateKnowledgeSpace",
+        (
+            "/api/v1/knowledge-spaces/{knowledge_space_id}",
+            "delete",
+        ): "deleteKnowledgeSpace",
+        (
+            "/api/v1/knowledge-spaces/{knowledge_space_id}/commands/archive",
+            "post",
+        ): "archiveKnowledgeSpace",
+        (
+            "/api/v1/knowledge-spaces/{knowledge_space_id}/commands/unarchive",
+            "post",
+        ): "unarchiveKnowledgeSpace",
+        (
+            "/api/v1/knowledge-space-categories",
+            "get",
+        ): "listKnowledgeSpaceCategories",
+        (
+            "/api/v1/knowledge-space-categories",
+            "post",
+        ): "createKnowledgeSpaceCategory",
+        (
+            "/api/v1/knowledge-spaces/{knowledge_space_id}/file-tree",
+            "get",
+        ): "loadKnowledgeFileTree",
+        (
+            "/api/v1/knowledge-spaces/{knowledge_space_id}/graph",
+            "get",
+        ): "loadKnowledgeGraph",
+        (
+            "/api/v1/knowledge-spaces/{knowledge_space_id}/graph-manifest/validate",
+            "post",
+        ): "validateKnowledgeGraphManifest",
+        (
+            "/api/v1/knowledge-spaces/{knowledge_space_id}/graph-manifest/apply",
+            "post",
+        ): "applyKnowledgeGraphManifest",
+        (
+            "/api/v1/knowledge-spaces/{knowledge_space_id}/folders",
+            "post",
+        ): "createKnowledgeFolder",
+        (
+            "/api/v1/knowledge-spaces/{knowledge_space_id}/uploads/prepare",
+            "post",
+        ): "prepareKnowledgeUpload",
+        (
+            "/api/v1/knowledge-spaces/{knowledge_space_id}/uploads/complete",
+            "post",
+        ): "completeKnowledgeUpload",
+        (
+            "/api/v1/knowledge-spaces/{knowledge_space_id}/resources/{resource_id}/commands/move",
+            "post",
+        ): "moveKnowledgeResource",
+        (
+            "/api/v1/knowledge-spaces/{knowledge_space_id}/resources/{resource_id}",
+            "get",
+        ): "loadKnowledgeResource",
+        (
+            "/api/v1/knowledge-spaces/{knowledge_space_id}/resources/{resource_id}",
+            "delete",
+        ): "deleteKnowledgeResource",
+        (
+            "/api/v1/knowledge-spaces/{knowledge_space_id}/resources/{resource_id}/content",
+            "put",
+        ): "updateKnowledgeResourceContent",
     }
     actual_operations = {
         (path, method): operation["operationId"]

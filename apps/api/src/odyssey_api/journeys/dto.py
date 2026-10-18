@@ -401,11 +401,14 @@ class KnowledgeRetrievalToolStep(ApiModel):
     failure_behavior: ToolFailureBehavior
     kind: Literal["knowledge_retrieval"]
     configuration: KnowledgeRetrievalConfiguration
-    output_mapping: ToolOutputMapping
+    output_mapping: ToolOutputMapping | None
 
     @model_validator(mode="after")
     def validate_output_source(self) -> "KnowledgeRetrievalToolStep":
-        if self.output_mapping.source_key != "retrieved_documents":
+        if (
+            self.output_mapping is not None
+            and self.output_mapping.source_key != "retrieved_documents"
+        ):
             raise ValueError("Knowledge retrieval output source must be retrieved_documents")
         return self
 
@@ -416,11 +419,11 @@ class ScriptExecutionToolStep(ApiModel):
     failure_behavior: ToolFailureBehavior
     kind: Literal["script_execution"]
     configuration: ScriptExecutionConfiguration
-    output_mapping: ToolOutputMapping
+    output_mapping: ToolOutputMapping | None
 
     @model_validator(mode="after")
     def validate_output_source(self) -> "ScriptExecutionToolStep":
-        if self.output_mapping.source_key != "result":
+        if self.output_mapping is not None and self.output_mapping.source_key != "result":
             raise ValueError("Script output source must be result")
         return self
 
@@ -431,11 +434,11 @@ class ApiRequestToolStep(ApiModel):
     failure_behavior: ToolFailureBehavior
     kind: Literal["api_request"]
     configuration: ApiRequestConfiguration
-    output_mapping: ToolOutputMapping
+    output_mapping: ToolOutputMapping | None
 
     @model_validator(mode="after")
     def validate_output_source(self) -> "ApiRequestToolStep":
-        if self.output_mapping.source_key != "response.data":
+        if self.output_mapping is not None and self.output_mapping.source_key != "response.data":
             raise ValueError("API output source must be response.data")
         return self
 
@@ -455,11 +458,11 @@ class LlmCallToolStep(ApiModel):
     failure_behavior: ToolFailureBehavior
     kind: Literal["llm_call"]
     configuration: LlmCallConfiguration
-    output_mapping: ToolOutputMapping
+    output_mapping: ToolOutputMapping | None
 
     @model_validator(mode="after")
     def validate_output_source(self) -> "LlmCallToolStep":
-        if self.output_mapping.source_key != "response.text":
+        if self.output_mapping is not None and self.output_mapping.source_key != "response.text":
             raise ValueError("LLM output source must be response.text")
         return self
 
@@ -781,6 +784,30 @@ AgentReusableTool = Annotated[
 ]
 
 
+def _validate_agent_reusable_tool_references(
+    workflow: WorkflowGraph, reusable_tools: list[AgentReusableTool]
+) -> None:
+    reusable_tool_ids = [tool.id for tool in reusable_tools]
+    if len(set(reusable_tool_ids)) != len(reusable_tool_ids):
+        raise ValueError("Reusable Tool IDs must be unique within an Agent")
+    available_ids = set(reusable_tool_ids)
+
+    def visit(nodes: list[WorkflowNode] | list[LoopBodyNode]) -> None:
+        for node in nodes:
+            if isinstance(node, AgentActionNode):
+                if any(
+                    tool_id not in available_ids
+                    for tool_id in node.configuration.reusable_tool_ids
+                ):
+                    raise ValueError(
+                        "Agent Action must reference a reusable Tool owned by the Agent"
+                    )
+            elif isinstance(node, LoopNode):
+                visit(node.configuration.body.graph.nodes)
+
+    visit(workflow.nodes)
+
+
 class AgentMetadata(ApiModel):
     id: UUID
     journey_id: UUID
@@ -804,6 +831,7 @@ class AgentWorkflowEditorDocument(ApiModel):
         placement_ids = {placement.node_id for placement in self.layout.node_placements}
         if not placement_ids.issubset(node_ids):
             raise ValueError("Canvas placements must reference Workflow nodes")
+        _validate_agent_reusable_tool_references(self.workflow, self.reusable_tools)
         return self
 
 
@@ -813,6 +841,11 @@ class SaveAgentWorkflowRequest(ApiModel):
     layout: CanvasLayout
     variables: list[AgentVariable]
     reusable_tools: list[AgentReusableTool]
+
+    @model_validator(mode="after")
+    def validate_reusable_tool_references(self) -> "SaveAgentWorkflowRequest":
+        _validate_agent_reusable_tool_references(self.workflow, self.reusable_tools)
+        return self
 
 
 class SaveAgentAsTemplateRequest(ApiModel):

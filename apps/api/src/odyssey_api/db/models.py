@@ -310,7 +310,7 @@ class KnowledgeSpace(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("workspace_id", "normalized_name"),
         CheckConstraint(
-            "lifecycle_status IN ('initializing', 'ready', 'syncing', 'failed')",
+            "lifecycle_status IN ('initializing', 'ready', 'syncing', 'failed', 'archived')",
             name="lifecycle_status_values",
         ),
         CheckConstraint(
@@ -380,6 +380,14 @@ class KnowledgeResource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint(
             "checksum IS NULL OR octet_length(checksum) = 32", name="checksum_sha256_length"
         ),
+        CheckConstraint(
+            "summary_source IS NULL OR summary_source IN ('user', 'manifest', 'llm', 'seed')",
+            name="summary_source_values",
+        ),
+        CheckConstraint(
+            "guide_source IS NULL OR guide_source IN ('user', 'manifest', 'llm', 'seed')",
+            name="guide_source_values",
+        ),
         Index("ix_knowledge_resource_space_folder", "knowledge_space_id", "folder_id"),
         Index("ix_knowledge_resource_space_status", "knowledge_space_id", "status"),
     )
@@ -394,7 +402,11 @@ class KnowledgeResource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     resource_type: Mapped[str] = mapped_column(String(32), server_default=text("'file'"))
     status: Mapped[str] = mapped_column(String(16), server_default=text("'pending'"))
     summary: Mapped[str | None] = mapped_column(Text)
+    summary_source: Mapped[str | None] = mapped_column(String(16))
+    summary_source_key: Mapped[str | None] = mapped_column(String(128))
     guide: Mapped[str | None] = mapped_column(Text)
+    guide_source: Mapped[str | None] = mapped_column(String(16))
+    guide_source_key: Mapped[str | None] = mapped_column(String(128))
     mime_type: Mapped[str | None] = mapped_column(String(255))
     size_bytes: Mapped[int | None] = mapped_column(BigInteger)
     checksum: Mapped[bytes | None] = mapped_column(LargeBinary)
@@ -472,7 +484,10 @@ class KnowledgeResourceArtifact(UUIDPrimaryKeyMixin, Base):
 
 class KnowledgeTag(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "knowledge_tag"
-    __table_args__ = (UniqueConstraint("knowledge_space_id", "normalized_name"),)
+    __table_args__ = (
+        UniqueConstraint("knowledge_space_id", "normalized_name"),
+        CheckConstraint("source IN ('user', 'manifest', 'llm', 'seed')", name="source_values"),
+    )
 
     knowledge_space_id: Mapped[UUID] = mapped_column(
         ForeignKey("knowledge_space.id", ondelete="CASCADE"), index=True
@@ -480,6 +495,8 @@ class KnowledgeTag(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255))
     normalized_name: Mapped[str] = mapped_column(String(255))
     color_token: Mapped[str | None] = mapped_column(String(64))
+    source: Mapped[str] = mapped_column(String(16), server_default=text("'user'"))
+    source_key: Mapped[str | None] = mapped_column(String(128))
 
 
 class KnowledgeResourceTag(Base):
@@ -488,6 +505,7 @@ class KnowledgeResourceTag(Base):
         Index(
             "ix_knowledge_resource_tag_tag_resource", "knowledge_tag_id", "knowledge_resource_id"
         ),
+        CheckConstraint("source IN ('user', 'manifest', 'llm', 'seed')", name="source_values"),
     )
 
     knowledge_resource_id: Mapped[UUID] = mapped_column(
@@ -497,6 +515,25 @@ class KnowledgeResourceTag(Base):
         ForeignKey("knowledge_tag.id", ondelete="CASCADE"), primary_key=True
     )
     created_at: Mapped[Any] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+    source: Mapped[str] = mapped_column(String(16), server_default=text("'user'"))
+    source_key: Mapped[str | None] = mapped_column(String(128))
+
+
+class KnowledgeGraphManifestImport(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "knowledge_graph_manifest_import"
+    __table_args__ = (
+        UniqueConstraint("knowledge_space_id"),
+        CheckConstraint("octet_length(manifest_checksum) = 32", name="checksum_sha256_length"),
+        CheckConstraint("applied_revision >= 1", name="applied_revision_positive"),
+    )
+
+    knowledge_space_id: Mapped[UUID] = mapped_column(
+        ForeignKey("knowledge_space.id", ondelete="CASCADE"), index=True
+    )
+    manifest_key: Mapped[str] = mapped_column(String(128))
+    manifest_checksum: Mapped[bytes] = mapped_column(LargeBinary)
+    applied_revision: Mapped[int] = mapped_column(Integer)
+    applied_at: Mapped[Any] = mapped_column(DateTime(timezone=True))
 
 
 class KnowledgeRelation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -508,7 +545,7 @@ class KnowledgeRelation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             name="relation_kind_values",
         ),
         CheckConstraint("status IN ('active', 'needs_review')", name="status_values"),
-        CheckConstraint("source IN ('user', 'seed')", name="source_values"),
+        CheckConstraint("source IN ('user', 'manifest', 'llm', 'seed')", name="source_values"),
         CheckConstraint(
             "confidence IS NULL OR confidence BETWEEN 0 AND 1", name="confidence_range"
         ),
@@ -530,6 +567,7 @@ class KnowledgeRelation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(16), server_default=text("'active'"))
     confidence: Mapped[float | None] = mapped_column(Float)
     source: Mapped[str] = mapped_column(String(16), server_default=text("'user'"))
+    source_key: Mapped[str | None] = mapped_column(String(128))
     confirmed_by_user: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     description: Mapped[str | None] = mapped_column(Text)
     metadata_: Mapped[dict[str, Any]] = mapped_column(
@@ -551,7 +589,7 @@ class GraphIssue(UUIDPrimaryKeyMixin, Base):
             "resolution_status IN ('open', 'accepted', 'resolved', 'dismissed')",
             name="resolution_status_values",
         ),
-        CheckConstraint("source IN ('user', 'seed')", name="source_values"),
+        CheckConstraint("source IN ('user', 'manifest', 'llm', 'seed')", name="source_values"),
         CheckConstraint("scope IN ('knowledge_space', 'affected_objects')", name="scope_values"),
         CheckConstraint(
             "(resolution_status = 'open' AND resolved_at IS NULL) OR "
@@ -573,6 +611,7 @@ class GraphIssue(UUIDPrimaryKeyMixin, Base):
     severity: Mapped[str] = mapped_column(String(16))
     resolution_status: Mapped[str] = mapped_column(String(16), server_default=text("'open'"))
     source: Mapped[str] = mapped_column(String(16), server_default=text("'user'"))
+    source_key: Mapped[str | None] = mapped_column(String(128))
     scope: Mapped[str] = mapped_column(String(32))
     title: Mapped[str] = mapped_column(String(255))
     message: Mapped[str | None] = mapped_column(Text)

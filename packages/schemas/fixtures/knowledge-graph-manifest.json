@@ -1,0 +1,64 @@
+{
+  "valid": [
+    {
+      "schemaVersion": 1,
+      "key": "coffee-guide",
+      "documents": [
+        {
+          "key": "coffee-basics",
+          "path": "foundations/coffee-basics.md",
+          "tags": ["foundations"]
+        },
+        {
+          "key": "espresso",
+          "path": "brewing/espresso.md",
+          "summary": "Espresso extraction guide.",
+          "tags": ["brewing"]
+        }
+      ],
+      "tags": [
+        { "key": "foundations", "name": "Foundations" },
+        { "key": "brewing", "name": "Brewing", "colorToken": "knowledge-family-blue" }
+      ],
+      "relations": [
+        {
+          "key": "espresso-builds-on-basics",
+          "source": "espresso",
+          "target": "coffee-basics",
+          "kind": "builds_on",
+          "confidence": 0.9
+        }
+      ],
+      "issues": [],
+      "graph": { "status": "healthy" }
+    }
+  ],
+  "invalid": [
+    {
+      "schemaVersion": 1,
+      "key": "unsafe-path",
+      "documents": [{ "key": "escape", "path": "../escape.md" }],
+      "graph": { "status": "healthy" }
+    },
+    {
+      "schemaVersion": 1,
+      "key": "broken-reference",
+      "documents": [{ "key": "only-document", "path": "only.md" }],
+      "relations": [
+        {
+          "key": "missing-target",
+          "source": "only-document",
+          "target": "not-present",
+          "kind": "references"
+        }
+      ],
+      "graph": { "status": "healthy" }
+    },
+    {
+      "schemaVersion": 1,
+      "key": "forbidden-field",
+      "documents": [{ "key": "only-document", "path": "only.md", "objectKey": "forbidden" }],
+      "graph": { "status": "healthy" }
+    }
+  ]
+}

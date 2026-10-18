@@ -205,7 +205,24 @@ export const validationErrorDetailsSchema = z.strictObject({
   issues: z.array(z.strictObject({ path: z.array(z.union([z.string(), z.number()])), code: z.string().min(1) })),
 })
 export const revisionConflictDetailsSchema = z.strictObject({ expectedRevision: revisionSchema, currentRevision: revisionSchema })
-export const stateConflictReasonSchema = z.enum(['PATTERN_IMMUTABLE', 'OCCUPIED_SLOT_REMOVAL_REQUIRES_COMMAND', 'SLOT_OCCUPIED', 'SLOT_AGENT_CHANGED', 'GUARDRAIL_ALREADY_ACTIVE', 'GUARDRAIL_ALREADY_INACTIVE', 'GUARDRAIL_AGENT_MISMATCH', 'GUARDRAIL_STATE_INVALID'])
+export const stateConflictReasonSchema = z.enum([
+  'PATTERN_IMMUTABLE',
+  'OCCUPIED_SLOT_REMOVAL_REQUIRES_COMMAND',
+  'SLOT_OCCUPIED',
+  'SLOT_AGENT_CHANGED',
+  'GUARDRAIL_ALREADY_ACTIVE',
+  'GUARDRAIL_ALREADY_INACTIVE',
+  'GUARDRAIL_AGENT_MISMATCH',
+  'GUARDRAIL_STATE_INVALID',
+  'KNOWLEDGE_SPACE_CATEGORY_NAME_CONFLICT',
+  'KNOWLEDGE_SPACE_NAME_CONFLICT',
+  'KNOWLEDGE_SPACE_MUST_BE_ARCHIVED',
+  'KNOWLEDGE_SPACE_HAS_DOCUMENTS',
+  'KNOWLEDGE_SPACE_IS_REFERENCED',
+  'KNOWLEDGE_FOLDER_NAME_CONFLICT',
+  'KNOWLEDGE_RESOURCE_ALREADY_IN_FOLDER',
+  'KNOWLEDGE_RESOURCE_NOT_EDITABLE_MARKDOWN',
+])
 export const stateConflictDetailsSchema = z.object({ reason: stateConflictReasonSchema }).passthrough()
 
 const simpleRepositoryErrorSchema = z.discriminatedUnion('code', [

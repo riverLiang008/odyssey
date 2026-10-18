@@ -8,6 +8,7 @@ import {
   removeBranchCase,
   removeEdge,
   removeNode,
+  renameNode,
   reorderBranchCase,
   updateBranchCase,
   updateLoopBody,
@@ -58,6 +59,17 @@ describe('workflow commands', () => {
     if (!removed.ok) throw new Error('Expected removal')
     expect(removed.value.nodes.some((node) => node.id === id(20))).toBe(false)
     expect(removed.value.edges.some((edge) => edge.sourceNodeId === id(20) || edge.targetNodeId === id(20))).toBe(false)
+  })
+
+  it('renames an ordinary node without mutating the source graph', () => {
+    const graph = createMinimalAgentWorkflow(ids())
+    const added = addNode(graph, task(id(30), 'New Task'))
+    if (!added.ok) throw new Error('Expected task creation')
+    const before = structuredClone(added.value)
+    const renamed = renameNode(added.value, id(30), '  Publish brief  ')
+    expect(renamed.ok).toBe(true)
+    expect(added.value).toEqual(before)
+    if (renamed.ok) expect(renamed.value.nodes.find((node) => node.id === id(30))?.name).toBe('Publish brief')
   })
 
   it('returns stable errors for invalid connections without changing source graph', () => {

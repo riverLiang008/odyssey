@@ -14,7 +14,7 @@ let pendingSaveFailures = 0
 export function installDevelopmentSaveFaultController(): void {
   if (!import.meta.env.DEV) return
   globalThis.window.__ODYSSEY_ACCEPTANCE__ = {
-    failNextSave() { pendingSaveFailures += 1 },
+    failNextSave() { pendingSaveFailures = 1 },
     clear() { pendingSaveFailures = 0 },
   }
 }

@@ -65,6 +65,27 @@ export function removeLoopBodyNode(
   return finalize(candidate, loopNodeId)
 }
 
+export function renameLoopBodyNode(
+  graph: LoopBodyGraph,
+  loopNodeId: UUID,
+  nodeId: UUID,
+  name: string,
+): WorkflowCommandResult<LoopBodyGraph> {
+  const invalid = sourceFailure<LoopBodyGraph>(graph, loopNodeId)
+  if (invalid) return invalid
+  const index = graph.nodes.findIndex((node) => node.id === nodeId)
+  const node = graph.nodes[index]
+  if (!node) return failure({ code: 'NODE_NOT_FOUND', nodeId })
+  if (isBoundaryNode(node)) return failure({ code: 'BOUNDARY_NODE_IMMUTABLE', nodeId })
+  const nextName = name.trim()
+  if (!nextName) return failure({ code: 'INVALID_NODE_CONFIG', nodeId })
+  const candidate = structuredClone(graph)
+  const candidateNode = candidate.nodes[index]
+  if (!candidateNode) return failure({ code: 'NODE_NOT_FOUND', nodeId })
+  candidateNode.name = nextName
+  return finalize(candidate, loopNodeId)
+}
+
 export function removeLoopBodyEdge(
   graph: LoopBodyGraph,
   loopNodeId: UUID,

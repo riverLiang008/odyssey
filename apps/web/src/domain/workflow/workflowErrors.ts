@@ -65,6 +65,8 @@ export type WorkflowDomainError =
   | { readonly code: 'RESOURCE_NOT_AVAILABLE'; readonly resourceId: UUID }
   | { readonly code: 'RESOURCE_ALREADY_BOUND'; readonly nodeId: UUID; readonly resourceId: UUID }
   | { readonly code: 'RESOURCE_NOT_BOUND'; readonly nodeId: UUID; readonly resourceId: UUID }
+  | { readonly code: 'RESOURCE_IN_USE'; readonly resourceId: UUID; readonly referenceCount: number }
+  | { readonly code: 'RESOURCE_ID_CONFLICT'; readonly resourceId: UUID }
 
 export type WorkflowCommandResult<T> =
   | { readonly ok: true; readonly value: T; readonly validation: WorkflowValidationReport }

@@ -41,6 +41,7 @@ def test_v1_baseline_contains_all_first_class_tables() -> None:
         "agent_variable",
         "agent_reusable_tool",
         "knowledge_space",
+        "knowledge_graph_manifest_import",
         "knowledge_folder",
         "knowledge_resource",
         "knowledge_resource_artifact",

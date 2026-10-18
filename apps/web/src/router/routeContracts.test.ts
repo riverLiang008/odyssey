@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { uuidSchema } from '@odyssey/schemas'
 import { FIXTURE_IDS } from '@/fixtures'
-import { parseAgentWorkflowRoute, parseJourneyRoute, parseJourneyTab, routeLocations } from './routeContracts'
+import { parseAgentWorkflowRoute, parseJourneyRoute, parseJourneyTab, parseKnowledgeResourceRoute, parseKnowledgeSpaceRoute, routeLocations } from './routeContracts'
 
 describe('route contracts', () => {
   it('parses UUID route identities and normalizes unknown tabs', () => {
@@ -14,11 +14,16 @@ describe('route contracts', () => {
     expect(parseJourneyRoute('not-a-uuid')).toBeNull()
     expect(parseJourneyRoute([FIXTURE_IDS.journey])).toBeNull()
     expect(parseAgentWorkflowRoute(FIXTURE_IDS.journey, 'nope')).toBeNull()
+    expect(parseKnowledgeSpaceRoute('not-a-uuid')).toBeNull()
+    expect(parseKnowledgeResourceRoute([FIXTURE_IDS.journey])).toBeNull()
   })
 
   it('builds named locations without UI state', () => {
     expect(routeLocations.journey(uuidSchema.parse(FIXTURE_IDS.journey))).toEqual({
       name: 'journey-editor', params: { journeyId: FIXTURE_IDS.journey }, query: { tab: 'execution' },
+    })
+    expect(routeLocations.knowledgeDocument(uuidSchema.parse(FIXTURE_IDS.journey), uuidSchema.parse(FIXTURE_IDS.researchAgent))).toEqual({
+      name: 'knowledge-document-detail', params: { knowledgeSpaceId: FIXTURE_IDS.journey, resourceId: FIXTURE_IDS.researchAgent },
     })
   })
 })

@@ -517,6 +517,16 @@ Rules:
 
 A Task owns Task-local Variables and a strictly ordered Tool sequence.
 
+When a Tool is added from the Agent's Reusable Tool inventory, the application creates a new Task-owned Tool step snapshot:
+
+- the step receives a new ToolStep UUID;
+- kind and configuration are copied from the Reusable Tool at that moment;
+- output mapping and failure behavior remain Task-step-owned configuration;
+- no live `reusableToolId`/source link is persisted in V1;
+- later source edits or deletion do not alter existing Task steps, and Task-step edits do not update the source.
+
+Consequently, `Linked`, `Detach`, and `Update source` are not valid V1 states or commands. Reusing the same Reusable Tool multiple times creates distinct independent ToolStep snapshots.
+
 ```json
 {
   "id": "0195f076-b6e6-7ef0-98db-d721990f8865",

@@ -4,7 +4,7 @@ import odysseyLogoUrl from '../../../../doc/assets/brand/odyssey-logo.png'
 const items = [
   { label: 'Community', disabled: true },
   { label: 'OdyJourney', to: '/journeys' },
-  { label: 'Assets', disabled: true },
+  { label: 'Assets', to: '/assets/knowledge-spaces' },
   { label: 'Settings', disabled: true },
 ] as const
 </script>

@@ -19,6 +19,28 @@ import {
   deleteJourneyInputSchema,
   deleteJourneySuccessSchema,
   journeySummaryListSchema,
+  createKnowledgeSpaceCategoryInputSchema,
+  createKnowledgeSpaceInputSchema,
+  updateKnowledgeSpaceInputSchema,
+  knowledgeSpaceRevisionCommandSchema,
+  knowledgeSpaceCategorySummarySchema,
+  knowledgeSpaceDetailSchema,
+  knowledgeFileTreeSchema,
+  knowledgeGraphOverviewSchema,
+  knowledgeGraphManifestSchema,
+  validateKnowledgeGraphManifestResultSchema,
+  applyKnowledgeGraphManifestRequestSchema,
+  applyKnowledgeGraphManifestResultSchema,
+  createKnowledgeFolderInputSchema,
+  createKnowledgeFolderSuccessSchema,
+  moveKnowledgeResourceInputSchema,
+  moveKnowledgeResourceSuccessSchema,
+  deleteKnowledgeResourceInputSchema,
+  deleteKnowledgeResourceSuccessSchema,
+  updateKnowledgeResourceContentInputSchema,
+  updateKnowledgeResourceContentSuccessSchema,
+  completeKnowledgeUploadSuccessSchema,
+  knowledgeResourceDetailSchema,
   type SystemToolDefinition,
   type AgentTemplate,
   type AddGuardrailInput,
@@ -34,6 +56,30 @@ import {
   type JourneySummary,
   type KnowledgeSpaceSummary,
   type KnowledgeSpaceSummaryPage,
+  type KnowledgeSpaceCategorySummary,
+  type KnowledgeSpaceDetail,
+  type CreateKnowledgeSpaceCategoryInput,
+  type CreateKnowledgeSpaceInput,
+  type UpdateKnowledgeSpaceInput,
+  type KnowledgeSpaceRevisionCommand,
+  type DeleteKnowledgeSpaceSuccess,
+  type KnowledgeFileTree,
+  type KnowledgeGraphOverview,
+  type KnowledgeGraphManifest,
+  type ValidateKnowledgeGraphManifestResult,
+  type ApplyKnowledgeGraphManifestResult,
+  type KnowledgeFolderSummary,
+  type KnowledgeResourceSummary,
+  type KnowledgeResourceDetail,
+  type CreateKnowledgeFolderInput,
+  type CreateKnowledgeFolderSuccess,
+  type MoveKnowledgeResourceInput,
+  type MoveKnowledgeResourceSuccess,
+  type DeleteKnowledgeResourceInput,
+  type DeleteKnowledgeResourceSuccess,
+  type UpdateKnowledgeResourceContentInput,
+  type UpdateKnowledgeResourceContentSuccess,
+  type CompleteKnowledgeUploadSuccess,
   type CreateJourneyInput,
   type DeleteJourneyInput,
   type DeleteJourneySuccess,
@@ -57,7 +103,7 @@ import {
   type AgentLifecycleIdFactory,
 } from '@/domain/agent-template'
 import { instantiatePattern, removeSlot as removePatternSlot, unassignAgent, type PatternIdFactory } from '@/domain/pattern'
-import type { AgentLifecycleRepository, EditorRepository, GuardrailLifecycleRepository, JourneyLifecycleRepository, OdysseyEditorRepository, RepositoryOperationOptions } from './editorRepository'
+import type { AgentLifecycleRepository, EditorRepository, GuardrailLifecycleRepository, JourneyLifecycleRepository, KnowledgeResourceInspection, OdysseyEditorRepository, RepositoryOperationOptions, UploadKnowledgeFileInput } from './editorRepository'
 
 type InjectableFailure = 'NETWORK_FAILED' | 'RESPONSE_INVALID' | 'REVISION_CONFLICT'
 
@@ -66,6 +112,7 @@ export interface InMemoryEditorRepositoryOptions {
   agentWorkflows?: AgentWorkflowEditorDocument[]
   agentTemplates?: AgentTemplate[]
   knowledgeSpaces?: KnowledgeSpaceSummary[]
+  knowledgeSpaceCategories?: KnowledgeSpaceCategorySummary[]
   latencyMs?: number
   now?: () => string
   systemVariableIds?: readonly string[]
@@ -126,6 +173,11 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
   readonly #agentWorkflows = new Map<string, AgentWorkflowEditorDocument>()
   readonly #agentTemplates = new Map<string, AgentTemplate>()
   readonly #knowledgeSpaces: KnowledgeSpaceSummary[]
+  readonly #knowledgeSpaceCategories: KnowledgeSpaceCategorySummary[]
+  readonly #knowledgeSpaceDetails = new Map<UUID, KnowledgeSpaceDetail>()
+  readonly #knowledgeFolders = new Map<UUID, KnowledgeFolderSummary[]>()
+  readonly #knowledgeResources = new Map<UUID, KnowledgeResourceSummary[]>()
+  readonly #knowledgeResourceFiles = new Map<UUID, File>()
   readonly #latencyMs: number
   readonly #now: () => string
   readonly #scenario: ScenarioState
@@ -148,6 +200,7 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
       systemVariableIds: options.systemVariableIds,
     })
     this.#knowledgeSpaces = structuredClone(options.knowledgeSpaces ?? [])
+    this.#knowledgeSpaceCategories = structuredClone(options.knowledgeSpaceCategories ?? [])
     this.#lifecycleSchemas = createAgentLifecycleResponseSchemas(options.systemVariableIds)
     this.#systemVariableIds = (options.systemVariableIds ?? []).map((id) => uuidSchema.parse(id))
     const nextUuid = () => uuidSchema.parse(crypto.randomUUID())
@@ -189,7 +242,7 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
   }
 
   async listKnowledgeSpaces(
-    input: { query?: string; page?: number; pageSize?: number } = {},
+    input: { query?: string; page?: number; pageSize?: number; includeArchived?: boolean } = {},
     options?: RepositoryOperationOptions,
   ): Promise<RepositoryResult<KnowledgeSpaceSummaryPage>> {
     if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
@@ -198,8 +251,295 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
     const query = input.query?.trim().toLocaleLowerCase() ?? ''
     const page = input.page ?? 1
     const pageSize = input.pageSize ?? 20
-    const matched = this.#knowledgeSpaces.filter((space) => !query || space.name.toLocaleLowerCase().includes(query) || space.description?.toLocaleLowerCase().includes(query))
+    const matched = this.#knowledgeSpaces.filter((space) => (input.includeArchived || space.lifecycleStatus !== 'archived') && (!query || space.name.toLocaleLowerCase().includes(query) || space.description?.toLocaleLowerCase().includes(query)))
     return { ok: true, value: { items: structuredClone(matched.slice((page - 1) * pageSize, page * pageSize)), page, pageSize, total: matched.length } }
+  }
+
+  async listKnowledgeSpaceCategories(options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceCategorySummary[]>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    return { ok: true, value: structuredClone(this.#knowledgeSpaceCategories) }
+  }
+
+  async createKnowledgeSpaceCategory(input: CreateKnowledgeSpaceCategoryInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceCategorySummary>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const request = createKnowledgeSpaceCategoryInputSchema.safeParse(input)
+    if (!request.success) return failure({ code: 'VALIDATION_FAILED', issues: request.error.issues.map((issue) => ({ path: issue.path.filter((part): part is string | number => typeof part === 'string' || typeof part === 'number'), code: issue.code })) })
+    if (this.#knowledgeSpaceCategories.some((category) => category.name.toLocaleLowerCase() === request.data.name.toLocaleLowerCase())) return failure({ code: 'STATE_CONFLICT', reason: 'KNOWLEDGE_SPACE_CATEGORY_NAME_CONFLICT' })
+    const candidate = knowledgeSpaceCategorySummarySchema.parse({ id: crypto.randomUUID(), name: request.data.name, colorToken: request.data.colorToken, sortOrder: this.#knowledgeSpaceCategories.length, isDefault: false })
+    this.#knowledgeSpaceCategories.push(candidate)
+    return { ok: true, value: structuredClone(candidate) }
+  }
+
+  async createKnowledgeSpace(input: CreateKnowledgeSpaceInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceDetail>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const request = createKnowledgeSpaceInputSchema.safeParse(input)
+    if (!request.success) return failure({ code: 'VALIDATION_FAILED', issues: request.error.issues.map((issue) => ({ path: issue.path.filter((part): part is string | number => typeof part === 'string' || typeof part === 'number'), code: issue.code })) })
+    const category = this.#knowledgeSpaceCategories.find((candidate) => candidate.id === request.data.categoryId)
+    if (!category) return failure({ code: 'NOT_FOUND' })
+    if (this.#knowledgeSpaces.some((space) => space.name.toLocaleLowerCase() === request.data.name.toLocaleLowerCase())) return failure({ code: 'STATE_CONFLICT', reason: 'KNOWLEDGE_SPACE_NAME_CONFLICT' })
+    const timestamp = this.#now()
+    const detail = knowledgeSpaceDetailSchema.parse({ id: crypto.randomUUID(), rootFolderId: crypto.randomUUID(), name: request.data.name, description: request.data.description, category, lifecycleStatus: 'ready', graphStatus: 'not_indexed', fileCount: 0, knowledgeFamilyCount: 0, openIssueCount: 0, revision: 1, lastDocumentIndexedAt: null, lastStewardRunAt: null, createdAt: timestamp, updatedAt: timestamp })
+    this.#knowledgeSpaces.push(detail)
+    this.#knowledgeSpaceDetails.set(detail.id, detail)
+    this.#knowledgeFolders.set(detail.id, [{ id: detail.rootFolderId, knowledgeSpaceId: detail.id, parentFolderId: null, name: detail.name, sortOrder: 0, createdAt: timestamp, updatedAt: timestamp }])
+    this.#knowledgeResources.set(detail.id, [])
+    return { ok: true, value: structuredClone(detail) }
+  }
+
+  async loadKnowledgeSpace(knowledgeSpaceId: UUID, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceDetail>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const detail = this.#knowledgeSpaceDetails.get(knowledgeSpaceId)
+    return detail ? { ok: true, value: structuredClone(detail) } : failure({ code: 'NOT_FOUND' })
+  }
+
+  async updateKnowledgeSpace(input: UpdateKnowledgeSpaceInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceDetail>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const request = updateKnowledgeSpaceInputSchema.safeParse(input)
+    if (!request.success) return failure({ code: 'VALIDATION_FAILED', issues: request.error.issues.map((issue) => ({ path: issue.path.filter((part): part is string | number => typeof part === 'string' || typeof part === 'number'), code: issue.code })) })
+    const current = this.#knowledgeSpaceDetails.get(request.data.knowledgeSpaceId)
+    if (!current) return failure({ code: 'NOT_FOUND' })
+    if (current.revision !== request.data.expectedRevision) return failure({ code: 'REVISION_CONFLICT', expectedRevision: request.data.expectedRevision, currentRevision: current.revision })
+    const category = this.#knowledgeSpaceCategories.find((candidate) => candidate.id === request.data.categoryId)
+    if (!category) return failure({ code: 'NOT_FOUND' })
+    if (this.#knowledgeSpaces.some((space) => space.id !== current.id && space.name.toLocaleLowerCase() === request.data.name.toLocaleLowerCase())) return failure({ code: 'STATE_CONFLICT', reason: 'KNOWLEDGE_SPACE_NAME_CONFLICT' })
+    const updated = knowledgeSpaceDetailSchema.parse({ ...current, name: request.data.name, description: request.data.description, category, revision: current.revision + 1, updatedAt: this.#now() })
+    this.#replaceKnowledgeSpace(updated)
+    return { ok: true, value: structuredClone(updated) }
+  }
+
+  async archiveKnowledgeSpace(input: KnowledgeSpaceRevisionCommand, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceDetail>> {
+    return this.#setKnowledgeSpaceLifecycle(input, 'archived', options)
+  }
+
+  async unarchiveKnowledgeSpace(input: KnowledgeSpaceRevisionCommand, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceDetail>> {
+    return this.#setKnowledgeSpaceLifecycle(input, 'ready', options)
+  }
+
+  async #setKnowledgeSpaceLifecycle(input: KnowledgeSpaceRevisionCommand, lifecycleStatus: 'archived' | 'ready', options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceDetail>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const request = knowledgeSpaceRevisionCommandSchema.safeParse(input)
+    if (!request.success) return failure({ code: 'VALIDATION_FAILED', issues: request.error.issues.map((issue) => ({ path: issue.path.filter((part): part is string | number => typeof part === 'string' || typeof part === 'number'), code: issue.code })) })
+    const current = this.#knowledgeSpaceDetails.get(request.data.knowledgeSpaceId)
+    if (!current) return failure({ code: 'NOT_FOUND' })
+    if (current.revision !== request.data.expectedRevision) return failure({ code: 'REVISION_CONFLICT', expectedRevision: request.data.expectedRevision, currentRevision: current.revision })
+    const updated = knowledgeSpaceDetailSchema.parse({ ...current, lifecycleStatus, revision: current.revision + 1, updatedAt: this.#now() })
+    this.#replaceKnowledgeSpace(updated)
+    return { ok: true, value: structuredClone(updated) }
+  }
+
+  async deleteKnowledgeSpace(input: KnowledgeSpaceRevisionCommand, options?: RepositoryOperationOptions): Promise<RepositoryResult<DeleteKnowledgeSpaceSuccess>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const request = knowledgeSpaceRevisionCommandSchema.safeParse(input)
+    if (!request.success) return failure({ code: 'VALIDATION_FAILED', issues: request.error.issues.map((issue) => ({ path: issue.path.filter((part): part is string | number => typeof part === 'string' || typeof part === 'number'), code: issue.code })) })
+    const current = this.#knowledgeSpaceDetails.get(request.data.knowledgeSpaceId)
+    if (!current) return failure({ code: 'NOT_FOUND' })
+    if (current.revision !== request.data.expectedRevision) return failure({ code: 'REVISION_CONFLICT', expectedRevision: request.data.expectedRevision, currentRevision: current.revision })
+    if (current.fileCount > 0) return failure({ code: 'STATE_CONFLICT', reason: 'KNOWLEDGE_SPACE_HAS_DOCUMENTS' })
+    this.#knowledgeSpaceDetails.delete(current.id)
+    const index = this.#knowledgeSpaces.findIndex((space) => space.id === current.id)
+    if (index >= 0) this.#knowledgeSpaces.splice(index, 1)
+    return { ok: true, value: { knowledgeSpaceId: current.id } }
+  }
+
+  async loadKnowledgeFileTree(knowledgeSpaceId: UUID, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeFileTree>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const detail = this.#knowledgeSpaceDetails.get(knowledgeSpaceId)
+    if (!detail) return failure({ code: 'NOT_FOUND' })
+    const parsed = knowledgeFileTreeSchema.safeParse({ knowledgeSpaceId, rootFolderId: detail.rootFolderId, revision: detail.revision, folders: this.#knowledgeFolders.get(knowledgeSpaceId) ?? [], resources: this.#knowledgeResources.get(knowledgeSpaceId) ?? [] })
+    return parsed.success ? { ok: true, value: structuredClone(parsed.data) } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async loadKnowledgeGraph(knowledgeSpaceId: UUID, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeGraphOverview>> {
+    if (options?.signal?.aborted) return failure({ code: 'ABORTED' })
+    const detail = this.#knowledgeSpaceDetails.get(knowledgeSpaceId)
+    if (!detail) return failure({ code: 'NOT_FOUND' })
+    const graph = knowledgeGraphOverviewSchema.parse({
+      knowledgeSpaceId,
+      status: detail.graphStatus,
+      generatedAt: detail.lastDocumentIndexedAt,
+      nodes: [],
+      edges: [],
+      families: [],
+      issues: [],
+    })
+    return { ok: true, value: graph }
+  }
+
+  async validateKnowledgeGraphManifest(knowledgeSpaceId: UUID, expectedRevision: number, manifest: KnowledgeGraphManifest, options?: RepositoryOperationOptions): Promise<RepositoryResult<ValidateKnowledgeGraphManifestResult>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const detail = this.#knowledgeSpaceDetails.get(knowledgeSpaceId)
+    if (!detail) return failure({ code: 'NOT_FOUND' })
+    if (detail.revision !== expectedRevision) return failure({ code: 'REVISION_CONFLICT', expectedRevision, currentRevision: detail.revision })
+    const parsed = knowledgeGraphManifestSchema.safeParse(manifest)
+    if (!parsed.success) return failure({ code: 'REQUEST_INVALID' })
+    const resourceNames = new Set((this.#knowledgeResources.get(knowledgeSpaceId) ?? []).map((resource) => resource.name))
+    const unmatched = parsed.data.documents.filter((document) => !resourceNames.has(document.path.split('/').at(-1) ?? '')).length
+    const checksumBytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(parsed.data)))
+    const manifestChecksum = [...new Uint8Array(checksumBytes)].map((value) => value.toString(16).padStart(2, '0')).join('')
+    return { ok: true, value: validateKnowledgeGraphManifestResultSchema.parse({
+      validationToken: unmatched === 0 ? `in-memory:${knowledgeSpaceId}:${expectedRevision}:${manifestChecksum}` : null,
+      manifestChecksum,
+      knowledgeSpaceRevision: expectedRevision,
+      status: unmatched === 0 ? 'valid' : 'invalid',
+      matchedDocumentCount: parsed.data.documents.length - unmatched,
+      unmatchedDocumentCount: unmatched,
+      summaryUpdateCount: parsed.data.documents.filter((document) => document.summary !== null).length,
+      guideUpdateCount: parsed.data.documents.filter((document) => document.guide !== null).length,
+      tagCount: parsed.data.tags.length,
+      relationCount: parsed.data.relations.length,
+      issueCount: parsed.data.issues.length,
+      resultingGraphStatus: unmatched === 0 ? parsed.data.graph.status : null,
+      issues: unmatched === 0 ? [] : [{ path: ['documents'], code: 'DOCUMENT_FILE_NOT_FOUND', message: null }],
+    }) }
+  }
+
+  async applyKnowledgeGraphManifest(knowledgeSpaceId: UUID, input: { expectedRevision: number; validationToken: string; manifestChecksum: string; manifest: KnowledgeGraphManifest }, options?: RepositoryOperationOptions): Promise<RepositoryResult<ApplyKnowledgeGraphManifestResult>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const request = applyKnowledgeGraphManifestRequestSchema.safeParse(input)
+    if (!request.success) return failure({ code: 'REQUEST_INVALID' })
+    const detail = this.#knowledgeSpaceDetails.get(knowledgeSpaceId)
+    if (!detail) return failure({ code: 'NOT_FOUND' })
+    if (detail.revision !== request.data.expectedRevision) return failure({ code: 'REVISION_CONFLICT', expectedRevision: request.data.expectedRevision, currentRevision: detail.revision })
+    const updated = knowledgeSpaceDetailSchema.parse({
+      ...detail,
+      graphStatus: request.data.manifest.graph.status,
+      knowledgeFamilyCount: request.data.manifest.tags.length,
+      openIssueCount: request.data.manifest.issues.filter((issue) => issue.resolutionStatus === 'open').length,
+      lastDocumentIndexedAt: this.#now(),
+      revision: detail.revision + 1,
+      updatedAt: this.#now(),
+    })
+    this.#replaceKnowledgeSpace(updated)
+    return { ok: true, value: applyKnowledgeGraphManifestResultSchema.parse({ status: 'applied', manifestChecksum: request.data.manifestChecksum, knowledgeSpaceRevision: updated.revision }) }
+  }
+
+  async loadKnowledgeResource(knowledgeSpaceId: UUID, resourceId: UUID, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeResourceInspection>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const resource = (this.#knowledgeResources.get(knowledgeSpaceId) ?? []).find((candidate) => candidate.id === resourceId)
+    const file = this.#knowledgeResourceFiles.get(resourceId)
+    if (!resource || !file) return failure({ code: 'NOT_FOUND' })
+    const detail: KnowledgeResourceDetail = knowledgeResourceDetailSchema.parse({
+      ...resource,
+      summary: null,
+      guide: null,
+      checksumSha256: null,
+      lastIndexedAt: null,
+      downloadUrl: `https://example.test/knowledge-resources/${resource.id}`,
+      downloadExpiresAt: this.#now(),
+    })
+    const isText = detail.mimeType === 'text/plain' || detail.mimeType === 'text/markdown' || detail.mimeType === 'application/json'
+    const content = isText ? await readFileText(file) : null
+    return { ok: true, value: { detail, preview: content === null ? { type: 'external' } : { type: 'text', content, truncated: false } } }
+  }
+
+  async createKnowledgeFolder(input: CreateKnowledgeFolderInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<CreateKnowledgeFolderSuccess>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const request = createKnowledgeFolderInputSchema.safeParse(input)
+    if (!request.success) return failure({ code: 'VALIDATION_FAILED', issues: request.error.issues.map((issue) => ({ path: issue.path.filter((part): part is string | number => typeof part === 'string' || typeof part === 'number'), code: issue.code })) })
+    const detail = this.#knowledgeSpaceDetails.get(request.data.knowledgeSpaceId)
+    if (!detail) return failure({ code: 'NOT_FOUND' })
+    if (detail.revision !== request.data.expectedRevision) return failure({ code: 'REVISION_CONFLICT', expectedRevision: request.data.expectedRevision, currentRevision: detail.revision })
+    const folders = this.#knowledgeFolders.get(detail.id) ?? []
+    if (!folders.some((folder) => folder.id === request.data.parentFolderId)) return failure({ code: 'NOT_FOUND' })
+    if (folders.some((folder) => folder.parentFolderId === request.data.parentFolderId && folder.name.toLocaleLowerCase() === request.data.name.toLocaleLowerCase())) return failure({ code: 'STATE_CONFLICT', reason: 'KNOWLEDGE_FOLDER_NAME_CONFLICT' })
+    const timestamp = this.#now()
+    const folder: KnowledgeFolderSummary = { id: uuidSchema.parse(crypto.randomUUID()), knowledgeSpaceId: detail.id, parentFolderId: request.data.parentFolderId, name: request.data.name, sortOrder: 0, createdAt: timestamp, updatedAt: timestamp }
+    folders.push(folder)
+    this.#knowledgeFolders.set(detail.id, folders)
+    const updated = knowledgeSpaceDetailSchema.parse({ ...detail, revision: detail.revision + 1, updatedAt: timestamp })
+    this.#replaceKnowledgeSpace(updated)
+    const parsed = createKnowledgeFolderSuccessSchema.parse({ folder, knowledgeSpaceRevision: updated.revision })
+    return { ok: true, value: structuredClone(parsed) }
+  }
+
+  async moveKnowledgeResource(input: MoveKnowledgeResourceInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<MoveKnowledgeResourceSuccess>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const request = moveKnowledgeResourceInputSchema.safeParse(input)
+    if (!request.success) return failure({ code: 'VALIDATION_FAILED', issues: request.error.issues.map((issue) => ({ path: issue.path.filter((part): part is string | number => typeof part === 'string' || typeof part === 'number'), code: issue.code })) })
+    const detail = this.#knowledgeSpaceDetails.get(request.data.knowledgeSpaceId)
+    if (!detail) return failure({ code: 'NOT_FOUND' })
+    if (detail.revision !== request.data.expectedRevision) return failure({ code: 'REVISION_CONFLICT', expectedRevision: request.data.expectedRevision, currentRevision: detail.revision })
+    if (!(this.#knowledgeFolders.get(detail.id) ?? []).some((folder) => folder.id === request.data.targetFolderId)) return failure({ code: 'NOT_FOUND' })
+    const resources = this.#knowledgeResources.get(detail.id) ?? []
+    const resourceIndex = resources.findIndex((resource) => resource.id === request.data.resourceId)
+    if (resourceIndex < 0) return failure({ code: 'NOT_FOUND' })
+    const resource = resources[resourceIndex]
+    if (!resource) return failure({ code: 'NOT_FOUND' })
+    if (resource.folderId === request.data.targetFolderId) return failure({ code: 'STATE_CONFLICT', reason: 'KNOWLEDGE_RESOURCE_ALREADY_IN_FOLDER' })
+    const timestamp = this.#now()
+    const moved = { ...resource, folderId: request.data.targetFolderId, updatedAt: timestamp }
+    resources.splice(resourceIndex, 1, moved)
+    this.#knowledgeResources.set(detail.id, resources)
+    const updated = knowledgeSpaceDetailSchema.parse({ ...detail, revision: detail.revision + 1, updatedAt: timestamp })
+    this.#replaceKnowledgeSpace(updated)
+    const parsed = moveKnowledgeResourceSuccessSchema.safeParse({ resource: moved, knowledgeSpaceRevision: updated.revision })
+    return parsed.success ? { ok: true, value: structuredClone(parsed.data) } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async deleteKnowledgeResource(input: DeleteKnowledgeResourceInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<DeleteKnowledgeResourceSuccess>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const request = deleteKnowledgeResourceInputSchema.safeParse(input)
+    if (!request.success) return failure({ code: 'VALIDATION_FAILED', issues: request.error.issues.map((issue) => ({ path: issue.path.filter((part): part is string | number => typeof part === 'string' || typeof part === 'number'), code: issue.code })) })
+    const detail = this.#knowledgeSpaceDetails.get(request.data.knowledgeSpaceId)
+    if (!detail) return failure({ code: 'NOT_FOUND' })
+    if (detail.revision !== request.data.expectedRevision) return failure({ code: 'REVISION_CONFLICT', expectedRevision: request.data.expectedRevision, currentRevision: detail.revision })
+    const resources = this.#knowledgeResources.get(detail.id) ?? []
+    const resourceIndex = resources.findIndex((resource) => resource.id === request.data.resourceId)
+    if (resourceIndex < 0) return failure({ code: 'NOT_FOUND' })
+    resources.splice(resourceIndex, 1)
+    this.#knowledgeResourceFiles.delete(request.data.resourceId)
+    const updated = knowledgeSpaceDetailSchema.parse({ ...detail, revision: detail.revision + 1, fileCount: Math.max(0, detail.fileCount - 1), updatedAt: this.#now() })
+    this.#replaceKnowledgeSpace(updated)
+    const parsed = deleteKnowledgeResourceSuccessSchema.parse({ resourceId: request.data.resourceId, knowledgeSpaceRevision: updated.revision })
+    return { ok: true, value: structuredClone(parsed) }
+  }
+
+  async updateKnowledgeResourceContent(input: UpdateKnowledgeResourceContentInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<UpdateKnowledgeResourceContentSuccess>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const request = updateKnowledgeResourceContentInputSchema.safeParse(input)
+    if (!request.success) return failure({ code: 'VALIDATION_FAILED', issues: request.error.issues.map((issue) => ({ path: issue.path.filter((part): part is string | number => typeof part === 'string' || typeof part === 'number'), code: issue.code })) })
+    const detail = this.#knowledgeSpaceDetails.get(request.data.knowledgeSpaceId)
+    if (!detail) return failure({ code: 'NOT_FOUND' })
+    if (detail.revision !== request.data.expectedRevision) return failure({ code: 'REVISION_CONFLICT', expectedRevision: request.data.expectedRevision, currentRevision: detail.revision })
+    const resources = this.#knowledgeResources.get(detail.id) ?? []
+    const resourceIndex = resources.findIndex((resource) => resource.id === request.data.resourceId)
+    const resource = resources[resourceIndex]
+    if (!resource) return failure({ code: 'NOT_FOUND' })
+    if (!/\.(md|markdown)$/i.test(resource.name)) return failure({ code: 'STATE_CONFLICT', reason: 'KNOWLEDGE_RESOURCE_NOT_EDITABLE_MARKDOWN' })
+    const timestamp = this.#now()
+    const file = new File([request.data.content], resource.name, { type: 'text/markdown', lastModified: new Date(timestamp).valueOf() })
+    const updatedResource: KnowledgeResourceSummary = { ...resource, status: 'indexing', mimeType: 'text/markdown', sizeBytes: file.size, updatedAt: timestamp }
+    resources.splice(resourceIndex, 1, updatedResource)
+    this.#knowledgeResources.set(detail.id, resources)
+    this.#knowledgeResourceFiles.set(resource.id, file)
+    const updated = knowledgeSpaceDetailSchema.parse({ ...detail, revision: detail.revision + 1, updatedAt: timestamp })
+    this.#replaceKnowledgeSpace(updated)
+    const parsed = updateKnowledgeResourceContentSuccessSchema.parse({ resource: updatedResource, knowledgeSpaceRevision: updated.revision })
+    return { ok: true, value: structuredClone(parsed) }
+  }
+
+  async uploadKnowledgeFile(input: UploadKnowledgeFileInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<CompleteKnowledgeUploadSuccess>> {
+    if ((await waitForLatency(this.#latencyMs, options?.signal)) === 'aborted') return failure({ code: 'ABORTED' })
+    const detail = this.#knowledgeSpaceDetails.get(input.knowledgeSpaceId)
+    if (!detail) return failure({ code: 'NOT_FOUND' })
+    if (detail.revision !== input.expectedRevision) return failure({ code: 'REVISION_CONFLICT', expectedRevision: input.expectedRevision, currentRevision: detail.revision })
+    if (!(this.#knowledgeFolders.get(detail.id) ?? []).some((folder) => folder.id === input.folderId)) return failure({ code: 'NOT_FOUND' })
+    const timestamp = this.#now()
+    const resource: KnowledgeResourceSummary = { id: uuidSchema.parse(crypto.randomUUID()), knowledgeSpaceId: detail.id, folderId: input.folderId, name: input.file.name, status: 'indexing', mimeType: input.file.type || 'application/octet-stream', sizeBytes: input.file.size, createdAt: timestamp, updatedAt: timestamp }
+    const resources = this.#knowledgeResources.get(detail.id) ?? []
+    resources.push(resource)
+    this.#knowledgeResources.set(detail.id, resources)
+    this.#knowledgeResourceFiles.set(resource.id, input.file)
+    const updated = knowledgeSpaceDetailSchema.parse({ ...detail, fileCount: detail.fileCount + 1, revision: detail.revision + 1, updatedAt: timestamp })
+    this.#replaceKnowledgeSpace(updated)
+    const parsed = completeKnowledgeUploadSuccessSchema.safeParse({ resource, knowledgeSpaceRevision: updated.revision })
+    return parsed.success ? { ok: true, value: structuredClone(parsed.data) } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  #replaceKnowledgeSpace(detail: KnowledgeSpaceDetail) {
+    this.#knowledgeSpaceDetails.set(detail.id, detail)
+    const index = this.#knowledgeSpaces.findIndex((space) => space.id === detail.id)
+    if (index >= 0) this.#knowledgeSpaces[index] = detail
   }
 
   async listJourneys(options?: RepositoryOperationOptions): Promise<RepositoryResult<JourneySummary[]>> {
@@ -604,6 +944,15 @@ export class InMemoryEditorRepository implements EditorRepository, AgentLifecycl
     this.#scenario.nextFailure = null
     return true
   }
+}
+
+function readFileText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.addEventListener('load', () => resolve(typeof reader.result === 'string' ? reader.result : ''))
+    reader.addEventListener('error', () => reject(reader.error ?? new Error('Could not read file')))
+    reader.readAsText(file)
+  })
 }
 
 export function createInMemoryEditorRepositoryScenario(

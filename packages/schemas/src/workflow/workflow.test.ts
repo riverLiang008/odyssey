@@ -143,6 +143,7 @@ describe('Tool schemas', () => {
     const steps = createToolSteps()
     expect(steps.map((step) => step.kind)).toEqual(TOOL_KINDS)
     for (const step of steps) expect(toolStepSchema.safeParse(step).success).toBe(true)
+    expect(toolStepSchema.safeParse({ ...steps[1], outputMapping: null }).success).toBe(true)
   })
 
   it('rejects unknown kinds, mismatched output keys, and invalid retry counts', () => {

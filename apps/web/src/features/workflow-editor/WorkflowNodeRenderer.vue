@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import { Handle, Position, type NodeProps } from '@vue-flow/core'
-import type { AgentVariable, AgentReusableTool, UUID } from '@odyssey/schemas'
+import type { AgentVariable, AgentReusableTool, KnowledgeSpaceSummary, UUID } from '@odyssey/schemas'
 import {
   parseWorkflowResourceDragPayload,
   WORKFLOW_RESOURCE_DRAG_MIME,
@@ -14,28 +14,39 @@ const props = defineProps<NodeProps<WorkflowCanvasNodeData> & {
   variables?: readonly AgentVariable[]
   configureExpanded: boolean
   tools?: readonly AgentReusableTool[]
+  knowledgeSpaces?: readonly KnowledgeSpaceSummary[]
   activeResourceDrag?: WorkflowResourceDragPayload | null
   resourceDropState?: 'idle' | 'valid' | 'invalid' | 'duplicate' | 'unavailable'
   resourceDropNodeId?: string | null
+  resourceDropTargetKind?: WorkflowResourceDropTarget['kind'] | null
 }>()
 const emit = defineEmits<{
   editTool: [nodeId: UUID, stepId: UUID]
   changeTool: [nodeId: UUID, stepId: UUID, operation: 'delete' | 'up' | 'down']
+  reorderTool: [nodeId: UUID, stepId: UUID, targetIndex: number]
+  toolStepContextMenu: [nodeId: UUID, stepId: UUID, point: { x: number; y: number }]
   resourceEnter: [payload: WorkflowResourceDragPayload, target: WorkflowResourceDropTarget]
   resourceLeave: [target: WorkflowResourceDropTarget]
   resourceDrop: [payload: WorkflowResourceDragPayload, target: WorkflowResourceDropTarget]
   unbindTool: [nodeId: UUID, reusableToolId: UUID]
+  unbindKnowledgeSpace: [nodeId: UUID, knowledgeSpaceId: UUID]
+  editReusableTool: [nodeId: UUID, reusableToolId: UUID]
   updateAgentAction: [nodeId: UUID, details: { name: string; model: string; goal: string }]
+  updateNodeName: [nodeId: UUID, name: string]
 }>()
 const node = computed(() => props.data.node)
 const isEditingName = ref(false)
 const nameDraft = ref('')
 const nameInput = ref<globalThis.HTMLInputElement | null>(null)
+const modelMenuOpen = ref(false)
+const modelSelectRoot = ref<globalThis.HTMLDivElement | null>(null)
+type StepReorderState = { type: 'idle' } | { type: 'dragging'; stepId: UUID; overStepId: UUID; placement: 'before' | 'after' }
+const stepReorder = ref<StepReorderState>({ type: 'idle' })
 const protectedNode = computed(() => ['start', 'end', 'loop_start', 'loop_end'].includes(node.value.type))
 const subtitle = computed(() => node.value.type === 'agent_action'
   ? node.value.config.model
   : node.value.type === 'task'
-    ? `${node.value.config.steps.length} tool steps`
+    ? 'Deterministic sequence · drag Tool to add a step'
     : node.value.type === 'loop'
       ? `Max turns · ${node.value.config.maxTurns}`
       : node.value.type === 'branch'
@@ -62,11 +73,20 @@ function stepOutput(index: number): string {
   if (node.value.type !== 'task') return ''
   const step = node.value.config.steps[index]
   if (!step) return ''
-  const targetId = step.kind === 'set_variable' ? step.configuration.targetVariableId : step.outputMapping.targetVariableId
+  if (step.kind === 'set_variable') {
+    const targetId = step.configuration.targetVariableId
+    const local = node.value.config.localVariables.find((v) => v.id === targetId)
+    const agent = props.variables?.find((v) => v.id === targetId)
+    const target = local ? `task.${local.key}` : agent ? `agent.${agent.key}` : 'Unavailable variable'
+    return `Write: ${target}`
+  }
+  const outputMapping = step.outputMapping
+  if (!outputMapping) return 'No output binding'
+  const targetId = outputMapping.targetVariableId
   const local = node.value.config.localVariables.find((v) => v.id === targetId)
   const agent = props.variables?.find((v) => v.id === targetId)
   const target = local ? `task.${local.key}` : agent ? `agent.${agent.key}` : 'Unavailable variable'
-  return step.kind === 'set_variable' ? `Write: ${target}` : `${step.outputMapping.sourceKey} → ${target}`
+  return `Output: ${target}`
 }
 
 function loopExitSummary(): string {
@@ -76,10 +96,25 @@ function loopExitSummary(): string {
 }
 
 const toolById = computed(() => new Map((props.tools ?? []).map((tool) => [tool.id, tool])))
+const knowledgeSpaceById = computed(() => new Map((props.knowledgeSpaces ?? []).map((space) => [space.id, space])))
 const modelOptions = computed(() => [...new Set([node.value.type === 'agent_action' ? node.value.config.model : '', 'gpt-5', 'gpt-4.1', 'gpt-4o'].filter(Boolean))])
-function boundToolName(toolId: UUID): string { return toolById.value.get(toolId)?.name ?? 'Unavailable Tool' }
-async function beginNameEdit() {
+function selectModel(model: string) {
   if (node.value.type !== 'agent_action') return
+  const currentGoal = node.value.config.goal.kind === 'literal' && typeof node.value.config.goal.value === 'string'
+    ? node.value.config.goal.value
+    : valueSourceSummary()
+  modelMenuOpen.value = false
+  if (model === node.value.config.model) return
+  emit('updateAgentAction', node.value.id, { name: node.value.name, model, goal: currentGoal })
+}
+function closeModelMenuOnFocusOut(event: globalThis.FocusEvent) {
+  if (event.relatedTarget instanceof globalThis.Node && modelSelectRoot.value?.contains(event.relatedTarget)) return
+  modelMenuOpen.value = false
+}
+function boundToolName(toolId: UUID): string { return toolById.value.get(toolId)?.name ?? 'Unavailable Tool' }
+function boundKnowledgeSpaceName(knowledgeSpaceId: UUID): string { return knowledgeSpaceById.value.get(knowledgeSpaceId)?.name ?? 'Unavailable Knowledge Space' }
+async function beginNameEdit() {
+  if (!['agent_action', 'task', 'branch'].includes(node.value.type)) return
   nameDraft.value = node.value.name
   isEditingName.value = true
   await nextTick()
@@ -87,10 +122,14 @@ async function beginNameEdit() {
   nameInput.value?.select()
 }
 function finishNameEdit(commit: boolean) {
-  if (node.value.type !== 'agent_action') return
+  if (!['agent_action', 'task', 'branch'].includes(node.value.type)) return
   const nextName = nameDraft.value.trim()
   isEditingName.value = false
   if (!commit || !nextName || nextName === node.value.name) return
+  if (node.value.type !== 'agent_action') {
+    emit('updateNodeName', node.value.id, nextName)
+    return
+  }
   const currentGoal = node.value.config.goal.kind === 'literal' && typeof node.value.config.goal.value === 'string'
     ? node.value.config.goal.value
     : valueSourceSummary()
@@ -107,14 +146,15 @@ function updateAgentActionField(field: 'name' | 'model' | 'goal', event: globalT
     goal: field === 'goal' ? event.target.value : currentGoal,
   })
 }
-function target(kind: 'agent-action-tools' | 'task-tool-sequence'): WorkflowResourceDropTarget {
+type NodeResourceDropTargetKind = Exclude<WorkflowResourceDropTarget['kind'], 'canvas-pane'>
+function target(kind: NodeResourceDropTargetKind): WorkflowResourceDropTarget {
   return { kind, nodeId: node.value.id }
 }
 function payloadFromEvent(event: globalThis.DragEvent): WorkflowResourceDragPayload | null {
   if (props.activeResourceDrag) return props.activeResourceDrag
   return parseWorkflowResourceDragPayload(event.dataTransfer?.getData(WORKFLOW_RESOURCE_DRAG_MIME) || event.dataTransfer?.getData('text/plain') || '')
 }
-function resourceEnter(event: globalThis.DragEvent, kind: 'agent-action-tools' | 'task-tool-sequence') {
+function resourceEnter(event: globalThis.DragEvent, kind: NodeResourceDropTargetKind) {
   const payload = payloadFromEvent(event)
   if (!payload) return
   event.preventDefault()
@@ -122,29 +162,73 @@ function resourceEnter(event: globalThis.DragEvent, kind: 'agent-action-tools' |
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
   emit('resourceEnter', payload, target(kind))
 }
-function resourceLeave(event: globalThis.DragEvent, kind: 'agent-action-tools' | 'task-tool-sequence') {
+function resourceLeave(event: globalThis.DragEvent, kind: NodeResourceDropTargetKind) {
   const current = event.currentTarget
   if (current instanceof globalThis.Element && event.relatedTarget instanceof globalThis.Node && current.contains(event.relatedTarget)) return
   emit('resourceLeave', target(kind))
 }
-function resourceDrop(event: globalThis.DragEvent, kind: 'agent-action-tools' | 'task-tool-sequence') {
+function resourceDrop(event: globalThis.DragEvent, kind: NodeResourceDropTargetKind) {
   const payload = payloadFromEvent(event)
   if (!payload) return
   event.preventDefault()
   event.stopPropagation()
   emit('resourceDrop', payload, target(kind))
 }
-function targetStateClass() {
-  if (props.resourceDropNodeId !== node.value.id || !props.resourceDropState || props.resourceDropState === 'idle') return ''
+function targetStateClass(kind: NodeResourceDropTargetKind) {
+  if (props.resourceDropNodeId !== node.value.id || props.resourceDropTargetKind !== kind || !props.resourceDropState || props.resourceDropState === 'idle') return ''
   return `is-drop-${props.resourceDropState}`
 }
-function dropStatusText(): string {
-  if (props.resourceDropNodeId !== node.value.id) return ''
+function dropStatusText(kind: NodeResourceDropTargetKind): string {
+  if (props.resourceDropNodeId !== node.value.id || props.resourceDropTargetKind !== kind) return ''
   if (props.resourceDropState === 'valid') return 'Drop to add'
   if (props.resourceDropState === 'duplicate') return 'Already added'
-  if (props.resourceDropState === 'unavailable') return 'Tool unavailable'
+  if (props.resourceDropState === 'unavailable') return 'Resource unavailable'
   if (props.resourceDropState === 'invalid') return 'Not available here'
   return ''
+}
+
+function openToolStepContextMenu(event: globalThis.MouseEvent, stepId: UUID) {
+  event.preventDefault()
+  event.stopPropagation()
+  const target = event.currentTarget
+  const bounds = target instanceof globalThis.HTMLElement ? target.getBoundingClientRect() : null
+  emit('toolStepContextMenu', node.value.id, stepId, {
+    x: event.clientX || bounds?.left || 0,
+    y: event.clientY || bounds?.bottom || 0,
+  })
+}
+
+function startStepReorder(event: globalThis.DragEvent, stepId: UUID) {
+  if (node.value.type !== 'task' || !event.dataTransfer) return
+  event.stopPropagation()
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('application/x-odyssey-task-tool-step', stepId)
+  stepReorder.value = { type: 'dragging', stepId, overStepId: stepId, placement: 'before' }
+}
+function overStepReorder(event: globalThis.DragEvent, overStepId: UUID) {
+  if (stepReorder.value.type !== 'dragging') return
+  event.preventDefault()
+  event.stopPropagation()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  const bounds = event.currentTarget instanceof globalThis.HTMLElement ? event.currentTarget.getBoundingClientRect() : null
+  const placement = bounds && event.clientY > bounds.top + bounds.height / 2 ? 'after' : 'before'
+  stepReorder.value = { ...stepReorder.value, overStepId, placement }
+}
+function dropStepReorder(event: globalThis.DragEvent, overIndex: number) {
+  if (node.value.type !== 'task' || stepReorder.value.type !== 'dragging') return
+  event.preventDefault()
+  event.stopPropagation()
+  const drag = stepReorder.value
+  const sourceIndex = node.value.config.steps.findIndex((step) => step.id === drag.stepId)
+  const insertionIndex = overIndex + (drag.placement === 'after' ? 1 : 0)
+  const targetIndex = sourceIndex < insertionIndex ? insertionIndex - 1 : insertionIndex
+  stepReorder.value = { type: 'idle' }
+  if (sourceIndex >= 0 && targetIndex !== sourceIndex) emit('reorderTool', node.value.id, drag.stepId, targetIndex)
+}
+function finishStepReorder() { stepReorder.value = { type: 'idle' } }
+function stepReorderClass(stepId: UUID): string {
+  if (stepReorder.value.type !== 'dragging' || stepReorder.value.overStepId !== stepId || stepReorder.value.stepId === stepId) return ''
+  return `is-reorder-${stepReorder.value.placement}`
 }
 
 </script>
@@ -157,32 +241,82 @@ function dropStatusText(): string {
     </template>
     <template v-else>
       <span class="node-accent" aria-hidden="true" />
-      <strong v-if="!(configureExpanded && node.type === 'agent_action')">{{ node.name }}</strong>
+      <strong v-if="!(configureExpanded && ['agent_action', 'task', 'branch'].includes(node.type))">{{ node.name }}</strong>
       <div v-else class="node-name-editor nodrag nopan" data-no-node-inspector="true" @pointerdown.stop @click.stop>
-        <button v-if="!isEditingName" type="button" aria-label="Edit action name" @click="beginNameEdit">AGENT ACTION · {{ node.name }}</button>
-        <input v-else :id="`name-${node.id}`" ref="nameInput" v-model="nameDraft" aria-label="Action name" @blur="finishNameEdit(true)" @keydown.enter.prevent="finishNameEdit(true)" @keydown.escape.prevent="finishNameEdit(false)" />
+        <button v-if="!isEditingName" type="button" :aria-label="`Edit ${node.type.replace('_', ' ')} name`" @click="beginNameEdit">{{ node.type.replace('_', ' ').toUpperCase() }} · {{ node.name }}</button>
+        <input v-else :id="`name-${node.id}`" ref="nameInput" v-model="nameDraft" :aria-label="`${node.type.replace('_', ' ')} name`" @blur="finishNameEdit(true)" @keydown.enter.prevent="finishNameEdit(true)" @keydown.escape.prevent="finishNameEdit(false)" />
       </div>
       <small>{{ subtitle }}</small>
       <dl v-if="configureExpanded && node.type === 'agent_action'" class="node-config-preview">
-        <div class="node-config-field nodrag nopan" data-no-node-inspector="true" @pointerdown.stop @click.stop><dt><label :for="`model-${node.id}`">Model</label></dt><dd><select :id="`model-${node.id}`" :value="node.config.model" @change="updateAgentActionField('model', $event)"><option v-for="model in modelOptions" :key="model" :value="model">{{ model }}</option></select></dd></div>
+        <div class="node-config-field node-model-field nodrag nopan" data-no-node-inspector="true" @pointerdown.stop @click.stop>
+          <dt><span :id="`model-label-${node.id}`">Model</span></dt>
+          <dd>
+            <div ref="modelSelectRoot" class="node-model-select" @focusout="closeModelMenuOnFocusOut" @keydown.escape.stop="modelMenuOpen = false">
+              <button
+                :id="`model-${node.id}`"
+                type="button"
+                class="node-model-select-trigger"
+                aria-haspopup="listbox"
+                :aria-expanded="modelMenuOpen"
+                :aria-labelledby="`model-label-${node.id} model-${node.id}`"
+                @click="modelMenuOpen = !modelMenuOpen"
+              >
+                <span>{{ node.config.model }}</span><i aria-hidden="true" />
+              </button>
+              <div v-if="modelMenuOpen" class="node-model-select-menu" role="listbox" :aria-labelledby="`model-label-${node.id}`">
+                <button
+                  v-for="model in modelOptions"
+                  :key="model"
+                  type="button"
+                  role="option"
+                  :aria-selected="model === node.config.model"
+                  :class="{ 'is-selected': model === node.config.model }"
+                  @click="selectModel(model)"
+                >
+                  <span>{{ model }}</span><b v-if="model === node.config.model" aria-hidden="true">✓</b>
+                </button>
+              </div>
+            </div>
+          </dd>
+        </div>
         <div class="node-config-field nodrag nopan" data-no-node-inspector="true" @pointerdown.stop @click.stop><dt><label :for="`goal-${node.id}`">Goal</label></dt><dd><input :id="`goal-${node.id}`" :value="valueSourceSummary()" placeholder="Describe what this action should accomplish" @change="updateAgentActionField('goal', $event)" /></dd></div>
-        <div class="node-config-resource"><dt>Knowledge Spaces</dt><dd>{{ node.config.knowledgeSpaceIds.length ? `${node.config.knowledgeSpaceIds.length} linked` : '+ Drop Knowledge Space' }}</dd></div>
-        <div class="node-config-resource is-toolbox nodrag nopan" :class="targetStateClass()" role="group" data-no-node-inspector="true" data-workflow-resource-drop-target="agent-action-tools" :data-workflow-node-id="node.id" :aria-label="`Drop a Tool into ${node.name} Toolbox`" @click.stop @pointerdown.stop @dragenter="resourceEnter($event, 'agent-action-tools')" @dragover="resourceEnter($event, 'agent-action-tools')" @dragleave="resourceLeave($event, 'agent-action-tools')" @drop="resourceDrop($event, 'agent-action-tools')">
+        <div class="node-config-resource is-knowledge-spaces nodrag nopan" :class="targetStateClass('agent-action-knowledge-spaces')" role="group" data-no-node-inspector="true" data-workflow-resource-drop-target="agent-action-knowledge-spaces" :data-workflow-node-id="node.id" :aria-label="`Drop a Knowledge Space into ${node.name}`" @click.stop @pointerdown.stop @dragenter="resourceEnter($event, 'agent-action-knowledge-spaces')" @dragover="resourceEnter($event, 'agent-action-knowledge-spaces')" @dragleave="resourceLeave($event, 'agent-action-knowledge-spaces')" @drop="resourceDrop($event, 'agent-action-knowledge-spaces')">
+          <dt>Knowledge Spaces</dt>
+          <dd class="toolbox-content">
+            <span v-for="knowledgeSpaceId in node.config.knowledgeSpaceIds" :key="knowledgeSpaceId" class="tool-chip knowledge-space-chip nodrag nopan"><span :title="boundKnowledgeSpaceName(knowledgeSpaceId)">{{ boundKnowledgeSpaceName(knowledgeSpaceId) }}</span><button type="button" :aria-label="`Remove ${boundKnowledgeSpaceName(knowledgeSpaceId)}`" @click.stop="emit('unbindKnowledgeSpace', node.id, knowledgeSpaceId)">×</button></span>
+            <span class="toolbox-drop-hint">+ Drop Knowledge Space</span>
+            <span v-if="dropStatusText('agent-action-knowledge-spaces')" class="resource-drop-status" role="status">{{ dropStatusText('agent-action-knowledge-spaces') }}</span>
+          </dd>
+        </div>
+        <div class="node-config-resource is-toolbox nodrag nopan" :class="targetStateClass('agent-action-tools')" role="group" data-no-node-inspector="true" data-workflow-resource-drop-target="agent-action-tools" :data-workflow-node-id="node.id" :aria-label="`Drop a Tool into ${node.name} Toolbox`" @click.stop @pointerdown.stop @dragenter="resourceEnter($event, 'agent-action-tools')" @dragover="resourceEnter($event, 'agent-action-tools')" @dragleave="resourceLeave($event, 'agent-action-tools')" @drop="resourceDrop($event, 'agent-action-tools')">
           <dt>Toolbox</dt>
           <dd class="toolbox-content">
-            <button v-for="toolId in node.config.reusableToolIds" :key="toolId" type="button" class="tool-chip nodrag nopan" :title="`Remove ${boundToolName(toolId)}`" @click.stop="emit('unbindTool', node.id, toolId)">{{ boundToolName(toolId) }} <span aria-hidden="true">×</span></button>
+            <span v-for="toolId in node.config.reusableToolIds" :key="toolId" class="tool-chip nodrag nopan"><button type="button" :title="`Configure ${boundToolName(toolId)}`" @click.stop="emit('editReusableTool', node.id, toolId)">{{ boundToolName(toolId) }}</button><button type="button" :aria-label="`Remove ${boundToolName(toolId)}`" @click.stop="emit('unbindTool', node.id, toolId)">×</button></span>
             <span class="toolbox-drop-hint">+ Drop Tool</span>
-            <span v-if="dropStatusText()" class="resource-drop-status" role="status">{{ dropStatusText() }}</span>
+            <span v-if="dropStatusText('agent-action-tools')" class="resource-drop-status" role="status">{{ dropStatusText('agent-action-tools') }}</span>
           </dd>
         </div>
       </dl>
-      <section v-else-if="configureExpanded && node.type === 'task'" class="node-config-detail node-config-task nodrag nopan" :class="targetStateClass()" role="group" data-no-node-inspector="true" data-workflow-resource-drop-target="task-tool-sequence" :data-workflow-node-id="node.id" :aria-label="`Drop a Tool into ${node.name} sequence`" @click.stop @pointerdown.stop @dragenter="resourceEnter($event, 'task-tool-sequence')" @dragover="resourceEnter($event, 'task-tool-sequence')" @dragleave="resourceLeave($event, 'task-tool-sequence')" @drop="resourceDrop($event, 'task-tool-sequence')">
-        <p>Deterministic sequence · drag Tool to add a step</p>
+      <section v-else-if="configureExpanded && node.type === 'task'" class="node-config-detail node-config-task nodrag nopan" :class="targetStateClass('task-tool-sequence')" role="group" data-no-node-inspector="true" data-workflow-resource-drop-target="task-tool-sequence" :data-workflow-node-id="node.id" :aria-label="`Drop a Tool into ${node.name} sequence`" @click.stop @pointerdown.stop @dragenter="resourceEnter($event, 'task-tool-sequence')" @dragover="resourceEnter($event, 'task-tool-sequence')" @dragleave="resourceLeave($event, 'task-tool-sequence')" @drop="resourceDrop($event, 'task-tool-sequence')">
         <ol v-if="node.config.steps.length">
-          <li v-for="(step, index) in node.config.steps" :key="step.id"><span>{{ index + 1 }}</span><button type="button" @click="emit('editTool', node.id, step.id)">{{ stepLabel(index) }}</button><small>{{ stepOutput(index) }}</small><button type="button" :disabled="index === 0" aria-label="Move step up" @click="emit('changeTool', node.id, step.id, 'up')">↑</button><button type="button" :disabled="index === node.config.steps.length - 1" aria-label="Move step down" @click="emit('changeTool', node.id, step.id, 'down')">↓</button><button type="button" aria-label="Delete step" @click="emit('changeTool', node.id, step.id, 'delete')">×</button></li>
+          <li v-for="(step, index) in node.config.steps" :key="step.id" class="task-tool-step" :class="stepReorderClass(step.id)" @dragover="overStepReorder($event, step.id)" @drop="dropStepReorder($event, index)" @contextmenu="openToolStepContextMenu($event, step.id)">
+            <span class="task-tool-step-index">{{ index + 1 }}</span>
+            <button type="button" class="task-tool-step-open" @click="emit('editTool', node.id, step.id)" @contextmenu="openToolStepContextMenu($event, step.id)">
+              <strong>{{ stepLabel(index) }}</strong>
+              <small>{{ stepOutput(index) }}</small>
+            </button>
+            <span class="task-tool-step-actions" aria-label="Step actions">
+              <button type="button" draggable="true" aria-label="Drag to reorder step" title="Drag to reorder" @dragstart="startStepReorder($event, step.id)" @dragend="finishStepReorder">⠿</button>
+              <button type="button" :disabled="index === 0" aria-label="Move step up" @click="emit('changeTool', node.id, step.id, 'up')">↑</button>
+              <button type="button" :disabled="index === node.config.steps.length - 1" aria-label="Move step down" @click="emit('changeTool', node.id, step.id, 'down')">↓</button>
+              <button type="button" aria-label="Delete step" @click="emit('changeTool', node.id, step.id, 'delete')">×</button>
+            </span>
+          </li>
         </ol>
-        <div v-else class="node-config-empty">+ Drop Tool to create the first step</div>
-        <p v-if="dropStatusText()" class="resource-drop-status" role="status">{{ dropStatusText() }}</p>
+        <div class="task-tool-drop-zone" :class="{ 'is-empty': !node.config.steps.length }">
+          <span>{{ node.config.steps.length ? '+ Drop Tool to add another step' : '+ Drop Tool to create the first step' }}</span>
+          <strong v-if="dropStatusText('task-tool-sequence')" class="resource-drop-status" role="status">{{ dropStatusText('task-tool-sequence') }}</strong>
+        </div>
       </section>
       <section v-else-if="configureExpanded && node.type === 'branch'" class="node-config-detail node-config-branch">
         <p>Route by variables · {{ node.config.cases.length + 1 }} routes</p>

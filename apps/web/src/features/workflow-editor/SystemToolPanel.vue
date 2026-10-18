@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { colors, radii } from '@odyssey/design-tokens'
 import { computed, shallowReactive, ref, onMounted, onBeforeUnmount } from 'vue'
-import { toolStepSchema, uuidSchema, type AgentVariable, type KnowledgeSpaceSummary, type ToolStep, type ValueSource, type TaskNode } from '@odyssey/schemas'
+import { toolStepSchema, uuidSchema, type AgentVariable, type KnowledgeSpaceSummary, type TaskLocalVariable, type ValueSource, type TaskNode, type VariableDataType } from '@odyssey/schemas'
 import type { SystemToolDraft } from '@/stores/workflowEditor'
-import { toolVariables } from '@/domain/workflow/systemToolCommands'
+import { toolVariables, type TaskToolSaveDraft } from '@/domain/workflow/systemToolCommands'
 import outputArrow from '@/assets/tool-output-arrow.svg'
 import ToolValueInput from './ToolValueInput.vue'
-const props = defineProps<{ draft: NonNullable<SystemToolDraft>; task: TaskNode; variables: readonly AgentVariable[]; knowledgeSpaces: readonly KnowledgeSpaceSummary[]; knowledgeStatus: 'loading' | 'ready' | 'error'; error: string | null }>()
-const emit = defineEmits<{ save: [step: ToolStep]; cancel: [] }>()
+import ToolSelect from './ToolSelect.vue'
+const props = defineProps<{ draft: Extract<NonNullable<SystemToolDraft>, { host: 'task' }>; task: TaskNode; variables: readonly AgentVariable[]; knowledgeSpaces: readonly KnowledgeSpaceSummary[]; knowledgeStatus: 'loading' | 'ready' | 'error'; error: string | null }>()
+const emit = defineEmits<{ save: [draft: TaskToolSaveDraft]; cancel: [] }>()
 const firstInput = ref<globalThis.HTMLInputElement | null>(null)
 const returnFocus = globalThis.document.activeElement
 onMounted(() => firstInput.value?.focus())
@@ -15,6 +16,10 @@ onBeforeUnmount(() => { if (returnFocus instanceof globalThis.HTMLElement && ret
 const existing = props.draft.step
 const kind = props.draft.kind
 const newId = () => uuidSchema.parse(globalThis.crypto.randomUUID())
+const newVariableId = newId()
+const createTaskVariable = ref(false)
+const newVariableKey = ref('')
+const newVariableType = ref<VariableDataType>('json')
 const literal = (value = ''): ValueSource => ({ kind: 'literal', value })
 const form = shallowReactive({
   label: existing?.label ?? '', failure: existing?.failureBehavior.kind ?? 'fail_task',
@@ -39,6 +44,10 @@ const form = shallowReactive({
 const validationError = ref('')
 const variables = computed(() => toolVariables(props.task, props.variables))
 const writable = computed(() => variables.value.filter((v) => v.writable))
+const outputOptions = computed(() => [
+  { value: '', label: 'No output binding' },
+  ...writable.value.map((variable) => ({ value: variable.id, label: variable.name })),
+])
 const spaces = computed(() => props.knowledgeSpaces.filter((s) => ['ready', 'syncing'].includes(s.lifecycleStatus) && ['healthy', 'needs_review'].includes(s.graphStatus)))
 const title = { knowledge_retrieval: 'Knowledge Retrieval', script_execution: 'Script Execution', api_request: 'API Request', set_variable: 'Set Variable', llm_call: 'LLM Call' }[kind]
 const outputKeys = { knowledge_retrieval: 'retrieved_documents', script_execution: 'result', api_request: 'response.data', set_variable: '', llm_call: 'response.text' }
@@ -51,7 +60,10 @@ function addInput() {
   if (first) form.inputs = [...form.inputs, { alias: `input_${form.inputs.length + 1}`, variableId: first.id }]
 }
 function submit() {
-  const base = { id: existing?.id ?? newId(), kind, label: form.label.trim() || null, failureBehavior: form.failure === 'retry' ? { kind: 'retry', maxAttempts: 2 } : { kind: 'fail_task' }, outputMapping: kind === 'set_variable' ? null : { sourceKey: outputKeys[kind], targetVariableId: form.output } }
+  const variableKey = newVariableKey.value.trim()
+  if (createTaskVariable.value && !variableKey) { validationError.value = 'Task Variable name is required.'; return }
+  const outputVariableId = createTaskVariable.value ? newVariableId : form.output
+  const base = { id: existing?.id ?? newId(), kind, label: form.label.trim() || null, failureBehavior: form.failure === 'retry' ? { kind: 'retry', maxAttempts: 2 } : { kind: 'fail_task' }, outputMapping: kind === 'set_variable' || !outputVariableId ? null : { sourceKey: outputKeys[kind], targetVariableId: outputVariableId } }
   const configuration = kind === 'knowledge_retrieval' ? { knowledgeSpaceId: form.knowledgeSpaceId, query: form.query, topK: form.topK }
     : kind === 'script_execution' ? { language: form.language, inputs: form.inputs, script: form.script }
     : kind === 'api_request' ? { method: form.method, url: form.url, headers: form.headers, body: form.body }
@@ -60,7 +72,10 @@ function submit() {
   const parsed = toolStepSchema.safeParse({ ...base, configuration })
   if (!parsed.success) { validationError.value = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '); return }
   validationError.value = ''
-  emit('save', parsed.data)
+  const newVariable: TaskLocalVariable | undefined = createTaskVariable.value
+    ? { id: newVariableId, key: variableKey, dataType: newVariableType.value, defaultValue: null }
+    : undefined
+  emit('save', { step: parsed.data, ...(newVariable ? { newVariable } : {}) })
 }
 </script>
 <template>
@@ -85,7 +100,7 @@ function submit() {
       </template>
       <template v-else-if="kind === 'api_request'">
         <label>Method *<select v-model="form.method"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select></label>
-        <ToolValueInput v-model="form.url" label="URL" :variables="variables" />
+        <ToolValueInput v-model="form.url" label="URL" :variables="variables" compact />
         <h3>HEADERS · OPTIONAL</h3>
         <div v-for="(header, index) in form.headers" :key="header.id"><input v-model="header.name" aria-label="Header name" required /><ToolValueInput v-model="header.value" label="Header value" :variables="variables" /><button type="button" @click="form.headers = form.headers.filter((_, i) => i !== index)">Remove header</button></div>
         <button type="button" @click="form.headers = [...form.headers, { id: newId(), name: '', value: literal() }]">+ Add header</button>
@@ -103,8 +118,17 @@ function submit() {
         <ToolValueInput v-model="form.systemPrompt" label="System prompt · optional" :variables="variables" />
         <ToolValueInput v-model="form.prompt" label="Prompt" :variables="variables" />
       </template>
-      <template v-if="kind !== 'set_variable'"><h3>OUTPUT MAPPING</h3><label class="tool-output-mapping"><span>{{ outputKeys[kind] }}</span><img :src="outputArrow" alt="maps to" /><select v-model="form.output" aria-label="Output variable" required><option disabled value="">Choose a writable variable</option><option v-for="variable in writable" :key="variable.id" :value="variable.id">{{ variable.name }}</option></select></label></template>
-      <button type="button" disabled>+ New Task Variable</button><small>Task variable creation is unavailable in this batch. Select an existing writable variable.</small>
+      <template v-if="kind !== 'set_variable'">
+        <h3>OUTPUT MAPPING · OPTIONAL</h3>
+        <label v-if="!createTaskVariable" class="tool-output-mapping"><span>{{ outputKeys[kind] }}</span><img :src="outputArrow" alt="maps to" /><ToolSelect v-model="form.output" :options="outputOptions" control-label="Output variable" /></label>
+        <section v-else class="new-task-variable" aria-label="New Task Variable">
+          <div class="tool-output-mapping"><span>{{ outputKeys[kind] }}</span><img :src="outputArrow" alt="maps to" /><strong>task.{{ newVariableKey || 'variable_name' }}</strong></div>
+          <label>Name *<input v-model="newVariableKey" autocomplete="off" placeholder="api_response" required /></label>
+          <label>Data type<select v-model="newVariableType"><option value="json">JSON</option><option value="string">String</option><option value="number">Number</option><option value="boolean">Boolean</option></select></label>
+        </section>
+        <button type="button" @click="createTaskVariable = !createTaskVariable">{{ createTaskVariable ? 'Use Existing Variable' : '+ New Task Variable' }}</button>
+        <small>Task Variables are scoped to this Task and become available to later Tool steps.</small>
+      </template>
       <details><summary>Available variables</summary><p v-for="variable in variables" :key="variable.id">{{ variable.name }} · {{ variable.dataType }} · {{ variable.writable ? 'writable' : 'read only' }}</p></details>
       <h3>FAILURE BEHAVIOR</h3><div class="tool-failure"><label><input v-model="form.failure" type="radio" value="retry" />Retry once</label><label><input v-model="form.failure" type="radio" value="fail_task" />Fail Task</label></div>
       <p v-if="validationError || error" role="alert" class="field-error">{{ validationError || error }}</p>
@@ -115,23 +139,33 @@ function submit() {
 </template>
 
 <style>
-.system-tool-panel { overflow-y: auto; color: var(--tool-ink); background: var(--tool-surface); border-color: var(--tool-border); }
-.system-tool-panel > header { align-items: center; min-height: 28px; flex-shrink: 0; }
-.system-tool-panel > header h2 { flex: 1; font-size: 14px; font-weight: 500; }
-.system-tool-panel > .inspector-note { margin: 0; padding-bottom: 12px; border-bottom: 1px solid var(--tool-border); font-size: 10px; }
+.system-tool-panel { gap: 0; overflow-y: auto; padding: 16px; color: var(--tool-ink); background: var(--tool-surface); border-color: var(--tool-border); font-family: Manrope, Inter, sans-serif; }
+.system-tool-panel > header { align-items: center; min-height: 24px; flex-shrink: 0; gap: 8px; }
+.system-tool-panel > header h2 { flex: 1; margin: 0; font-size: 15px; line-height: 21px; font-weight: 500; }
+.system-tool-panel > header button { display: grid; width: 20px; height: 24px; padding: 0; place-items: center; border: 0; border-radius: 5px; background: transparent; color: var(--tool-muted); font-size: 18px; }
+.system-tool-panel > header button:first-child { color: var(--tool-primary); }
+.system-tool-panel > header button:hover { background: var(--tool-soft); }
+.system-tool-panel > .inspector-note { margin: 0; padding: 2px 0 12px; border-bottom: 1px solid var(--tool-border); color: var(--tool-muted); font-size: 9px; line-height: 15px; }
 .system-tool-panel p { margin: 0; }
 .system-tool-panel .tool-value-input > label { grid-template-columns: 1fr auto; align-items: center; }
-.system-tool-panel .tool-value-input > label select { padding: 4px; width: auto; font-size: 9px; }
-.system-tool-form { display: grid; gap: 12px; font-size: 11px; }
-.system-tool-form label,.tool-value-input { display: grid; gap: 7px; }
-.system-tool-form h3 { margin: 8px 0 0; color: var(--tool-muted); font-size: 10px; font-weight: 500; }
-.system-tool-form input,.system-tool-form select,.system-tool-form textarea { min-width: 0; width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid var(--tool-border); border-radius: var(--tool-radius); background: var(--tool-soft); color: var(--tool-ink); font: inherit; }
+.system-tool-panel .tool-value-input > label select { padding: 2px 4px; width: auto; border: 0; background: transparent; color: var(--tool-muted); font-size: 9px; }
+.system-tool-panel .tool-value-input.is-compact > label { min-height: 16px; }
+.system-tool-panel .tool-value-input.is-compact > label select { appearance: none; min-height: 16px; padding: 0 18px 0 4px; border: 0; background-color: transparent; background-position: calc(100% - 10px) 6px, calc(100% - 6px) 6px; background-size: 4px 4px, 4px 4px; color: var(--tool-muted); line-height: 16px; }
+.system-tool-panel .tool-value-input.is-compact > input { height: 34px; }
+.system-tool-form { display: grid; gap: 12px; padding-top: 14px; font-size: 11px; }
+.system-tool-form label,.tool-value-input { display: grid; gap: 6px; color: var(--tool-muted); line-height: 16px; }
+.system-tool-form h3 { margin: 8px 0 -5px; color: var(--tool-muted); font-size: 10px; line-height: 16px; font-weight: 500; letter-spacing: .02em; }
+.system-tool-form input,.system-tool-form select,.system-tool-form textarea { min-width: 0; width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--tool-border); border-radius: var(--tool-radius); background: var(--tool-soft); color: var(--tool-ink); font: inherit; line-height: 17px; }
+.system-tool-form select { appearance: none; min-height: 34px; padding-right: 34px; background-color: var(--tool-soft); background-image: linear-gradient(45deg, transparent 50%, var(--tool-muted) 50%), linear-gradient(135deg, var(--tool-muted) 50%, transparent 50%); background-position: calc(100% - 16px) 14px, calc(100% - 11px) 14px; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; cursor: pointer; }
+.system-tool-form select:hover { border-color: color-mix(in srgb, var(--tool-primary) 45%, var(--tool-border)); background-color: color-mix(in srgb, var(--tool-primary) 4%, var(--tool-soft)); }
+.system-tool-form select:focus { border-color: var(--tool-primary); background-color: var(--tool-surface); }
+.system-tool-form select option { background: var(--tool-surface); color: var(--tool-ink); font: inherit; }
 .system-tool-form textarea { resize: vertical; }
-.system-tool-form button,.system-tool-panel > header button { border: 1px solid var(--tool-border); border-radius: var(--tool-radius); padding: 8px 12px; background: var(--tool-surface); color: var(--tool-primary); cursor: pointer; }
+.system-tool-form button { border: 1px solid var(--tool-border); border-radius: var(--tool-radius); padding: 8px 12px; background: var(--tool-surface); color: var(--tool-primary); cursor: pointer; }
 .system-tool-form button:disabled { color: var(--tool-muted); cursor: not-allowed; }
 .system-tool-form :focus-visible { outline: 2px solid var(--tool-primary); outline-offset: 2px; }
 .system-tool-form small { color: var(--tool-muted); line-height: 1.5; }
-.system-tool-form footer { display: flex; justify-content: space-between; border-top: 1px solid var(--tool-border); padding-top: 16px; }
+.system-tool-form footer { display: flex; justify-content: space-between; margin-top: 4px; border-top: 1px solid var(--tool-border); padding-top: 16px; }
 .system-tool-form .primary-panel-button { width: 132px; background: var(--tool-primary); color: var(--tool-surface); }
 .tool-entry { display: grid; grid-template-columns: 1fr 1fr auto; gap: 5px; }
 .tool-failure { display: flex; gap: 20px; }
@@ -141,4 +175,11 @@ function submit() {
 .system-tool-form .tool-output-mapping { display: grid; grid-template-columns: auto 20px minmax(0, 1fr); align-items: center; gap: 8px; }
 .tool-output-mapping img { display: block; }
 .system-tool-form .tool-code { height: 122px; min-height: 122px; font-family: monospace; background: var(--tool-ink); color: var(--tool-surface); }
+.tool-section-divider { height: 1px; margin-top: 2px; background: var(--tool-border); }
+.tool-request-row { display: grid; grid-template-columns: 108px minmax(0, 1fr); align-items: start; gap: 12px; }
+.tool-request-row > label,.tool-request-row > .tool-value-input { align-self: start; }
+.tool-empty-note { padding: 9px 10px; border: 1px dashed var(--tool-border); border-radius: var(--tool-radius); color: var(--tool-muted); font-size: 10px; line-height: 16px; }
+.system-tool-form .field-error { padding: 8px 10px; border: 1px solid #f2a6aa; border-radius: var(--tool-radius); background: #fff4f4; color: #b33b43; font-size: 10px; line-height: 16px; }
+.new-task-variable { display: grid; gap: 10px; padding: 10px; border: 1px solid var(--tool-border); border-radius: var(--tool-radius); background: color-mix(in srgb, var(--tool-primary) 3%, var(--tool-surface)); }
+.new-task-variable strong { min-width: 0; overflow: hidden; color: var(--tool-primary); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 </style>

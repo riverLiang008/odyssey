@@ -43,6 +43,7 @@ const templateDraft = reactive({ name: '', description: '' })
 const duplicateDraft = reactive({ name: '', targetSlotId: '' })
 const removalTemplateDraft = reactive({ name: '', description: '' })
 const conflictDialogOpen = ref(false)
+let interactionToastTimer: ReturnType<typeof globalThis.setTimeout> | null = null
 const guardrailPendingSide = computed(() => guardrailOperation.value.type === 'adding' || guardrailOperation.value.type === 'removing'
   ? guardrailOperation.value.side
   : null)
@@ -56,6 +57,22 @@ const saveLabel = computed(() => {
 watch(() => persistence.value.saveStatus, (status) => {
   if (status === 'conflict') conflictDialogOpen.value = true
   else conflictDialogOpen.value = false
+})
+
+const interactionToastMessage = computed(() => {
+  const error = session.value.lastDropError ?? session.value.lastDragBoundaryError
+  if (!error) return null
+  if (error === 'SAME_SLOT') return 'This Agent is already in that Slot.'
+  return error.replaceAll('_', ' ').toLowerCase().replace(/^./, (character) => character.toUpperCase()) + '.'
+})
+
+watch(interactionToastMessage, (message) => {
+  if (interactionToastTimer !== null) globalThis.clearTimeout(interactionToastTimer)
+  if (!message) return
+  interactionToastTimer = globalThis.setTimeout(() => {
+    store.clearInteractionFeedback()
+    interactionToastTimer = null
+  }, 3200)
 })
 
 watch(identity, (next) => {
@@ -72,6 +89,7 @@ function keydown(event: globalThis.KeyboardEvent) { if (event.key === 'Escape') 
 onMounted(() => globalThis.document?.addEventListener('keydown', keydown))
 onUnmounted(() => {
   globalThis.document?.removeEventListener('keydown', keydown)
+  if (interactionToastTimer !== null) globalThis.clearTimeout(interactionToastTimer)
   store.dispose()
 })
 
@@ -309,12 +327,15 @@ async function saveTemplate() {
           @retry="retryWorkflowPreview"
           @open="openPreviewCanvas"
         />
-        <p v-if="session.lastDropError" class="journey-feedback" role="alert">{{ session.lastDropError }}</p>
-        <p v-if="session.lastDragBoundaryError" class="journey-feedback" role="alert">{{ session.lastDragBoundaryError }}</p>
         <p v-if="lifecycle.operationStatus === 'error'" class="journey-feedback" role="alert">{{ lifecycle.error?.code }}</p>
         <p v-if="guardrailOperation.type === 'failed' || guardrailOperation.type === 'conflict'" class="journey-feedback" role="alert">Guardrail {{ guardrailOperation.operation }} failed: {{ guardrailOperation.error.code }}</p>
       </div>
     </div>
+    <Teleport to="body">
+      <Transition name="journey-toast">
+        <p v-if="interactionToastMessage" class="journey-interaction-toast" role="alert" aria-live="assertive">{{ interactionToastMessage }}</p>
+      </Transition>
+    </Teleport>
     <Teleport to="body">
       <AgentSlotContextMenu v-if="session.interaction.type === 'menu-open' && lifecycle.operationStatus !== 'loading'" class="journey-context-menu" :style="{ left: `${session.interaction.anchor.x}px`, top: `${session.interaction.anchor.y}px` }" :slot-id="session.interaction.slotId" :configured="selectedSlot?.assignment === 'configured'" :can-add-sibling="selectedSlot?.canAddSibling" :can-remove-slot="selectedSlot?.canRemove" :can-reorder="selectedSlot?.canReorder" :can-move-earlier="(selectedSlot?.order ?? 0) > 0" :can-move-later="selectedSlot?.order !== null && selectedSlot?.order !== undefined && selectedSlot.order < canvasModel.slots.length - 1" @action="menuAction" @close="store.cancelInteraction" />
       <GuardrailContextMenu v-if="session.guardrailInteraction.type === 'menu-open'" class="journey-context-menu" :style="{ position: 'fixed', left: `${session.guardrailInteraction.anchor.x}px`, top: `${session.guardrailInteraction.anchor.y}px` }" :side="session.guardrailInteraction.side" :agent-id="session.guardrailInteraction.agentId" @open="openGuardrailWorkflow" @remove="confirmGuardrailRemoval" @close="store.cancelInteraction" />

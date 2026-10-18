@@ -10,7 +10,7 @@ import {
 } from '@/canvas/workflow'
 
 const props = defineProps<{ node: WorkflowNode | LoopBodyNode | null; edge: WorkflowEdge | null; tools?: AgentReusableTool[]; variables?: AgentVariable[]; knowledgeSpaces?: KnowledgeSpaceSummary[]; knowledgeStatus?: 'idle' | 'loading' | 'ready' | 'error'; loopExpanded?: boolean; readOnly?: boolean }>()
-const emit = defineEmits<{ deleteNode: []; deleteEdge: []; close: []; openLoop: [loopNodeId: string]; updateLoop: [details: Pick<LoopNode, 'name'> & Pick<LoopNode['config'], 'maxTurns' | 'exitCondition'>]; bindTool: [toolId: UUID]; unbindTool: [toolId: UUID]; bindKnowledgeSpace: [knowledgeSpaceId: UUID]; unbindKnowledgeSpace: [knowledgeSpaceId: UUID]; rejectResource: [reason: WorkflowResourceDropErrorCode] }>()
+const emit = defineEmits<{ close: []; openLoop: [loopNodeId: string]; updateLoop: [details: Pick<LoopNode, 'name'> & Pick<LoopNode['config'], 'maxTurns' | 'exitCondition'>]; bindTool: [toolId: UUID]; unbindTool: [toolId: UUID]; bindKnowledgeSpace: [knowledgeSpaceId: UUID]; unbindKnowledgeSpace: [knowledgeSpaceId: UUID]; rejectResource: [reason: WorkflowResourceDropErrorCode] }>()
 const loopName = ref('')
 const loopMaxTurns = ref('1')
 const loopVariableId = ref('')
@@ -128,7 +128,6 @@ function startKnowledgeDrag(event: globalThis.DragEvent, space: KnowledgeSpaceSu
         <button type="submit" class="primary-panel-button" :disabled="readOnly">Apply Loop settings</button>
         <button type="button" class="secondary-panel-button" @click="$emit('openLoop', node.id)">{{ loopExpanded ? 'Focus Loop Body' : 'Open Loop Body' }} →</button>
         <div class="loop-body-summary"><strong>{{ node.config.body.graph.nodes.length }} nodes · {{ node.config.body.graph.edges.length }} edges</strong><small>Includes Loop Start and Loop End sentinels</small></div>
-        <button type="button" class="danger-button" :disabled="readOnly" @click="$emit('deleteNode')">Remove Loop<small>Removes the Loop and its owned body graph</small></button>
       </form>
       <section v-else-if="node.type === 'agent_action'" class="agent-action-resource-config">
         <h3>Tools</h3>
@@ -142,13 +141,10 @@ function startKnowledgeDrag(event: globalThis.DragEvent, space: KnowledgeSpaceSu
         <div v-else class="compact-resource-browser"><button v-for="space in knowledgeSpaces" :key="space.id" type="button" :draggable="!readOnly && isKnowledgeSelectable(space)" :disabled="readOnly || !isKnowledgeSelectable(space) || node.config.knowledgeSpaceIds.includes(space.id)" @dragstart="startKnowledgeDrag($event, space)" @click="$emit('bindKnowledgeSpace', space.id)">{{ space.name }}<small>{{ node.config.knowledgeSpaceIds.includes(space.id) ? 'Added' : readOnly ? 'Available in Configure mode' : isKnowledgeSelectable(space) ? 'Drag or click to add' : `${space.lifecycleStatus} · ${space.graphStatus}` }}</small></button></div>
         <div class="resource-drop-zone" @dragover.prevent.stop @drop="dropKnowledgeSpace">Drop a Knowledge Space here</div>
         <ul v-if="node.config.knowledgeSpaceIds.length"><li v-for="spaceId in node.config.knowledgeSpaceIds" :key="spaceId"><span>{{ knowledgeLabel(spaceId) }}</span><button type="button" :disabled="readOnly" :aria-label="`Remove ${knowledgeLabel(spaceId)}`" @click="$emit('unbindKnowledgeSpace', spaceId)">×</button></li></ul>
-        <button type="button" class="danger-button" :disabled="readOnly" @click="$emit('deleteNode')">Delete node</button>
       </section>
-      <button v-else type="button" class="danger-button" :disabled="readOnly" @click="$emit('deleteNode')">Delete node</button>
     </template>
     <template v-else-if="edge">
       <dl><dt>Source</dt><dd>{{ edge.sourceNodeId }}</dd><dt>Target</dt><dd>{{ edge.targetNodeId }}</dd></dl>
-      <button type="button" class="danger-button" :disabled="readOnly" @click="$emit('deleteEdge')">Delete route</button>
     </template>
     <p v-else class="inspector-note">Select a node or route to inspect it. Node configuration forms continue in M2.8.</p>
   </aside>

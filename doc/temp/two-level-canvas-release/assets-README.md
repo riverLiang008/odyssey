@@ -19,6 +19,7 @@
 | `thinking-ownership-annotated.png` | `119:2` | Thinking Ownership 表达责任归属，而不是 Canvas 层级 | 1 System；2 User-managed；3 Shared；4 Agent-managed | 2026-10-02 / 2026-10-03 |
 | `thinking-ownership-across-canvas.png` | `166:2`、`62:2`、`119:2` | 同一颜色语义贯穿 Workflow 节点、Node Palette 与 Agent Variables | 左：Focus Mode；中：Node Palette；右：Agent Variables | 2026-10-03 |
 | `system-pattern-selection.png` | `417:33` | OdyJourney 先从系统关系形状开始，再配置具体 Agent | Hub and Spoke、Circular Loop、Linear Sequence、Solo Component | 2026-10-03 |
+| `cross-level-transition.png` | `59:2`、`62:2` | Agent Slot、只读 Workflow Preview 与完整 Agent Workflow Canvas 构成渐进式跨层路径 | 1 Agent Slot；2 Workflow Preview；3 Full Agent Workflow Canvas | 2026-10-02 / 2026-10-04 |
 
 ## Alt Text 建议
 
@@ -29,6 +30,7 @@
 - Thinking Ownership：`Agent Variables 面板，编号标出 System、User-managed、Shared 和 Agent-managed 四组变量。`
 - 跨对象颜色：`Focus Mode 中的 Workflow 节点、节点面板与 Agent Variables 使用一致的 Thinking Ownership 颜色。`
 - System Pattern：`Create OdyJourney 对话框展示四种 System Pattern 的名称、简化拓扑和适用工作。`
+- 跨层路径：`从 Journey Canvas 中的 Agent Slot，经只读 Workflow Preview，进入完整 Agent Workflow Canvas。`
 
 ### English
 
@@ -37,3 +39,4 @@
 - Thinking Ownership: `Agent Variables panel with numbered emphasis on System, User-managed, Shared, and Agent-managed variable groups.`
 - Cross-object colors: `Workflow nodes in Focus Mode, the node palette, and Agent Variables use the same Thinking Ownership colors.`
 - System Pattern: `Create OdyJourney dialog showing four System Pattern options with simplified topology and intended use.`
+- Cross-level transition: `The progressive transition from an Agent Slot on the Journey Canvas, through a read-only Workflow Preview, to the full Agent Workflow Canvas.`

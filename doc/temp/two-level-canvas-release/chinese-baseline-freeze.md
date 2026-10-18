@@ -4,12 +4,13 @@
 > Decision: Approve  
 > Approved by: River  
 > Baseline file: `../why-two-level-canvas.zh.md`  
-> SHA-256: `CCF117F6033B38C91F11B8A1E8CDF1604338E50FA6831B0DB8CC376B34CC7EB5`
+> SHA-256: `C6C697D991E8B3F6E34D390E9A8E099EC5339B1E1ACB2248F90B96DE86CAAC99`
+> Revised: 2026-10-04（根据 River 英文快速 Review，同步修正中英文叙事顺序并增加跨层路径图）
 
 ## 冻结范围
 
 - 中文正文、标题层级与论证顺序；
-- 图 1a、图 1b、图 2、图 3、图 4 及对应图注；
+- 图 1a、图 1b、图 2、图 3、图 4、图 5 及对应图注；
 - `Agent Slot`、`Journey Canvas`、`Agent Workflow Canvas`、`System Pattern`、`Workflow Preview`、`Thinking Ownership` 与 `Execution Behavior` 的公开用法；
 - Guardrail、Main Execution 与 Execution Behavior 的结构描述；
 - 设计限制、代价、未决问题与来源。
@@ -21,6 +22,7 @@
 - `assets/journey-canvas-annotated.png`
 - `assets/system-pattern-selection.png`
 - `assets/agent-workflow-canvas-annotated.png`
+- `assets/cross-level-transition.png`
 
 ## Review 结果
 

@@ -30,6 +30,19 @@ def test_canonical_positive_parity(step: object) -> None:
     TypeAdapter(ToolStep).validate_json(json.dumps(step))
 
 
+def test_tool_step_contract_allows_an_unbound_output() -> None:
+    step = {
+        "id": "0195f076-b6e6-7ef0-98db-000000000100",
+        "kind": "script_execution",
+        "label": None,
+        "failureBehavior": {"kind": "fail_task"},
+        "configuration": {"language": "python", "script": "result = 1"},
+        "outputMapping": None,
+    }
+    parsed = TypeAdapter(ToolStep).validate_python(step)
+    assert parsed.output_mapping is None
+
+
 @pytest.mark.parametrize("step", FIXTURES["invalid"], ids=lambda s: s["kind"])
 def test_canonical_negative_parity(step: object) -> None:
     with pytest.raises(ValidationError):

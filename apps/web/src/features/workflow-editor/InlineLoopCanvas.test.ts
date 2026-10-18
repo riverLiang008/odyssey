@@ -40,6 +40,9 @@ describe('InlineLoopCanvas', () => {
     await wrapper.get('.inline-root-sibling').trigger('click')
     expect(wrapper.emitted('selectRoot')).toEqual([[id(10)]])
 
+    await wrapper.get('.inline-root-sibling').trigger('contextmenu', { clientX: 120, clientY: 180 })
+    expect(wrapper.emitted('nodeContextMenu')?.[0]).toEqual([id(10), { kind: 'root' }, { x: 120, y: 180 }])
+
     await wrapper.get('.inline-loop-heading button').trigger('click')
     expect(wrapper.emitted('collapse')).toHaveLength(1)
   })

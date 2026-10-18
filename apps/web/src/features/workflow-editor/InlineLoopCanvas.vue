@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { Connection } from '@vue-flow/core'
-import type { AgentVariable, SystemToolDefinition, AgentReusableTool, LoopNode, UUID, WorkflowGraph, WorkflowNode } from '@odyssey/schemas'
-import type { WorkflowMode } from '@/stores/workflowEditor'
+import type { AgentVariable, SystemToolDefinition, AgentReusableTool, KnowledgeSpaceSummary, LoopNode, UUID, WorkflowGraph, WorkflowNode } from '@odyssey/schemas'
+import type { WorkflowCanvasContext, WorkflowMode } from '@/stores/workflowEditor'
 import type { WorkflowCanvasIntent, WorkflowCanvasUiErrorCode, WorkflowPaletteNodeType, WorkflowResourceDragPayload, WorkflowResourceDropAction } from '@/canvas/workflow'
 import WorkflowCanvas from './WorkflowCanvas.vue'
 
@@ -17,6 +17,7 @@ const props = defineProps<{
   systemTools?: readonly SystemToolDefinition[]
   availableReusableToolIds?: readonly UUID[]
   reusableTools?: readonly AgentReusableTool[]
+  knowledgeSpaces?: readonly KnowledgeSpaceSummary[]
   activeResourceDrag?: WorkflowResourceDragPayload | null
 }>()
 defineEmits<{
@@ -28,9 +29,15 @@ defineEmits<{
   collapse: []
   selectRoot: [nodeId: UUID]
   editTool: [nodeId: UUID, stepId: UUID]
+  editReusableTool: [nodeId: UUID, reusableToolId: UUID]
   changeTool: [nodeId: UUID, stepId: UUID, operation: 'delete' | 'up' | 'down']
+  reorderTool: [nodeId: UUID, stepId: UUID, targetIndex: number]
+  toolStepContextMenu: [nodeId: UUID, stepId: UUID, context: WorkflowCanvasContext, point: { x: number; y: number }]
   resourceDrop: [action: WorkflowResourceDropAction]
   updateAgentAction: [nodeId: UUID, details: { name: string; model: string; goal: string }]
+  updateNodeName: [nodeId: UUID, name: string]
+  nodeContextMenu: [nodeId: UUID, context: WorkflowCanvasContext, point: { x: number; y: number }]
+  edgeContextMenu: [edgeId: UUID, context: WorkflowCanvasContext, point: { x: number; y: number }]
 }>()
 const childCanvas = ref<InstanceType<typeof WorkflowCanvas> | null>(null)
 const rootStart = computed(() => props.rootGraph.nodes.find((node) => node.type === 'start'))
@@ -79,14 +86,14 @@ defineExpose({ createFromClientPoint })
     </div>
     <template v-for="node in precedingSiblings" :key="node.id">
       <span class="inline-root-route" aria-hidden="true" />
-      <button type="button" class="inline-root-sibling" :class="{ 'is-selected': rootSelectedNodeId === node.id }" @click="$emit('selectRoot', node.id)">
+      <button type="button" class="inline-root-sibling" :class="{ 'is-selected': rootSelectedNodeId === node.id }" @click="$emit('selectRoot', node.id)" @contextmenu.prevent="$emit('nodeContextMenu', node.id, { kind: 'root' }, { x: $event.clientX, y: $event.clientY })">
         <strong>{{ node.name }}</strong><small>{{ siblingSubtitle(node) }}</small>
       </button>
     </template>
     <span class="inline-root-route before-loop" aria-hidden="true" />
 
     <section class="inline-loop-container" :aria-label="`${loop.name} Loop body`">
-      <header class="inline-loop-heading">
+      <header class="inline-loop-heading" @contextmenu.prevent="$emit('nodeContextMenu', loop.id, { kind: 'root' }, { x: $event.clientX, y: $event.clientY })">
         <div>
           <p>LOOP · {{ loop.name.toUpperCase() }}</p>
           <div><h2>Loop Body</h2><span>Expanded inline · nested graph remains owned by this Loop</span></div>
@@ -103,10 +110,14 @@ defineExpose({ createFromClientPoint })
         :available-reusable-tool-ids="availableReusableToolIds ?? []"
         :variables="variables" :system-tools="systemTools"
         :reusable-tools="reusableTools ?? []"
+        :knowledge-spaces="knowledgeSpaces ?? []"
         :active-resource-drag="activeResourceDrag"
         normalize-initial-viewport
         @edit-tool="(nodeId, stepId) => $emit('editTool', nodeId, stepId)"
+        @edit-reusable-tool="(nodeId, reusableToolId) => $emit('editReusableTool', nodeId, reusableToolId)"
         @change-tool="(nodeId, stepId, operation) => $emit('changeTool', nodeId, stepId, operation)"
+        @reorder-tool="(nodeId, stepId, targetIndex) => $emit('reorderTool', nodeId, stepId, targetIndex)"
+        @tool-step-context-menu="(nodeId, stepId, point) => $emit('toolStepContextMenu', nodeId, stepId, { kind: 'loop-body', loopNodeId: loop.id }, point)"
         @intent="$emit('intent', $event)"
         @connect="$emit('connect', $event)"
         @create="(nodeType, point) => $emit('create', nodeType, point)"
@@ -114,12 +125,15 @@ defineExpose({ createFromClientPoint })
         @reject="$emit('reject', $event)"
         @resource-drop="$emit('resourceDrop', $event)"
         @update-agent-action="(nodeId, details) => $emit('updateAgentAction', nodeId, details)"
+        @update-node-name="(nodeId, name) => $emit('updateNodeName', nodeId, name)"
+        @node-context-menu="(nodeId, point) => $emit('nodeContextMenu', nodeId, { kind: 'loop-body', loopNodeId: loop.id }, point)"
+        @edge-context-menu="(edgeId, point) => $emit('edgeContextMenu', edgeId, { kind: 'loop-body', loopNodeId: loop.id }, point)"
       />
     </section>
 
     <template v-for="node in followingSiblings" :key="node.id">
       <span class="inline-root-route" aria-hidden="true" />
-      <button type="button" class="inline-root-sibling" :class="{ 'is-selected': rootSelectedNodeId === node.id }" @click="$emit('selectRoot', node.id)">
+      <button type="button" class="inline-root-sibling" :class="{ 'is-selected': rootSelectedNodeId === node.id }" @click="$emit('selectRoot', node.id)" @contextmenu.prevent="$emit('nodeContextMenu', node.id, { kind: 'root' }, { x: $event.clientX, y: $event.clientY })">
         <strong>{{ node.name }}</strong><small>{{ siblingSubtitle(node) }}</small>
       </button>
     </template>

@@ -35,7 +35,7 @@ two-level-canvas/
 
 ### A. 发布级图片
 
-- [x] A1. 为三张图片分别冻结唯一的主要论点。
+- [x] A1. 为发布图片分别冻结唯一的主要论点。
 - [x] A2. Journey Canvas：强调 System configuration、Agent Slot 与右下角 Workflow Preview。
 - [x] A3. Agent Workflow Canvas：强调 Node Palette、局部控制流与 Available Tools。
 - [x] A4. Thinking Ownership：强调 System、User-managed、Shared、Agent-managed 四组变量。
@@ -43,7 +43,8 @@ two-level-canvas/
 - [x] A6. 为发布级图片补齐语言中立文件名、Alt Text 建议、Figma 节点和日期。
 - [x] A6a. 补充 Focus Mode、Node Palette 与 Agent Variables 的跨对象颜色对照图。
 - [x] A6b. 补充 System Pattern 选择图，并限定为双层 Canvas 所需的轻量介绍。
-- [ ] A7. River 完成图片选择与视觉重点 Review。
+- [x] A6c. 补充 Agent Slot → Workflow Preview → Full Agent Workflow Canvas 的跨层组合图。
+- [x] A7. River 完成图片选择与视觉重点 Review。
 
 ### B. 中文样章定稿
 
@@ -61,22 +62,42 @@ two-level-canvas/
 
 > 只有 B7、B8 完成后才启动。
 
-- [ ] C1. 按中文定稿生成等义英文稿。
-- [ ] C2. 使用冻结术语表，不自行增加产品承诺或设计结论。
-- [ ] C3. 保持标题层级、图号、图片、Figma 节点和来源一一对应。
-- [ ] C4. 对英文表达进行自然化处理，避免机械逐字翻译。
-- [ ] C5. 完成中英文逐节一致性检查。
-- [ ] C6. River 完成英文快速 Review。
+- [x] C1. 按中文定稿生成等义英文稿。
+- [x] C2. 使用冻结术语表，不自行增加产品承诺或设计结论。
+- [x] C3. 保持标题层级、图号、图片、Figma 节点和来源一一对应。
+- [x] C4. 对英文表达进行自然化处理，避免机械逐字翻译。
+- [x] C5. 完成中英文逐节一致性检查。
+- [x] C6. River 完成英文快速 Review。
+
+英文同步记录（2026-10-04）：
+
+- 英文稿：`../why-two-level-canvas.en.md`；
+- 中英文标题层级均为 14 项，发布图片均为 6 张；
+- 图 1a、图 1b、图 2、图 3、图 4、图 5，以及 Figma 节点 `119:2`、`166:2`、`59:2`、`417:33`、`62:2` 一一对应；
+- 已核对 `OdyJourney`、`Journey Canvas`、`System Canvas`、`Agent Workflow Canvas`、`Agent Slot`、`Thinking Ownership`、`Execution Behavior` 与 `Single` Pattern；
+- 英文稿未增加中文基线之外的设计结论、能力承诺或实现状态判断；
+- River 英文快速 Review 的两条批注已解决：移除过早出现的 Color 论述，并补充跨层路径图；最终自检通过。
 
 ### D. 正式文档站迁移
 
-- [ ] D1. 确定正式的中文与英文页面路径。
-- [ ] D2. 将发布级图片迁入站点统一静态资源目录。
-- [ ] D3. 配置中英文导航与对应页面切换。
-- [ ] D4. 检查图片路径、内部链接、标题锚点和来源链接。
-- [ ] D5. 检查桌面与窄屏排版。
-- [ ] D6. 运行 VitePress 构建并修复阻塞问题。
+- [x] D1. 确定正式的中文与英文页面路径。
+- [x] D2. 将发布级图片迁入站点统一静态资源目录。
+- [x] D3. 配置中英文导航与对应页面切换。
+- [x] D4. 检查图片路径、内部链接、标题锚点和来源链接。
+- [x] D5. 检查桌面与窄屏排版。
+- [x] D6. 运行 VitePress 构建并修复阻塞问题。
 - [ ] D7. River 完成正式页面发布 Review。
+
+正式站点迁移记录（2026-10-04）：
+
+- 英文页面：`docs/core-concepts/two-level-canvas.md`；
+- 中文页面：`docs/zh/core-concepts/two-level-canvas.md`；
+- 共享图片：`docs/public/images/design-decisions/two-level-canvas/`；
+- VitePress locale 菜单提供中英文双向切换，英文旧路径保持不变；
+- 中文导航和侧栏当前只暴露已完成的《为什么是双层 Canvas》，不为尚未迁移的页面制造占位内容；
+- `pnpm docs:build` 通过；生成的中英文页面、语言链接与 6 张图片均已检查；
+- 已检查桌面宽屏与 720px 窄屏布局，未发现溢出或不可读内容；
+- 构建仅保留 Vite/Rollup 的既有大 chunk 警告，不阻塞本次文档迁移。
 
 ### E. 方法沉淀
 

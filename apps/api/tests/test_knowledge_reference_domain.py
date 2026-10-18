@@ -155,6 +155,38 @@ def test_strict_workflow_boundary_rejects_malformed_and_duplicate_configs() -> N
     with pytest.raises(ValidationError):
         SaveAgentWorkflowRequest.model_validate(payload)
 
+
+def test_reusable_tools_must_be_owned_and_unique_across_root_and_nested_actions() -> None:
+    payload, _ = _request_payload()
+    workflow = _dict(payload["workflow"])
+    nodes = workflow["nodes"]
+    reusable_tools = payload["reusableTools"]
+    assert isinstance(nodes, list)
+    assert isinstance(reusable_tools, list)
+    reusable = _dict(reusable_tools[0])
+    reusable_id = reusable["id"]
+
+    root_action = _dict(nodes[0])
+    _dict(root_action["config"])["reusableToolIds"] = [reusable_id]
+    loop = _dict(nodes[2])
+    body = _dict(_dict(loop["config"])["body"])
+    nested_nodes = _dict(body["graph"])["nodes"]
+    assert isinstance(nested_nodes, list)
+    nested_action = _dict(nested_nodes[0])
+    _dict(nested_action["config"])["reusableToolIds"] = [reusable_id]
+    SaveAgentWorkflowRequest.model_validate(payload)
+
+    _dict(nested_action["config"])["reusableToolIds"] = [str(uuid4())]
+    with pytest.raises(ValidationError):
+        SaveAgentWorkflowRequest.model_validate(payload)
+
+    payload, _ = _request_payload()
+    reusable_tools = payload["reusableTools"]
+    assert isinstance(reusable_tools, list)
+    reusable_tools.append(dict(_dict(reusable_tools[0])))
+    with pytest.raises(ValidationError):
+        SaveAgentWorkflowRequest.model_validate(payload)
+
     payload, _ = _request_payload()
     reusable_tools = payload["reusableTools"]
     assert isinstance(reusable_tools, list)

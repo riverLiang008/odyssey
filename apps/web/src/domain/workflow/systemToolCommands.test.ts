@@ -30,9 +30,37 @@ describe('System Tool Task commands', () => {
     expect(edited.ok && edited.value.steps[0]?.label).toBe('Changed')
     const moved = changeTaskTool(full, { type: 'move', stepId: first.id, direction: 1 }, context)
     expect(moved.ok && moved.value.steps[0]?.id).toBe(second.id)
+    const reordered = changeTaskTool(full, { type: 'reorder', stepId: first.id, targetIndex: steps.length - 1 }, context)
+    expect(reordered.ok && reordered.value.steps.at(-1)?.id).toBe(first.id)
     expect(changeTaskTool(full, { type: 'move', stepId: first.id, direction: -1 }, context).ok).toBe(false)
+    expect(changeTaskTool(full, { type: 'reorder', stepId: first.id, targetIndex: steps.length }, context).ok).toBe(false)
     const deleted = changeTaskTool(full, { type: 'delete', stepId: first.id }, context)
     expect(deleted.ok && deleted.value.steps).toHaveLength(4)
+  })
+  it('atomically creates and binds a Task Variable without mutating the input', () => {
+    const emptyTask: TaskNode = { ...task, config: { localVariables: [], steps: [] } }
+    const before = structuredClone(emptyTask)
+    const variable = { id: id(30), key: 'script_output', dataType: 'json' as const, defaultValue: null }
+    const input = fixtures.valid.find((candidate) => candidate.kind === 'script_execution')
+    if (!input) throw new Error('Missing Script fixture')
+    const source = toolStepSchema.parse(input)
+    const step = toolStepSchema.parse({ ...source, configuration: { ...source.configuration, inputs: [] }, outputMapping: { sourceKey: 'result', targetVariableId: variable.id } })
+    const result = changeTaskTool(emptyTask, { type: 'add', step, newVariable: variable }, context)
+    expect(result.ok).toBe(true)
+    expect(emptyTask).toEqual(before)
+    if (result.ok) {
+      expect(result.value.localVariables).toEqual([variable])
+      expect(result.value.steps[0]?.outputMapping?.targetVariableId).toBe(variable.id)
+    }
+  })
+  it('rejects duplicate or orphan Task Variable creation atomically', () => {
+    const variable = { id: id(30), key: 'output', dataType: 'json' as const, defaultValue: null }
+    const input = fixtures.valid.find((candidate) => candidate.kind === 'script_execution')
+    if (!input) throw new Error('Missing Script fixture')
+    const source = toolStepSchema.parse(input)
+    const step = toolStepSchema.parse({ ...source, outputMapping: { sourceKey: 'result', targetVariableId: variable.id } })
+    expect(changeTaskTool(task, { type: 'add', step, newVariable: variable }, context)).toEqual({ ok: false, error: 'INVALID_REFERENCE' })
+    expect(changeTaskTool({ ...task, config: { localVariables: [], steps: [] } }, { type: 'add', step: { ...step, outputMapping: null }, newVariable: { ...variable, key: 'fresh' } }, context)).toEqual({ ok: false, error: 'INVALID_CONFIGURATION' })
   })
   it('rejects missing, duplicate, foreign and readonly references before mutation', () => {
     const input = fixtures.valid[0]

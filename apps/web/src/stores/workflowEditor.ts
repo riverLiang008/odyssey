@@ -3,6 +3,8 @@ import { defineStore } from 'pinia'
 import {
   uuidSchema,
   type SystemToolDefinition,
+  type AgentVariable,
+  type AgentReusableTool,
   type ToolKind,
   type ToolStep,
   type AgentWorkflowEditorDocument,
@@ -13,7 +15,8 @@ import {
   type UUID,
 } from '@odyssey/schemas'
 
-import { changeTaskTool, type ToolEditIntent } from '@/domain/workflow/systemToolCommands'
+import { changeTaskTool, type TaskToolSaveDraft, type ToolEditIntent } from '@/domain/workflow/systemToolCommands'
+import { agentVariableReferenceCount, changeAgentVariable as changeAgentVariableCommand } from '@/domain/workflow/agentVariableCommands'
 import type { WorkflowEditorRepository } from '@/repositories'
 import {
   connectLoopBodyDocumentNodes,
@@ -39,6 +42,7 @@ import {
   connectNodes as connectWorkflowNodesCommand,
   removeEdge as removeWorkflowEdgeCommand,
   removeNode as removeWorkflowNodeCommand,
+  renameNode as renameWorkflowNodeCommand,
   updateLoopBodyDocument as updateWorkflowLoopBodyDocumentCommand,
   updateLoopSettings as updateWorkflowLoopSettingsCommand,
   updateLoopDetails as updateWorkflowLoopDetailsCommand,
@@ -47,6 +51,7 @@ import {
   unbindAgentActionKnowledgeSpace as unbindAgentActionKnowledgeSpaceCommand,
   updateLoopBodyNodeConfig,
   updateLoopBodyAgentActionDetails,
+  renameLoopBodyNode,
   updateAgentActionDetails as updateAgentActionDetailsCommand,
   type AddableLoopBodyNode,
   type AddableWorkflowNode,
@@ -56,6 +61,11 @@ import {
   type WorkflowDomainError,
   createAgentActionFromDraft,
   createLoopFromDraft,
+  instantiateAndBindAgentReusableTool,
+  agentReusableToolReferenceCount,
+  deleteAgentReusableTool,
+  createAgentReusableToolFromTaskStep,
+  updateAgentReusableTool,
   type AgentActionDraftValues,
   type LoopDraftValues,
   type WorkflowDraftResult,
@@ -76,7 +86,11 @@ import { AutosaveCoordinator } from './persistence/autosaveCoordinator'
 
 export const WORKFLOW_AUTOSAVE_DELAY_MS = 800
 
-export type SystemToolDraft = { context: WorkflowCanvasContext; nodeId: UUID; kind: ToolKind; step: ToolStep | null } | null
+export type SystemToolDraft =
+  | { host: 'task'; context: WorkflowCanvasContext; nodeId: UUID; kind: ToolKind; step: ToolStep | null }
+  | { host: 'agent-action'; context: WorkflowCanvasContext; nodeId: UUID; definitionId: UUID | null; kind: ToolKind; tool: AgentReusableTool | null }
+  | { host: 'reusable-tool-library'; kind: ToolKind; tool: AgentReusableTool }
+  | null
 export type WorkflowMode = 'flow' | 'configure'
 export type KnowledgeInventoryStatus = 'idle' | 'loading' | 'ready' | 'error'
 export type WorkflowResourceCategory = 'tools' | 'knowledge-spaces' | 'agent-variables' | 'dsl-edit' | 'reusable-tools'
@@ -160,6 +174,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   const systemTools = shallowRef<SystemToolDefinition[]>([])
   const systemToolStatus = shallowRef<'loading' | 'empty' | 'error' | 'loaded'>('loading')
   const systemToolDraft = shallowRef<SystemToolDraft>(null)
+  const variableError = shallowRef<string | null>(null)
   const toolError = shallowRef<string | null>(null)
   const knowledgeSpaces = shallowRef<KnowledgeSpaceSummary[]>([])
   const knowledgeInventory = reactive({ status: 'idle' as KnowledgeInventoryStatus, error: null as RepositoryError | null, page: 1, pageSize: 6, total: 0 })
@@ -189,6 +204,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   function resetSession() {
     systemToolDraft.value = null
     toolError.value = null
+    variableError.value = null
     session.selectedNodeId = null
     session.selectedEdgeId = null
     session.panel = { type: 'tools' }
@@ -353,10 +369,39 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   function closeCreationDraft() { session.creationDraft = { type: 'closed' } }
   function setResourceBrowserCollapsed(collapsed: boolean) { session.resourceBrowser.collapsed = collapsed }
   function setResourceBrowserCategory(category: WorkflowResourceCategory) {
+    systemToolDraft.value = null
+    toolError.value = null
     session.resourceBrowser.category = category
     session.resourceBrowser.page = 1
     session.resourceBrowser.collapsed = false
+    variableError.value = null
     session.panel = { type: category }
+  }
+  function variableReferenceCount(variableId: UUID) {
+    return document.value ? agentVariableReferenceCount(document.value, variableId) : 0
+  }
+  function saveAgentVariable(variable: AgentVariable) {
+    const current = document.value
+    if (!current) return false
+    const intent = current.variables.some((candidate) => candidate.id === variable.id)
+      ? { type: 'update' as const, variable }
+      : { type: 'create' as const, variable }
+    const result = changeAgentVariableCommand(current, intent, session.mode)
+    if (!result.ok) { variableError.value = result.error; return false }
+    document.value = { ...current, variables: result.value }
+    variableError.value = null
+    markDirty()
+    return true
+  }
+  function deleteAgentVariable(variableId: UUID) {
+    const current = document.value
+    if (!current) return false
+    const result = changeAgentVariableCommand(current, { type: 'delete', variableId }, session.mode)
+    if (!result.ok) { variableError.value = result.error; return false }
+    document.value = { ...current, variables: result.value }
+    variableError.value = null
+    markDirty()
+    return true
   }
   function setResourceBrowserQuery(query: string) { session.resourceBrowser.query = query; session.resourceBrowser.page = 1 }
   function setResourceBrowserPage(page: number) { session.resourceBrowser.page = Math.max(1, page) }
@@ -465,6 +510,17 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     if (context.kind === 'loop-body' && !loop) return null
     if (!loop) return applyGraphResult(updateAgentActionDetailsCommand(current.workflow, { nodeId, ...details }))
     const graphResult = updateLoopBodyAgentActionDetails(loop.config.body.graph, loop.id, { nodeId, ...details })
+    if (!graphResult.ok) return graphResult
+    return applyLoopApplicationResult(loop.id, { ok: true, value: { graph: graphResult.value, layout: structuredClone(loop.config.body.layout) } })
+  }
+
+  function renameWorkflowNode(context: WorkflowCanvasContext, nodeId: UUID, name: string) {
+    const current = document.value
+    if (!current) return null
+    const loop = context.kind === 'loop-body' ? findLoop(context.loopNodeId) : null
+    if (context.kind === 'loop-body' && !loop) return null
+    if (!loop) return applyGraphResult(renameWorkflowNodeCommand(current.workflow, nodeId, name))
+    const graphResult = renameLoopBodyNode(loop.config.body.graph, loop.id, nodeId, name)
     if (!graphResult.ok) return graphResult
     return applyLoopApplicationResult(loop.id, { ok: true, value: { graph: graphResult.value, layout: structuredClone(loop.config.body.layout) } })
   }
@@ -601,9 +657,13 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
   function openSystemTool(context: WorkflowCanvasContext, nodeId: UUID, definitionId: UUID) {
     const definition = systemTools.value.find((t) => t.id === definitionId)
-    if (session.mode !== 'configure' || !definition || !toolTask(context, nodeId)) return false
+    const graph = context.kind === 'root' ? document.value?.workflow : findLoop(context.loopNodeId)?.config.body.graph
+    const node = graph?.nodes.find((candidate) => candidate.id === nodeId)
+    if (session.mode !== 'configure' || !definition || (node?.type !== 'task' && node?.type !== 'agent_action')) return false
     session.resourceBrowser.collapsed = false
-    systemToolDraft.value = { context: { ...context }, nodeId, kind: definition.kind, step: null }
+    systemToolDraft.value = node.type === 'task'
+      ? { host: 'task', context: { ...context }, nodeId, kind: definition.kind, step: null }
+      : { host: 'agent-action', context: { ...context }, nodeId, definitionId: definition.id, kind: definition.kind, tool: null }
     toolError.value = null
     return true
   }
@@ -611,7 +671,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     const step = toolTask(context, nodeId)?.config.steps.find((s) => s.id === stepId)
     if (session.mode !== 'configure' || !step) return false
     session.resourceBrowser.collapsed = false
-    systemToolDraft.value = { context: { ...context }, nodeId, kind: step.kind, step: structuredClone(step) }
+    systemToolDraft.value = { host: 'task', context: { ...context }, nodeId, kind: step.kind, step: structuredClone(step) }
     toolError.value = null
     return true
   }
@@ -634,11 +694,111 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     if (!graph.ok) return false
     return applyLoopApplicationResult(loop.id, { ok: true, value: { graph: graph.value, layout: loop.config.body.layout } })?.ok ?? false
   }
-  function saveSystemTool(step: ToolStep) {
+  function saveSystemTool(input: TaskToolSaveDraft) {
+    const { step, newVariable } = input
     const draft = systemToolDraft.value
-    if (!draft || draft.kind !== step.kind || (draft.step && draft.step.id !== step.id)) return false
-    if (!changeSystemTool(draft.context, draft.nodeId, { type: draft.step ? 'edit' : 'add', step })) return false
+    if (!draft || draft.host !== 'task' || draft.kind !== step.kind || (draft.step && draft.step.id !== step.id)) return false
+    if (!changeSystemTool(draft.context, draft.nodeId, { type: draft.step ? 'edit' : 'add', step, ...(newVariable ? { newVariable } : {}) })) return false
     cancelSystemTool()
+    return true
+  }
+
+  function saveAgentReusableTool(tool: AgentReusableTool) {
+    const draft = systemToolDraft.value
+    const current = document.value
+    if (!draft || (draft.host !== 'agent-action' && draft.host !== 'reusable-tool-library') || !current || draft.kind !== tool.kind || (draft.tool && draft.tool.id !== tool.id)) return false
+    if (draft.tool) {
+      const result = updateAgentReusableTool(current.reusableTools, tool)
+      if (!result.ok) {
+        lastDomainError.value = result.error
+        lastCanvasError.value = null
+        return false
+      }
+      document.value = { ...current, reusableTools: result.value }
+      lastDomainError.value = null
+      lastCanvasError.value = null
+      markDirty()
+      cancelSystemTool()
+      return true
+    }
+    if (draft.host === 'reusable-tool-library') return false
+    const loop = draft.context.kind === 'loop-body' ? findLoop(draft.context.loopNodeId) : null
+    if (draft.context.kind === 'loop-body' && !loop) return false
+    if (!loop) {
+      const result = instantiateAndBindAgentReusableTool(current.workflow.nodes, current.reusableTools, { nodeId: draft.nodeId, tool })
+      if (!result.ok) {
+        lastDomainError.value = result.error
+        lastCanvasError.value = null
+        return false
+      }
+      document.value = {
+        ...current,
+        workflow: { ...current.workflow, nodes: result.value.nodes },
+        reusableTools: result.value.reusableTools,
+      }
+    } else {
+      const result = instantiateAndBindAgentReusableTool(loop.config.body.graph.nodes, current.reusableTools, { nodeId: draft.nodeId, tool })
+      if (!result.ok) {
+        lastDomainError.value = result.error
+        lastCanvasError.value = null
+        return false
+      }
+      const graphResult = updateWorkflowLoopBodyDocumentCommand(current.workflow, loop.id, {
+        graph: { ...loop.config.body.graph, nodes: result.value.nodes },
+        layout: structuredClone(loop.config.body.layout),
+      })
+      if (!graphResult.ok) {
+        lastDomainError.value = graphResult.error
+        lastCanvasError.value = null
+        return false
+      }
+      document.value = { ...current, workflow: graphResult.value, reusableTools: result.value.reusableTools }
+    }
+    lastDomainError.value = null
+    lastCanvasError.value = null
+    markDirty()
+    cancelSystemTool()
+    return true
+  }
+
+  function reusableToolReferenceCount(reusableToolId: UUID) {
+    return document.value ? agentReusableToolReferenceCount(document.value, reusableToolId) : 0
+  }
+
+  function editLibraryReusableTool(reusableToolId: UUID) {
+    const tool = document.value?.reusableTools.find((candidate) => candidate.id === reusableToolId)
+    if (!tool || session.mode !== 'configure') return false
+    session.resourceBrowser.collapsed = false
+    systemToolDraft.value = { host: 'reusable-tool-library', kind: tool.kind, tool: structuredClone(tool) }
+    toolError.value = null
+    return true
+  }
+
+  function deleteLibraryReusableTool(reusableToolId: UUID) {
+    const current = document.value
+    if (!current || session.mode !== 'configure') return false
+    const result = deleteAgentReusableTool(current, reusableToolId)
+    if (!result.ok) {
+      lastDomainError.value = result.error
+      lastCanvasError.value = null
+      return false
+    }
+    document.value = { ...current, reusableTools: result.value }
+    lastDomainError.value = null
+    lastCanvasError.value = null
+    markDirty()
+    return true
+  }
+
+  function editAgentReusableTool(context: WorkflowCanvasContext, nodeId: UUID, reusableToolId: UUID) {
+    const current = document.value
+    if (!current || session.mode !== 'configure') return false
+    const graph = context.kind === 'root' ? current.workflow : findLoop(context.loopNodeId)?.config.body.graph
+    const node = graph?.nodes.find((candidate) => candidate.id === nodeId)
+    const tool = current.reusableTools.find((candidate) => candidate.id === reusableToolId)
+    if (node?.type !== 'agent_action' || !node.config.reusableToolIds.includes(reusableToolId) || !tool) return false
+    session.resourceBrowser.collapsed = false
+    systemToolDraft.value = { host: 'agent-action', context: { ...context }, nodeId, definitionId: null, kind: tool.kind, tool: structuredClone(tool) }
     return true
   }
 
@@ -667,6 +827,29 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
       return graphResult
     }
     return applyLoopApplicationResult(loop.id, { ok: true, value: { graph: graphResult.value, layout: structuredClone(loop.config.body.layout) } })
+  }
+
+  function saveTaskToolStepToReusableTools(context: WorkflowCanvasContext, nodeId: UUID, stepId: UUID) {
+    const current = document.value
+    if (!current || session.mode !== 'configure') return false
+    const task = toolTask(context, nodeId)
+    const step = task?.config.steps.find((candidate) => candidate.id === stepId)
+    if (!step) return false
+    const result = createAgentReusableToolFromTaskStep(
+      current.reusableTools,
+      step,
+      uuidSchema.parse(globalThis.crypto.randomUUID()),
+    )
+    if (!result.ok) {
+      lastDomainError.value = result.error
+      lastCanvasError.value = null
+      return false
+    }
+    document.value = { ...current, reusableTools: result.value.tools }
+    lastDomainError.value = null
+    lastCanvasError.value = null
+    markDirty()
+    return true
   }
 
   function unbindWorkflowAgentActionReusableTool(context: WorkflowCanvasContext, nodeId: UUID, reusableToolId: UUID) {
@@ -875,18 +1058,19 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
 
   return {
-    toolKnowledgeSpaces, toolKnowledgeStatus, systemTools, systemToolStatus, systemToolDraft, toolError, toolTask, openSystemTool, editSystemTool, cancelSystemTool, changeSystemTool, saveSystemTool,
+    toolKnowledgeSpaces, toolKnowledgeStatus, systemTools, systemToolStatus, systemToolDraft, toolError, toolTask, openSystemTool, editSystemTool, cancelSystemTool, changeSystemTool, saveSystemTool, saveAgentReusableTool, editAgentReusableTool, editLibraryReusableTool, deleteLibraryReusableTool, reusableToolReferenceCount,
+    variableError, variableReferenceCount, saveAgentVariable, deleteAgentVariable,
     document, session, persistence, persistenceState, hasUnsavedChanges, knowledgeSpaces, knowledgeInventory, lastDomainError, lastCanvasError, isReady, load, setMode, setPanel, setFocusMode, setPaletteCollapsed,
     selectNode, selectEdge, setInteraction, stageCreationDraft, closeCreationDraft, submitAgentActionDraft, submitLoopDraft, clearWorkflowErrors, rejectCanvasInteraction,
     setResourceBrowserCollapsed, setResourceBrowserCategory, setResourceBrowserQuery, setResourceBrowserPage, loadKnowledgeSpaces,
     addWorkflowNode, removeWorkflowNode, connectWorkflowNodes, removeWorkflowEdge,
-    updateWorkflowNodeConfig, updateWorkflowAgentActionDetails, updateWorkflowLoopSettings, updateWorkflowLoopDetails, createWorkflowNode,
+    updateWorkflowNodeConfig, updateWorkflowAgentActionDetails, renameWorkflowNode, updateWorkflowLoopSettings, updateWorkflowLoopDetails, createWorkflowNode,
     removeWorkflowNodeWithLayout, moveWorkflowNode, setViewport, save, retrySave, reloadAfterConflict, overwriteAfterConflict, toSaveInput, dispose,
     switchCanvasContext, expandLoopInline, collapseInlineLoop,
     createWorkflowLoopBodyNode, removeWorkflowLoopBodyNode, moveWorkflowLoopBodyNode,
     connectWorkflowLoopBodyNodes, removeWorkflowLoopBodyEdge, setWorkflowLoopBodyViewport,
     bindWorkflowAgentActionReusableTool, unbindWorkflowAgentActionReusableTool,
-    appendWorkflowTaskToolStep,
+    appendWorkflowTaskToolStep, saveTaskToolStepToReusableTools,
     bindWorkflowAgentActionKnowledgeSpace, unbindWorkflowAgentActionKnowledgeSpace,
   }
 })

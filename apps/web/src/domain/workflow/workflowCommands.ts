@@ -81,6 +81,22 @@ export function removeNode(graph: WorkflowGraph, nodeId: UUID): WorkflowCommandR
   return finalize(candidate)
 }
 
+export function renameNode(graph: WorkflowGraph, nodeId: UUID, name: string): WorkflowCommandResult<WorkflowGraph> {
+  const invalid = sourceFailure<WorkflowGraph>(graph)
+  if (invalid) return invalid
+  const index = graph.nodes.findIndex((node) => node.id === nodeId)
+  const node = graph.nodes[index]
+  if (!node) return failure({ code: 'NODE_NOT_FOUND', nodeId })
+  if (isBoundaryNode(node)) return failure({ code: 'BOUNDARY_NODE_IMMUTABLE', nodeId })
+  const nextName = name.trim()
+  if (!nextName) return failure({ code: 'INVALID_NODE_CONFIG', nodeId })
+  const candidate = structuredClone(graph)
+  const candidateNode = candidate.nodes[index]
+  if (!candidateNode) return failure({ code: 'NODE_NOT_FOUND', nodeId })
+  candidateNode.name = nextName
+  return finalize(candidate)
+}
+
 export function removeEdge(graph: WorkflowGraph, edgeId: UUID): WorkflowCommandResult<WorkflowGraph> {
   const invalid = sourceFailure<WorkflowGraph>(graph)
   if (invalid) return invalid

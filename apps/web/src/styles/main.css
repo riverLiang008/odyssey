@@ -1,5 +1,6 @@
 @import '../features/journey-editor/journey-editor.css';
 @import '../features/workflow-editor/workflow-editor.css';
+@import '../features/knowledge-space/knowledge-space.css';
 
 :root {
   color: #17202a;

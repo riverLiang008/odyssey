@@ -1,7 +1,7 @@
 import { shallowMount } from '@vue/test-utils'
 import type { NodeProps } from '@vue-flow/core'
 import { describe, expect, it } from 'vitest'
-import { uuidSchema, type AgentActionNode, type BranchNode, type LoopNode, type TaskNode, type UUID, type WorkflowNode } from '@odyssey/schemas'
+import { uuidSchema, type AgentActionNode, type BranchNode, type KnowledgeSpaceSummary, type LoopNode, type TaskNode, type UUID, type WorkflowNode } from '@odyssey/schemas'
 import type { WorkflowCanvasNodeData } from '@/canvas/workflow'
 import WorkflowNodeRenderer from './WorkflowNodeRenderer.vue'
 
@@ -19,6 +19,19 @@ const node: AgentActionNode = {
     knowledgeSpaceIds: [id(2)],
     reusableToolIds: [id(3), id(4)],
   },
+}
+const knowledgeSpace: KnowledgeSpaceSummary = {
+  id: id(2),
+  name: 'Product knowledge',
+  description: null,
+  category: { id: id(20), name: 'Research', colorToken: null, sortOrder: 0, isDefault: true },
+  lifecycleStatus: 'ready',
+  graphStatus: 'healthy',
+  fileCount: 2,
+  knowledgeFamilyCount: 1,
+  openIssueCount: 0,
+  createdAt: '2026-10-01T00:00:00.000Z',
+  updatedAt: '2026-10-02T00:00:00.000Z',
 }
 
 function rendererProps(nodeInput: WorkflowNode, configureExpanded: boolean): NodeProps<WorkflowCanvasNodeData> & { configureExpanded: boolean } {
@@ -50,10 +63,10 @@ describe('WorkflowNodeRenderer', () => {
       { id: id(3), name: 'Web Search', kind: 'web_search', config: {} },
       { id: id(4), name: 'Read File', kind: 'read_file', config: {} },
     ] as never
-    const wrapper = shallowMount(WorkflowNodeRenderer, { props: { ...rendererProps(node, true), tools } })
+    const wrapper = shallowMount(WorkflowNodeRenderer, { props: { ...rendererProps(node, true), tools, knowledgeSpaces: [knowledgeSpace] } })
     expect(wrapper.get<HTMLInputElement>(`#goal-${node.id}`).element.value).toBe('Check the result')
-    expect(wrapper.get<HTMLSelectElement>(`#model-${node.id}`).element.value).toBe('gpt-5')
-    expect(wrapper.get('.node-config-preview').text()).toContain('1 linked')
+    expect(wrapper.get(`#model-${node.id}`).text()).toContain('gpt-5')
+    expect(wrapper.get('.node-config-preview').text()).toContain('Product knowledge')
     expect(wrapper.get('.node-config-preview').text()).toContain('Web Search')
     expect(wrapper.get('.node-config-preview').text()).toContain('Read File')
   })
@@ -64,7 +77,9 @@ describe('WorkflowNodeRenderer', () => {
     await wrapper.get('.node-name-editor button').trigger('click')
     await wrapper.get(`#name-${node.id}`).setValue('Research and synthesize')
     await wrapper.get(`#name-${node.id}`).trigger('blur')
-    await wrapper.get(`#model-${node.id}`).setValue('gpt-4.1')
+    await wrapper.get(`#model-${node.id}`).trigger('click')
+    const modelOptions = wrapper.findAll('[role="option"]')
+    await modelOptions.find((option) => option.text().includes('gpt-4.1'))?.trigger('click')
     await wrapper.get(`#goal-${node.id}`).setValue('Create a concise brief')
     expect(wrapper.emitted('updateAgentAction')).toEqual([
       [node.id, { name: 'Research and synthesize', model: 'gpt-5', goal: 'Check the result' }],
@@ -94,10 +109,80 @@ describe('WorkflowNodeRenderer', () => {
     expect(shallowMount(WorkflowNodeRenderer, { props: rendererProps(loop, true) }).get('.node-config-loop').text()).toContain('3')
   })
 
+  it('keeps a visible drop affordance after a Task already has a Tool step', () => {
+    const task: TaskNode = {
+      id: id(40),
+      type: 'task',
+      name: 'Publish',
+      config: {
+        localVariables: [],
+        steps: [{
+          id: id(41),
+          kind: 'script_execution',
+          label: 'Prepare result',
+          configuration: { language: 'javascript', script: 'return 1' },
+          outputMapping: null,
+          failureBehavior: { kind: 'fail_task' },
+        }],
+      },
+    }
+    const wrapper = shallowMount(WorkflowNodeRenderer, { props: rendererProps(task, true) })
+
+    expect(wrapper.findAll('.task-tool-step')).toHaveLength(1)
+    expect(wrapper.get('.task-tool-drop-zone').text()).toContain('add another step')
+    expect(wrapper.get('.node-config-task').attributes('data-workflow-resource-drop-target')).toBe('task-tool-sequence')
+  })
+
+  it('emits a Task Tool step context-menu intent', async () => {
+    const task: TaskNode = {
+      id: id(42), type: 'task', name: 'Publish', config: { localVariables: [], steps: [{
+        id: id(43), kind: 'script_execution', label: 'Prepare result', configuration: { language: 'javascript', script: 'return 1' }, outputMapping: null, failureBehavior: { kind: 'fail_task' },
+      }] },
+    }
+    const wrapper = shallowMount(WorkflowNodeRenderer, { props: rendererProps(task, true) })
+    await wrapper.get('.task-tool-step-open').trigger('contextmenu', { clientX: 320, clientY: 180 })
+    expect(wrapper.emitted('toolStepContextMenu')).toEqual([[task.id, id(43), { x: 320, y: 180 }]])
+  })
+
+  it('emits a stable-identity reorder intent when a Task step is dragged', async () => {
+    const first = { id: id(44), kind: 'script_execution' as const, label: 'First', configuration: { language: 'javascript' as const, script: 'return 1' }, outputMapping: null, failureBehavior: { kind: 'fail_task' as const } }
+    const second = { ...first, id: id(45), label: 'Second' }
+    const task: TaskNode = { id: id(46), type: 'task', name: 'Publish', config: { localVariables: [], steps: [first, second] } }
+    const wrapper = shallowMount(WorkflowNodeRenderer, { props: rendererProps(task, true) })
+    const transfer = { effectAllowed: '', dropEffect: '', setData: () => undefined }
+    const rows = wrapper.findAll('.task-tool-step')
+    await rows[0]!.get('[aria-label="Drag to reorder step"]').trigger('dragstart', { dataTransfer: transfer })
+    await rows[1]!.trigger('dragover', { dataTransfer: transfer, clientY: 10 })
+    await rows[1]!.trigger('drop', { dataTransfer: transfer, clientY: 10 })
+    expect(wrapper.emitted('reorderTool')).toEqual([[task.id, first.id, 1]])
+  })
+
+  it('edits Task and Branch names inline', async () => {
+    const task: TaskNode = { id: id(30), type: 'task', name: 'New Task', config: { localVariables: [], steps: [] } }
+    const taskWrapper = shallowMount(WorkflowNodeRenderer, { props: rendererProps(task, true) })
+    expect(taskWrapper.get('.node-name-editor button').text()).toBe('TASK · New Task')
+    await taskWrapper.get('.node-name-editor button').trigger('click')
+    await taskWrapper.get(`#name-${task.id}`).setValue('Publish brief')
+    await taskWrapper.get(`#name-${task.id}`).trigger('blur')
+    expect(taskWrapper.emitted('updateNodeName')).toEqual([[task.id, 'Publish brief']])
+
+    const branch: BranchNode = { id: id(31), type: 'branch', name: 'New Branch', config: { cases: [], defaultCase: { id: id(32), label: 'Default' } } }
+    const branchWrapper = shallowMount(WorkflowNodeRenderer, { props: rendererProps(branch, true) })
+    expect(branchWrapper.get('.node-name-editor button').text()).toBe('BRANCH · New Branch')
+    await branchWrapper.get('.node-name-editor button').trigger('click')
+    await branchWrapper.get(`#name-${branch.id}`).setValue('Quality gate')
+    await branchWrapper.get(`#name-${branch.id}`).trigger('blur')
+    expect(branchWrapper.emitted('updateNodeName')).toEqual([[branch.id, 'Quality gate']])
+  })
+
   it('exposes typed drop targets for Canvas-level resource drop coordination', () => {
     const action = shallowMount(WorkflowNodeRenderer, { props: rendererProps({ ...node, config: { ...node.config, reusableToolIds: [] } }, true) })
     expect(action.get('.is-toolbox').attributes()).toMatchObject({
       'data-workflow-resource-drop-target': 'agent-action-tools',
+      'data-workflow-node-id': node.id,
+    })
+    expect(action.get('.is-knowledge-spaces').attributes()).toMatchObject({
+      'data-workflow-resource-drop-target': 'agent-action-knowledge-spaces',
       'data-workflow-node-id': node.id,
     })
 
@@ -107,6 +192,33 @@ describe('WorkflowNodeRenderer', () => {
       'data-workflow-resource-drop-target': 'task-tool-sequence',
       'data-workflow-node-id': task.id,
     })
+  })
+
+  it('consumes a Knowledge Space drop at the Knowledge Spaces boundary', async () => {
+    const actionWithoutKnowledge = { ...node, config: { ...node.config, knowledgeSpaceIds: [] } }
+    const wrapper = shallowMount(WorkflowNodeRenderer, {
+      props: {
+        ...rendererProps(actionWithoutKnowledge, true),
+        activeResourceDrag: { kind: 'knowledge-space', resourceId: knowledgeSpace.id },
+      },
+    })
+    const target = wrapper.get('.is-knowledge-spaces')
+    await target.trigger('dragenter')
+    await target.trigger('drop')
+    expect(wrapper.emitted('resourceEnter')?.[0]?.[1]).toEqual({ kind: 'agent-action-knowledge-spaces', nodeId: node.id })
+    expect(wrapper.emitted('resourceDrop')?.[0]).toEqual([
+      { kind: 'knowledge-space', resourceId: knowledgeSpace.id },
+      { kind: 'agent-action-knowledge-spaces', nodeId: node.id },
+    ])
+  })
+
+  it('renders and removes a bound Knowledge Space chip', async () => {
+    const wrapper = shallowMount(WorkflowNodeRenderer, {
+      props: { ...rendererProps(node, true), knowledgeSpaces: [knowledgeSpace] },
+    })
+    expect(wrapper.get('.knowledge-space-chip').text()).toContain('Product knowledge')
+    await wrapper.get('.knowledge-space-chip button').trigger('click')
+    expect(wrapper.emitted('unbindKnowledgeSpace')).toEqual([[node.id, knowledgeSpace.id]])
   })
 
   it('consumes a Tool drop at the Toolbox boundary', async () => {
@@ -132,10 +244,10 @@ describe('WorkflowNodeRenderer', () => {
     const wrapper = shallowMount(WorkflowNodeRenderer, {
       props: { ...rendererProps(initialNode, true), tools: [tool] },
     })
-    expect(wrapper.find('.tool-chip').exists()).toBe(false)
+    expect(wrapper.find('.is-toolbox .tool-chip').exists()).toBe(false)
     await wrapper.setProps({
       data: { node: { ...initialNode, config: { ...initialNode.config, reusableToolIds: [id(4)] } }, branchHandles: [] },
     })
-    expect(wrapper.get('.tool-chip').text()).toContain('Read File')
+    expect(wrapper.get('.is-toolbox .tool-chip').text()).toContain('Read File')
   })
 })

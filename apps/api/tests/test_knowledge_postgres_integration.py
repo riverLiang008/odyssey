@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -9,6 +10,9 @@ from sqlalchemy import delete, select
 from odyssey_api.bootstrap import bootstrap_builtin_tool_definitions
 from odyssey_api.db.models import (
     AgentWorkflow,
+    KnowledgeFolder,
+    KnowledgeResource,
+    KnowledgeResourceArtifact,
     KnowledgeSpace,
     KnowledgeSpaceCategory,
     OdyJourney,
@@ -28,6 +32,54 @@ from odyssey_api.journeys.service import (
 )
 from odyssey_api.main import create_app
 from odyssey_api.settings import Settings
+from odyssey_api.storage.base import InspectedObject, PresignedUpload, StoredObject
+from odyssey_api.storage.dependencies import get_object_storage
+
+
+class FakeUploadStorage:
+    provider = "minio"
+    bucket = "test-knowledge"
+
+    def __init__(self) -> None:
+        self.prepared: dict[str, tuple[str, bytes]] = {}
+
+    async def ensure_bucket(self) -> None:
+        return None
+
+    async def create_upload_url(
+        self, object_key: str, content_type: str, expires_in: timedelta
+    ) -> PresignedUpload:
+        content = b"hello knowledge"
+        self.prepared[object_key] = (content_type, content)
+        return PresignedUpload(
+            url=f"http://objects.test/{object_key}",
+            method="PUT",
+            required_headers={"Content-Type": content_type},
+        )
+
+    async def inspect(self, object_key: str) -> InspectedObject:
+        content_type, content = self.prepared[object_key]
+        return InspectedObject(
+            size_bytes=len(content),
+            content_type=content_type,
+            sha256=hashlib.sha256(content).digest(),
+        )
+
+    async def create_download_url(self, object_key: str, expires_in: timedelta) -> str:
+        return f"http://objects.test/{object_key}?expires={int(expires_in.total_seconds())}"
+
+    async def delete(self, object_key: str) -> None:
+        self.prepared.pop(object_key, None)
+
+    async def upload(self, object_key: str, content, content_type: str) -> StoredObject:
+        body = content.read()
+        self.prepared[object_key] = (content_type, body)
+        return StoredObject(
+            bucket=self.bucket,
+            object_key=object_key,
+            size_bytes=len(body),
+            content_type=content_type,
+        )
 
 
 async def _seed_spaces(
@@ -168,6 +220,447 @@ async def test_inventory_http_pagination_search_order_and_workspace_total() -> N
         assert underscore.json()["items"][0]["id"] == str(ids[1])
         assert invalid.status_code == 422
         assert "workspaceId" not in str(body)
+    finally:
+        await _cleanup([workspace_id, other_workspace_id], category_ids)
+
+
+@pytest.mark.integration
+async def test_create_and_load_knowledge_space_with_root_and_workspace_scope() -> None:
+    workspace_id, other_workspace_id = uuid4(), uuid4()
+    _, _, category_ids = await _seed_spaces(workspace_id, other_workspace_id)
+    created_id: UUID | None = None
+    try:
+        app = create_app()
+        app.dependency_overrides[get_current_workspace] = lambda: CurrentWorkspace(workspace_id)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            created = await client.post(
+                "/api/v1/knowledge-spaces",
+                json={
+                    "name": "Acceptance Knowledge",
+                    "description": "  Persisted detail  ",
+                    "categoryId": str(category_ids[0]),
+                },
+            )
+            assert created.status_code == 201
+            body = created.json()
+            created_id = UUID(body["id"])
+            assert body["name"] == "Acceptance Knowledge"
+            assert body["description"] == "Persisted detail"
+            assert body["category"]["id"] == str(category_ids[0])
+            assert body["revision"] == 1
+            assert body["graphStatus"] == "not_indexed"
+            assert body["fileCount"] == 0
+
+            tree = await client.get(f"/api/v1/knowledge-spaces/{created_id}/file-tree")
+            assert tree.status_code == 200
+            assert tree.json()["resources"] == []
+            assert tree.json()["folders"] == [
+                {
+                    "id": body["rootFolderId"],
+                    "knowledgeSpaceId": body["id"],
+                    "parentFolderId": None,
+                    "name": body["name"],
+                    "sortOrder": 0,
+                    "createdAt": body["createdAt"],
+                    "updatedAt": body["createdAt"],
+                }
+            ]
+
+            graph = await client.get(f"/api/v1/knowledge-spaces/{created_id}/graph")
+            assert graph.status_code == 200
+            assert graph.json() == {
+                "knowledgeSpaceId": body["id"],
+                "status": "not_indexed",
+                "generatedAt": None,
+                "nodes": [],
+                "edges": [],
+                "families": [],
+                "issues": [],
+            }
+
+            folder = await client.post(
+                f"/api/v1/knowledge-spaces/{created_id}/folders",
+                json={
+                    "expectedRevision": 1,
+                    "parentFolderId": body["rootFolderId"],
+                    "name": "Sources",
+                },
+            )
+            assert folder.status_code == 201
+            assert folder.json()["folder"]["name"] == "Sources"
+            assert folder.json()["knowledgeSpaceRevision"] == 2
+
+            stale_folder = await client.post(
+                f"/api/v1/knowledge-spaces/{created_id}/folders",
+                json={
+                    "expectedRevision": 1,
+                    "parentFolderId": body["rootFolderId"],
+                    "name": "Stale",
+                },
+            )
+            assert stale_folder.status_code == 409
+            assert stale_folder.json()["error"]["code"] == "REVISION_CONFLICT"
+
+            loaded = await client.get(f"/api/v1/knowledge-spaces/{created_id}")
+            assert loaded.status_code == 200
+            assert loaded.json()["revision"] == 2
+
+        async with async_session_factory() as session:
+            roots = list(
+                (
+                    await session.scalars(
+                        select(KnowledgeFolder).where(
+                            KnowledgeFolder.knowledge_space_id == created_id,
+                            KnowledgeFolder.parent_folder_id.is_(None),
+                        )
+                    )
+                ).all()
+            )
+            assert len(roots) == 1
+            assert str(roots[0].id) == body["rootFolderId"]
+
+        app.dependency_overrides[get_current_workspace] = lambda: CurrentWorkspace(
+            other_workspace_id
+        )
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            hidden = await client.get(f"/api/v1/knowledge-spaces/{created_id}")
+            hidden_graph = await client.get(f"/api/v1/knowledge-spaces/{created_id}/graph")
+        assert hidden.status_code == 404
+        assert hidden.json() == {"error": {"code": "NOT_FOUND", "details": {}}}
+        assert hidden_graph.status_code == 404
+        assert hidden_graph.json() == {"error": {"code": "NOT_FOUND", "details": {}}}
+    finally:
+        await _cleanup([workspace_id, other_workspace_id], category_ids)
+
+
+@pytest.mark.integration
+async def test_staged_upload_finalize_is_persisted_revisioned_and_idempotent() -> None:
+    workspace_id, other_workspace_id = uuid4(), uuid4()
+    _, _, category_ids = await _seed_spaces(workspace_id, other_workspace_id)
+    storage = FakeUploadStorage()
+    try:
+        app = create_app()
+        app.dependency_overrides[get_current_workspace] = lambda: CurrentWorkspace(workspace_id)
+        app.dependency_overrides[get_object_storage] = lambda: storage
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            created = await client.post(
+                "/api/v1/knowledge-spaces",
+                json={"name": "Upload Space", "categoryId": str(category_ids[0])},
+            )
+            assert created.status_code == 201
+            detail = created.json()
+            space_id = detail["id"]
+            prepared = await client.post(
+                f"/api/v1/knowledge-spaces/{space_id}/uploads/prepare",
+                json={
+                    "folderId": detail["rootFolderId"],
+                    "fileName": "notes.md",
+                    "contentType": "text/markdown",
+                    "sizeBytes": len(b"hello knowledge"),
+                },
+            )
+            assert prepared.status_code == 201
+            target = prepared.json()
+            assert target["method"] == "PUT"
+            assert target["requiredHeaders"] == {"Content-Type": "text/markdown"}
+
+            completed = await client.post(
+                f"/api/v1/knowledge-spaces/{space_id}/uploads/complete",
+                json={"artifactId": target["artifactId"], "expectedRevision": 1},
+            )
+            assert completed.status_code == 200
+            result = completed.json()
+            assert result["knowledgeSpaceRevision"] == 2
+            assert result["resource"] == {
+                "id": target["resourceId"],
+                "knowledgeSpaceId": space_id,
+                "folderId": detail["rootFolderId"],
+                "name": "notes.md",
+                "status": "indexing",
+                "mimeType": "text/markdown",
+                "sizeBytes": len(b"hello knowledge"),
+                "createdAt": result["resource"]["createdAt"],
+                "updatedAt": result["resource"]["updatedAt"],
+            }
+            repeated = await client.post(
+                f"/api/v1/knowledge-spaces/{space_id}/uploads/complete",
+                json={"artifactId": target["artifactId"], "expectedRevision": 1},
+            )
+            assert repeated.status_code == 200
+            assert repeated.json()["knowledgeSpaceRevision"] == 2
+            tree = await client.get(f"/api/v1/knowledge-spaces/{space_id}/file-tree")
+            assert tree.status_code == 200
+            assert tree.json()["resources"] == [result["resource"]]
+            document = await client.get(
+                f"/api/v1/knowledge-spaces/{space_id}/resources/{target['resourceId']}"
+            )
+            assert document.status_code == 200
+            document_body = document.json()
+            assert document_body["name"] == "notes.md"
+            assert document_body["checksumSha256"] == hashlib.sha256(
+                b"hello knowledge"
+            ).hexdigest()
+            assert document_body["downloadUrl"].startswith("http://objects.test/")
+            assert "objectKey" not in document_body
+
+            mismatched = await client.post(
+                f"/api/v1/knowledge-spaces/{space_id}/uploads/prepare",
+                json={
+                    "folderId": detail["rootFolderId"],
+                    "fileName": "wrong-size.md",
+                    "contentType": "text/markdown",
+                    "sizeBytes": 14,
+                },
+            )
+            assert mismatched.status_code == 201
+            rejected = await client.post(
+                f"/api/v1/knowledge-spaces/{space_id}/uploads/complete",
+                json={
+                    "artifactId": mismatched.json()["artifactId"],
+                    "expectedRevision": 2,
+                },
+            )
+            assert rejected.status_code == 409
+            assert rejected.json()["error"] == {
+                "code": "STATE_CONFLICT",
+                "details": {"reason": "UPLOAD_SIZE_MISMATCH"},
+            }
+            unchanged = await client.get(f"/api/v1/knowledge-spaces/{space_id}/file-tree")
+            assert unchanged.json()["revision"] == 2
+            assert unchanged.json()["resources"] == [result["resource"]]
+
+            original_object_key = next(iter(storage.prepared))
+            replacement_content = "# Updated\n\nEdited in Odyssey."
+            updated = await client.put(
+                f"/api/v1/knowledge-spaces/{space_id}/resources/{target['resourceId']}/content",
+                json={"expectedRevision": 2, "content": replacement_content},
+            )
+            assert updated.status_code == 200
+            updated_body = updated.json()
+            assert updated_body["knowledgeSpaceRevision"] == 3
+            assert updated_body["resource"]["sizeBytes"] == len(replacement_content.encode())
+            assert original_object_key not in storage.prepared
+            assert any(
+                content == replacement_content.encode()
+                for _, content in storage.prepared.values()
+            )
+
+        async with async_session_factory() as session:
+            resource = await session.get(KnowledgeResource, UUID(target["resourceId"]))
+            artifact = await session.get(KnowledgeResourceArtifact, UUID(target["artifactId"]))
+            assert resource is not None and resource.status == "indexing"
+            assert resource.checksum == hashlib.sha256(replacement_content.encode()).digest()
+            assert artifact is not None and artifact.status == "active"
+            assert artifact.checksum == resource.checksum
+
+        app.dependency_overrides[get_current_workspace] = lambda: CurrentWorkspace(
+            other_workspace_id
+        )
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            hidden = await client.post(
+                f"/api/v1/knowledge-spaces/{space_id}/uploads/complete",
+                json={"artifactId": target["artifactId"], "expectedRevision": 2},
+            )
+            hidden_document = await client.get(
+                f"/api/v1/knowledge-spaces/{space_id}/resources/{target['resourceId']}"
+            )
+        assert hidden.status_code == 404
+        assert hidden_document.status_code == 404
+    finally:
+        await _cleanup([workspace_id, other_workspace_id], category_ids)
+
+
+@pytest.mark.integration
+async def test_move_knowledge_resource_is_persisted_revisioned_and_workspace_scoped() -> None:
+    workspace_id, other_workspace_id = uuid4(), uuid4()
+    _, _, category_ids = await _seed_spaces(workspace_id, other_workspace_id)
+    storage = FakeUploadStorage()
+    try:
+        app = create_app()
+        app.dependency_overrides[get_current_workspace] = lambda: CurrentWorkspace(workspace_id)
+        app.dependency_overrides[get_object_storage] = lambda: storage
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            created = await client.post(
+                "/api/v1/knowledge-spaces",
+                json={"name": "Move Space", "categoryId": str(category_ids[0])},
+            )
+            detail = created.json()
+            space_id = detail["id"]
+            prepared = await client.post(
+                f"/api/v1/knowledge-spaces/{space_id}/uploads/prepare",
+                json={
+                    "folderId": detail["rootFolderId"],
+                    "fileName": "move.md",
+                    "contentType": "text/markdown",
+                    "sizeBytes": len(b"hello knowledge"),
+                },
+            )
+            completed = await client.post(
+                f"/api/v1/knowledge-spaces/{space_id}/uploads/complete",
+                json={"artifactId": prepared.json()["artifactId"], "expectedRevision": 1},
+            )
+            resource_id = completed.json()["resource"]["id"]
+            folder = await client.post(
+                f"/api/v1/knowledge-spaces/{space_id}/folders",
+                json={
+                    "expectedRevision": 2,
+                    "parentFolderId": detail["rootFolderId"],
+                    "name": "Target",
+                },
+            )
+            target_folder_id = folder.json()["folder"]["id"]
+            moved = await client.post(
+                f"/api/v1/knowledge-spaces/{space_id}/resources/{resource_id}/commands/move",
+                json={"targetFolderId": target_folder_id, "expectedRevision": 3},
+            )
+            assert moved.status_code == 200
+            assert moved.json()["knowledgeSpaceRevision"] == 4
+            assert moved.json()["resource"]["folderId"] == target_folder_id
+            tree = await client.get(f"/api/v1/knowledge-spaces/{space_id}/file-tree")
+            assert tree.json()["revision"] == 4
+            assert tree.json()["resources"][0]["folderId"] == target_folder_id
+
+            stale = await client.post(
+                f"/api/v1/knowledge-spaces/{space_id}/resources/{resource_id}/commands/move",
+                json={"targetFolderId": detail["rootFolderId"], "expectedRevision": 3},
+            )
+            assert stale.status_code == 409
+            assert stale.json()["error"]["code"] == "REVISION_CONFLICT"
+
+            storage.prepared.clear()
+            deleted = await client.delete(
+                f"/api/v1/knowledge-spaces/{space_id}/resources/{resource_id}",
+                headers={"If-Match": '"4"'},
+            )
+            assert deleted.status_code == 200
+            assert deleted.json() == {
+                "resourceId": resource_id,
+                "knowledgeSpaceRevision": 5,
+            }
+            tree = await client.get(f"/api/v1/knowledge-spaces/{space_id}/file-tree")
+            assert tree.json()["revision"] == 5
+            assert tree.json()["resources"] == []
+
+        app.dependency_overrides[get_current_workspace] = lambda: CurrentWorkspace(
+            other_workspace_id
+        )
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            hidden = await client.post(
+                f"/api/v1/knowledge-spaces/{space_id}/resources/{resource_id}/commands/move",
+                json={"targetFolderId": detail["rootFolderId"], "expectedRevision": 5},
+            )
+        assert hidden.status_code == 404
+    finally:
+        await _cleanup([workspace_id, other_workspace_id], category_ids)
+
+
+@pytest.mark.integration
+async def test_knowledge_space_mutations_use_cas_archive_visibility_and_protected_delete() -> None:
+    workspace_id, other_workspace_id = uuid4(), uuid4()
+    _, _, category_ids = await _seed_spaces(workspace_id, other_workspace_id)
+    try:
+        app = create_app()
+        app.dependency_overrides[get_current_workspace] = lambda: CurrentWorkspace(workspace_id)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            created = await client.post(
+                "/api/v1/knowledge-spaces",
+                json={"name": "Mutable Space", "categoryId": str(category_ids[0])},
+            )
+            assert created.status_code == 201
+            space_id = created.json()["id"]
+
+            updated = await client.put(
+                f"/api/v1/knowledge-spaces/{space_id}",
+                json={
+                    "expectedRevision": 1,
+                    "name": "Updated Space",
+                    "description": "  persisted  ",
+                    "categoryId": str(category_ids[0]),
+                },
+            )
+            assert updated.status_code == 200
+            assert updated.json()["revision"] == 2
+            assert updated.json()["description"] == "persisted"
+
+            stale = await client.put(
+                f"/api/v1/knowledge-spaces/{space_id}",
+                json={
+                    "expectedRevision": 1,
+                    "name": "Stale write",
+                    "description": None,
+                    "categoryId": str(category_ids[0]),
+                },
+            )
+            assert stale.status_code == 409
+            assert stale.json()["error"] == {
+                "code": "REVISION_CONFLICT",
+                "details": {"expectedRevision": 1, "currentRevision": 2},
+            }
+
+            active_delete = await client.delete(
+                f"/api/v1/knowledge-spaces/{space_id}", headers={"If-Match": '"2"'}
+            )
+            assert active_delete.status_code == 409
+            assert active_delete.json()["error"]["details"]["reason"] == (
+                "KNOWLEDGE_SPACE_MUST_BE_ARCHIVED"
+            )
+
+            archived = await client.post(
+                f"/api/v1/knowledge-spaces/{space_id}/commands/archive",
+                json={"expectedRevision": 2},
+            )
+            assert archived.status_code == 200
+            assert archived.json()["lifecycleStatus"] == "archived"
+            assert archived.json()["revision"] == 3
+
+            default_list = await client.get("/api/v1/knowledge-spaces")
+            archived_list = await client.get(
+                "/api/v1/knowledge-spaces", params={"includeArchived": "true"}
+            )
+            assert space_id not in {item["id"] for item in default_list.json()["items"]}
+            assert space_id in {item["id"] for item in archived_list.json()["items"]}
+
+            restored = await client.post(
+                f"/api/v1/knowledge-spaces/{space_id}/commands/unarchive",
+                json={"expectedRevision": 3},
+            )
+            assert restored.status_code == 200
+            assert restored.json()["lifecycleStatus"] == "ready"
+            assert restored.json()["revision"] == 4
+
+            rearchived = await client.post(
+                f"/api/v1/knowledge-spaces/{space_id}/commands/archive",
+                json={"expectedRevision": 4},
+            )
+            assert rearchived.status_code == 200
+
+        app.dependency_overrides[get_current_workspace] = lambda: CurrentWorkspace(
+            other_workspace_id
+        )
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            hidden_update = await client.put(
+                f"/api/v1/knowledge-spaces/{space_id}",
+                json={
+                    "expectedRevision": 5,
+                    "name": "Foreign update",
+                    "description": None,
+                    "categoryId": str(category_ids[1]),
+                },
+            )
+            hidden_delete = await client.delete(
+                f"/api/v1/knowledge-spaces/{space_id}", headers={"If-Match": '"5"'}
+            )
+            assert hidden_update.status_code == 404
+            assert hidden_delete.status_code == 404
+
+        app.dependency_overrides[get_current_workspace] = lambda: CurrentWorkspace(workspace_id)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            deleted = await client.delete(
+                f"/api/v1/knowledge-spaces/{space_id}", headers={"If-Match": '"5"'}
+            )
+            assert deleted.status_code == 204
+            missing = await client.get(f"/api/v1/knowledge-spaces/{space_id}")
+            assert missing.status_code == 404
     finally:
         await _cleanup([workspace_id, other_workspace_id], category_ids)
 
@@ -525,7 +1018,6 @@ async def test_concurrent_workflow_save_has_one_cas_winner() -> None:
 
         async def attempt() -> object:
             request = _workflow_request(revision=1, space_ids=ids, reusable_tool_id=uuid4())
-            request.reusable_tools = []
             async with async_session_factory() as session:
                 try:
                     return await save_agent_workflow(

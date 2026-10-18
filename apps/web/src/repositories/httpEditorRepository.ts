@@ -14,6 +14,30 @@ import {
   journeyEditorDocumentSchema,
   journeySummaryListSchema,
   knowledgeSpaceSummaryPageSchema,
+  knowledgeSpaceCategorySummarySchema,
+  knowledgeSpaceDetailSchema,
+  createKnowledgeSpaceCategoryInputSchema,
+  createKnowledgeSpaceInputSchema,
+  updateKnowledgeSpaceInputSchema,
+  knowledgeSpaceRevisionCommandSchema,
+  deleteKnowledgeSpaceSuccessSchema,
+  knowledgeFileTreeSchema,
+  knowledgeGraphOverviewSchema,
+  validateKnowledgeGraphManifestRequestSchema,
+  validateKnowledgeGraphManifestResultSchema,
+  applyKnowledgeGraphManifestRequestSchema,
+  applyKnowledgeGraphManifestResultSchema,
+  knowledgeResourceDetailSchema,
+  createKnowledgeFolderInputSchema,
+  createKnowledgeFolderSuccessSchema,
+  moveKnowledgeResourceInputSchema,
+  moveKnowledgeResourceSuccessSchema,
+  deleteKnowledgeResourceInputSchema,
+  deleteKnowledgeResourceSuccessSchema,
+  updateKnowledgeResourceContentInputSchema,
+  updateKnowledgeResourceContentSuccessSchema,
+  completeKnowledgeUploadSuccessSchema,
+  prepareKnowledgeUploadSuccessSchema,
   removeOccupiedSlotInputSchema,
   removeOccupiedSlotSuccessSchema,
   removeGuardrailInputSchema,
@@ -38,6 +62,28 @@ import {
   type JourneyEditorDocument,
   type JourneySummary,
   type KnowledgeSpaceSummaryPage,
+  type KnowledgeSpaceCategorySummary,
+  type KnowledgeSpaceDetail,
+  type CreateKnowledgeSpaceCategoryInput,
+  type CreateKnowledgeSpaceInput,
+  type UpdateKnowledgeSpaceInput,
+  type KnowledgeSpaceRevisionCommand,
+  type DeleteKnowledgeSpaceSuccess,
+  type KnowledgeFileTree,
+  type KnowledgeGraphOverview,
+  type KnowledgeGraphManifest,
+  type ValidateKnowledgeGraphManifestResult,
+  type ApplyKnowledgeGraphManifestResult,
+  type KnowledgeResourceDetail,
+  type CreateKnowledgeFolderInput,
+  type CreateKnowledgeFolderSuccess,
+  type MoveKnowledgeResourceInput,
+  type MoveKnowledgeResourceSuccess,
+  type DeleteKnowledgeResourceInput,
+  type DeleteKnowledgeResourceSuccess,
+  type UpdateKnowledgeResourceContentInput,
+  type UpdateKnowledgeResourceContentSuccess,
+  type CompleteKnowledgeUploadSuccess,
   type RemoveOccupiedSlotInput,
   type RemoveOccupiedSlotSuccess,
   type RemoveGuardrailInput,
@@ -51,7 +97,7 @@ import {
   type SaveJourneySuccess,
   type UUID,
 } from '@odyssey/schemas'
-import type { OdysseyEditorRepository, RepositoryOperationOptions } from './editorRepository'
+import type { KnowledgeResourceInspection, OdysseyEditorRepository, RepositoryOperationOptions, UploadKnowledgeFileInput } from './editorRepository'
 import { consumeDevelopmentSaveFailure } from './developmentSaveFault'
 
 type FetchImplementation = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
@@ -63,6 +109,16 @@ export interface HttpEditorRepositoryOptions {
 }
 
 function failure<T>(error: RepositoryError): RepositoryResult<T> { return { ok: false, error } }
+
+function invalidRequest<T>(error: { issues: ReadonlyArray<{ path: PropertyKey[]; code: string }> }): RepositoryResult<T> {
+  return failure({
+    code: 'VALIDATION_FAILED',
+    issues: error.issues.map((issue) => ({
+      path: issue.path.filter((part): part is string | number => typeof part === 'string' || typeof part === 'number'),
+      code: issue.code,
+    })),
+  })
+}
 
 function normalizeApiError(status: number, candidate: unknown): RepositoryError {
   const parsed = apiErrorEnvelopeSchema.safeParse(candidate)
@@ -135,18 +191,227 @@ export class HttpEditorRepository implements OdysseyEditorRepository {
   }
 
   async listKnowledgeSpaces(
-    input: { query?: string; page?: number; pageSize?: number } = {},
+    input: { query?: string; page?: number; pageSize?: number; includeArchived?: boolean } = {},
     options?: RepositoryOperationOptions,
   ): Promise<RepositoryResult<KnowledgeSpaceSummaryPage>> {
     const parameters = new URLSearchParams()
     if (input.query !== undefined) parameters.set('query', input.query)
     if (input.page !== undefined) parameters.set('page', String(input.page))
     if (input.pageSize !== undefined) parameters.set('pageSize', String(input.pageSize))
+    if (input.includeArchived !== undefined) parameters.set('includeArchived', String(input.includeArchived))
     const suffix = parameters.size ? `?${parameters.toString()}` : ''
     const result = await this.#request(`/knowledge-spaces${suffix}`, { method: 'GET' }, options)
     if (!result.ok) return result
     const parsed = knowledgeSpaceSummaryPageSchema.safeParse(result.value)
     return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async listKnowledgeSpaceCategories(options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceCategorySummary[]>> {
+    const result = await this.#request('/knowledge-space-categories', { method: 'GET' }, options)
+    if (!result.ok) return result
+    const parsed = knowledgeSpaceCategorySummarySchema.array().safeParse(result.value)
+    return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async createKnowledgeSpaceCategory(input: CreateKnowledgeSpaceCategoryInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceCategorySummary>> {
+    const request = createKnowledgeSpaceCategoryInputSchema.safeParse(input)
+    if (!request.success) return invalidRequest(request.error)
+    const result = await this.#request('/knowledge-space-categories', this.#json('POST', request.data), options)
+    if (!result.ok) return result
+    const parsed = knowledgeSpaceCategorySummarySchema.safeParse(result.value)
+    return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async createKnowledgeSpace(input: CreateKnowledgeSpaceInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceDetail>> {
+    const request = createKnowledgeSpaceInputSchema.safeParse(input)
+    if (!request.success) return invalidRequest(request.error)
+    const result = await this.#request('/knowledge-spaces', this.#json('POST', request.data), options)
+    if (!result.ok) return result
+    const parsed = knowledgeSpaceDetailSchema.safeParse(result.value)
+    return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async loadKnowledgeSpace(knowledgeSpaceId: UUID, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceDetail>> {
+    const result = await this.#request(`/knowledge-spaces/${encodeURIComponent(knowledgeSpaceId)}`, { method: 'GET' }, options)
+    if (!result.ok) return result
+    const parsed = knowledgeSpaceDetailSchema.safeParse(result.value)
+    return parsed.success && parsed.data.id === knowledgeSpaceId
+      ? { ok: true, value: parsed.data }
+      : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async updateKnowledgeSpace(input: UpdateKnowledgeSpaceInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceDetail>> {
+    const request = updateKnowledgeSpaceInputSchema.safeParse(input)
+    if (!request.success) return invalidRequest(request.error)
+    const { knowledgeSpaceId, ...body } = request.data
+    const result = await this.#request(`/knowledge-spaces/${encodeURIComponent(knowledgeSpaceId)}`, this.#json('PUT', body), options)
+    if (!result.ok) return result
+    const parsed = knowledgeSpaceDetailSchema.safeParse(result.value)
+    return parsed.success && parsed.data.id === knowledgeSpaceId ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async archiveKnowledgeSpace(input: KnowledgeSpaceRevisionCommand, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceDetail>> {
+    return this.#setKnowledgeSpaceArchived(input, 'archive', options)
+  }
+
+  async unarchiveKnowledgeSpace(input: KnowledgeSpaceRevisionCommand, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceDetail>> {
+    return this.#setKnowledgeSpaceArchived(input, 'unarchive', options)
+  }
+
+  async #setKnowledgeSpaceArchived(input: KnowledgeSpaceRevisionCommand, command: 'archive' | 'unarchive', options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceDetail>> {
+    const request = knowledgeSpaceRevisionCommandSchema.safeParse(input)
+    if (!request.success) return invalidRequest(request.error)
+    const result = await this.#request(`/knowledge-spaces/${encodeURIComponent(request.data.knowledgeSpaceId)}/commands/${command}`, this.#json('POST', { expectedRevision: request.data.expectedRevision }), options)
+    if (!result.ok) return result
+    const parsed = knowledgeSpaceDetailSchema.safeParse(result.value)
+    return parsed.success && parsed.data.id === request.data.knowledgeSpaceId ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async deleteKnowledgeSpace(input: KnowledgeSpaceRevisionCommand, options?: RepositoryOperationOptions): Promise<RepositoryResult<DeleteKnowledgeSpaceSuccess>> {
+    const request = knowledgeSpaceRevisionCommandSchema.safeParse(input)
+    if (!request.success) return invalidRequest(request.error)
+    const result = await this.#request(`/knowledge-spaces/${encodeURIComponent(request.data.knowledgeSpaceId)}`, { method: 'DELETE', headers: { 'If-Match': `"${request.data.expectedRevision}"` } }, options)
+    if (!result.ok) return result
+    if (result.value !== null) return failure({ code: 'RESPONSE_INVALID' })
+    const parsed = deleteKnowledgeSpaceSuccessSchema.safeParse({ knowledgeSpaceId: request.data.knowledgeSpaceId })
+    return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async loadKnowledgeFileTree(knowledgeSpaceId: UUID, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeFileTree>> {
+    const result = await this.#request(`/knowledge-spaces/${encodeURIComponent(knowledgeSpaceId)}/file-tree`, { method: 'GET' }, options)
+    if (!result.ok) return result
+    const parsed = knowledgeFileTreeSchema.safeParse(result.value)
+    return parsed.success && parsed.data.knowledgeSpaceId === knowledgeSpaceId ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async loadKnowledgeGraph(knowledgeSpaceId: UUID, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeGraphOverview>> {
+    const result = await this.#request(`/knowledge-spaces/${encodeURIComponent(knowledgeSpaceId)}/graph`, { method: 'GET' }, options)
+    if (!result.ok) return result
+    const parsed = knowledgeGraphOverviewSchema.safeParse(result.value)
+    return parsed.success && parsed.data.knowledgeSpaceId === knowledgeSpaceId
+      ? { ok: true, value: parsed.data }
+      : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async validateKnowledgeGraphManifest(knowledgeSpaceId: UUID, expectedRevision: number, manifest: KnowledgeGraphManifest, options?: RepositoryOperationOptions): Promise<RepositoryResult<ValidateKnowledgeGraphManifestResult>> {
+    const request = validateKnowledgeGraphManifestRequestSchema.safeParse({ expectedRevision, manifest })
+    if (!request.success) return invalidRequest(request.error)
+    const result = await this.#request(`/knowledge-spaces/${encodeURIComponent(knowledgeSpaceId)}/graph-manifest/validate`, this.#json('POST', request.data), options)
+    if (!result.ok) return result
+    const parsed = validateKnowledgeGraphManifestResultSchema.safeParse(result.value)
+    return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async applyKnowledgeGraphManifest(knowledgeSpaceId: UUID, input: { expectedRevision: number; validationToken: string; manifestChecksum: string; manifest: KnowledgeGraphManifest }, options?: RepositoryOperationOptions): Promise<RepositoryResult<ApplyKnowledgeGraphManifestResult>> {
+    const request = applyKnowledgeGraphManifestRequestSchema.safeParse(input)
+    if (!request.success) return invalidRequest(request.error)
+    const result = await this.#request(`/knowledge-spaces/${encodeURIComponent(knowledgeSpaceId)}/graph-manifest/apply`, this.#json('POST', request.data), options)
+    if (!result.ok) return result
+    const parsed = applyKnowledgeGraphManifestResultSchema.safeParse(result.value)
+    return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async loadKnowledgeResource(knowledgeSpaceId: UUID, resourceId: UUID, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeResourceInspection>> {
+    const result = await this.#request(`/knowledge-spaces/${encodeURIComponent(knowledgeSpaceId)}/resources/${encodeURIComponent(resourceId)}`, { method: 'GET' }, options)
+    if (!result.ok) return result
+    const parsed = knowledgeResourceDetailSchema.safeParse(result.value)
+    if (!parsed.success || parsed.data.knowledgeSpaceId !== knowledgeSpaceId || parsed.data.id !== resourceId) return failure({ code: 'RESPONSE_INVALID' })
+    const detail: KnowledgeResourceDetail = parsed.data
+    if (!isTextPreviewType(detail.mimeType)) return { ok: true, value: { detail, preview: { type: 'external' } } }
+    try {
+      const response = await this.#fetch(detail.downloadUrl, { method: 'GET', signal: options?.signal })
+      if (!response.ok) return { ok: true, value: { detail, preview: { type: 'failed', error: { code: 'NETWORK_FAILED' } } } }
+      const content = await response.text()
+      const previewLimit = 200_000
+      return { ok: true, value: { detail, preview: { type: 'text', content: content.slice(0, previewLimit), truncated: content.length > previewLimit } } }
+    } catch (error) {
+      if (error instanceof globalThis.DOMException && error.name === 'AbortError') return failure({ code: 'ABORTED' })
+      return { ok: true, value: { detail, preview: { type: 'failed', error: { code: 'NETWORK_FAILED' } } } }
+    }
+  }
+
+  async createKnowledgeFolder(input: CreateKnowledgeFolderInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<CreateKnowledgeFolderSuccess>> {
+    const request = createKnowledgeFolderInputSchema.safeParse(input)
+    if (!request.success) return invalidRequest(request.error)
+    const { knowledgeSpaceId, ...body } = request.data
+    const result = await this.#request(`/knowledge-spaces/${encodeURIComponent(knowledgeSpaceId)}/folders`, this.#json('POST', body), options)
+    if (!result.ok) return result
+    const parsed = createKnowledgeFolderSuccessSchema.safeParse(result.value)
+    return parsed.success && parsed.data.folder.knowledgeSpaceId === knowledgeSpaceId ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async moveKnowledgeResource(input: MoveKnowledgeResourceInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<MoveKnowledgeResourceSuccess>> {
+    const request = moveKnowledgeResourceInputSchema.safeParse(input)
+    if (!request.success) return invalidRequest(request.error)
+    const { knowledgeSpaceId, resourceId, ...body } = request.data
+    const result = await this.#request(
+      `/knowledge-spaces/${encodeURIComponent(knowledgeSpaceId)}/resources/${encodeURIComponent(resourceId)}/commands/move`,
+      this.#json('POST', body),
+      options,
+    )
+    if (!result.ok) return result
+    const parsed = moveKnowledgeResourceSuccessSchema.safeParse(result.value)
+    return parsed.success && parsed.data.resource.knowledgeSpaceId === knowledgeSpaceId && parsed.data.resource.id === resourceId
+      ? { ok: true, value: parsed.data }
+      : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async deleteKnowledgeResource(input: DeleteKnowledgeResourceInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<DeleteKnowledgeResourceSuccess>> {
+    const request = deleteKnowledgeResourceInputSchema.safeParse(input)
+    if (!request.success) return invalidRequest(request.error)
+    const result = await this.#request(
+      `/knowledge-spaces/${encodeURIComponent(request.data.knowledgeSpaceId)}/resources/${encodeURIComponent(request.data.resourceId)}`,
+      { method: 'DELETE', headers: { 'If-Match': `"${request.data.expectedRevision}"` } },
+      options,
+    )
+    if (!result.ok) return result
+    const parsed = deleteKnowledgeResourceSuccessSchema.safeParse(result.value)
+    return parsed.success && parsed.data.resourceId === request.data.resourceId ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async updateKnowledgeResourceContent(input: UpdateKnowledgeResourceContentInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<UpdateKnowledgeResourceContentSuccess>> {
+    const request = updateKnowledgeResourceContentInputSchema.safeParse(input)
+    if (!request.success) return invalidRequest(request.error)
+    const { knowledgeSpaceId, resourceId, ...body } = request.data
+    const result = await this.#request(`/knowledge-spaces/${encodeURIComponent(knowledgeSpaceId)}/resources/${encodeURIComponent(resourceId)}/content`, this.#json('PUT', body), options)
+    if (!result.ok) return result
+    const parsed = updateKnowledgeResourceContentSuccessSchema.safeParse(result.value)
+    return parsed.success && parsed.data.resource.id === resourceId && parsed.data.resource.knowledgeSpaceId === knowledgeSpaceId
+      ? { ok: true, value: parsed.data }
+      : failure({ code: 'RESPONSE_INVALID' })
+  }
+
+  async uploadKnowledgeFile(input: UploadKnowledgeFileInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<CompleteKnowledgeUploadSuccess>> {
+    const contentType = input.file.type || inferKnowledgeFileContentType(input.file.name)
+    if (!contentType) return failure({ code: 'REQUEST_INVALID' })
+    const prepared = await this.#request(
+      `/knowledge-spaces/${encodeURIComponent(input.knowledgeSpaceId)}/uploads/prepare`,
+      this.#json('POST', { folderId: input.folderId, fileName: input.file.name, contentType, sizeBytes: input.file.size }),
+      options,
+    )
+    if (!prepared.ok) return prepared
+    const target = prepareKnowledgeUploadSuccessSchema.safeParse(prepared.value)
+    if (!target.success) return failure({ code: 'RESPONSE_INVALID' })
+    try {
+      const uploadResponse = await this.#fetch(target.data.uploadUrl, {
+        method: target.data.method,
+        headers: target.data.requiredHeaders,
+        body: input.file,
+        signal: options?.signal,
+      })
+      if (!uploadResponse.ok) return failure({ code: 'NETWORK_FAILED' })
+    } catch (error) {
+      if (error instanceof globalThis.DOMException && error.name === 'AbortError') return failure({ code: 'ABORTED' })
+      return failure({ code: 'NETWORK_FAILED' })
+    }
+    const completed = await this.#request(
+      `/knowledge-spaces/${encodeURIComponent(input.knowledgeSpaceId)}/uploads/complete`,
+      this.#json('POST', { artifactId: target.data.artifactId, expectedRevision: input.expectedRevision }),
+      options,
+    )
+    if (!completed.ok) return completed
+    const parsed = completeKnowledgeUploadSuccessSchema.safeParse(completed.value)
+    return parsed.success && parsed.data.resource.knowledgeSpaceId === input.knowledgeSpaceId ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
   }
 
   async createJourney(input: CreateJourneyInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<JourneyEditorDocument>> {
@@ -196,7 +461,7 @@ export class HttpEditorRepository implements OdysseyEditorRepository {
 
   async saveAgentWorkflow(input: SaveAgentWorkflowInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<SaveAgentWorkflowSuccess>> {
     const request = saveAgentWorkflowInputSchema.safeParse(input)
-    if (!request.success) return failure({ code: 'REQUEST_INVALID' })
+    if (!request.success) return invalidRequest(request.error)
     if (consumeDevelopmentSaveFailure()) return failure({ code: 'NETWORK_FAILED' })
     const { journeyId, agentId, ...body } = request.data
     const result = await this.#request(`/journeys/${encodeURIComponent(journeyId)}/agents/${encodeURIComponent(agentId)}`, this.#json('PUT', body), options)
@@ -287,4 +552,19 @@ export class HttpEditorRepository implements OdysseyEditorRepository {
       ? { ok: true, value: parsed.data }
       : failure({ code: 'RESPONSE_INVALID' })
   }
+}
+
+function inferKnowledgeFileContentType(fileName: string): string | undefined {
+  const extension = fileName.slice(fileName.lastIndexOf('.')).toLowerCase()
+  return {
+    '.json': 'application/json',
+    '.markdown': 'text/markdown',
+    '.md': 'text/markdown',
+    '.pdf': 'application/pdf',
+    '.txt': 'text/plain',
+  }[extension]
+}
+
+function isTextPreviewType(mimeType: string | null): boolean {
+  return mimeType === 'text/plain' || mimeType === 'text/markdown' || mimeType === 'application/json'
 }

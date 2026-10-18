@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     s3_access_key: str = "odyssey"
     s3_secret_key: str = "odyssey-local-secret"
     s3_bucket: str = "odyssey"
+    knowledge_upload_ttl_seconds: int = 900
+    knowledge_upload_max_bytes: int = 25 * 1024 * 1024
+    knowledge_manifest_token_secret: str = "odyssey-development-manifest-token-secret"
+    knowledge_manifest_token_ttl_seconds: int = 600
+    knowledge_manifest_import_enabled: bool = False
 
 
 @lru_cache

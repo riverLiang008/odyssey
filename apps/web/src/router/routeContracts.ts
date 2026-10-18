@@ -14,6 +14,18 @@ export interface AgentWorkflowRouteIdentity {
   agentId: UUID
 }
 
+export function parseKnowledgeSpaceRoute(knowledgeSpaceId: string | string[] | undefined): UUID | null {
+  if (typeof knowledgeSpaceId !== 'string') return null
+  const parsed = uuidSchema.safeParse(knowledgeSpaceId)
+  return parsed.success ? parsed.data : null
+}
+
+export function parseKnowledgeResourceRoute(resourceId: string | string[] | undefined): UUID | null {
+  if (typeof resourceId !== 'string') return null
+  const parsed = uuidSchema.safeParse(resourceId)
+  return parsed.success ? parsed.data : null
+}
+
 function firstQueryValue(value: LocationQueryValue | LocationQueryValue[] | undefined): string | null {
   return Array.isArray(value) ? (value[0] ?? null) : (value ?? null)
 }
@@ -55,5 +67,15 @@ export const routeLocations = {
   agentWorkflow: (journeyId: UUID, agentId: UUID) => ({
     name: 'agent-workflow' as const,
     params: { journeyId, agentId },
+  }),
+  knowledgeSpaces: () => ({ name: 'knowledge-spaces' as const }),
+  newKnowledgeSpace: () => ({ name: 'knowledge-space-create' as const }),
+  knowledgeSpace: (knowledgeSpaceId: UUID) => ({
+    name: 'knowledge-space-detail' as const,
+    params: { knowledgeSpaceId },
+  }),
+  knowledgeDocument: (knowledgeSpaceId: UUID, resourceId: UUID) => ({
+    name: 'knowledge-document-detail' as const,
+    params: { knowledgeSpaceId, resourceId },
   }),
 }

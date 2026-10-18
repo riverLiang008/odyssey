@@ -641,12 +641,12 @@ interface ConfiguredTool {
 
 ### 13.3 Reusable Tool
 
-A `ReusableTool` is a workspace-level configured Tool that can be selected by multiple Agent Actions or Task steps.
+A `ReusableTool` is an Agent Workflow-owned configured Tool that can be referenced by multiple Agent Actions or copied into Task steps.
 
 ```ts
 interface ReusableTool {
   id: ReusableToolId
-  workspaceId: WorkspaceId
+  agentWorkflowId: AgentWorkflowId
   tool: ConfiguredTool
   description?: string
   tags: string[]
@@ -655,7 +655,7 @@ interface ReusableTool {
 }
 ```
 
-A Task step may also own a local `ConfiguredTool` that is not present in the reusable tool library.
+A Task step owns a local configured snapshot. Dropping a Reusable Tool into a Task copies its current kind and configuration into a new Task-owned step ID. The copy may be edited independently, does not remain synchronized with the source, and survives later source edits or deletion.
 
 Rules:
 
@@ -663,6 +663,7 @@ Rules:
 - configured tools retain the Tool Definition version used to create them;
 - secret values must not be embedded in exported public workflow JSON;
 - reusable references and local instances must be distinguishable.
+- Agent Actions reference Reusable Tool IDs; Task steps do not keep a live Reusable Tool link in V1.
 
 ---
 

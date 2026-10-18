@@ -9,13 +9,26 @@ const task: TaskNode = { id: id(1), name: 'Task', type: 'task', config: { steps:
 describe('System Tool configuration UI', () => {
   it.each(fixtures.valid)('opens and saves $kind through canonical parsing', async (input) => {
     const step = toolStepSchema.parse(input)
-    const wrapper = mount(SystemToolPanel, { props: { draft: { context: { kind: 'root' }, nodeId: task.id, kind: step.kind, step }, task, variables: [], knowledgeSpaces: [], knowledgeStatus: 'ready', error: null } })
+    const wrapper = mount(SystemToolPanel, { props: { draft: { host: 'task', context: { kind: 'root' }, nodeId: task.id, kind: step.kind, step }, task, variables: [], knowledgeSpaces: [], knowledgeStatus: 'ready', error: null } })
     await wrapper.get('form').trigger('submit')
     const saved = wrapper.emitted('save')?.[0]?.[0]
-    expect(saved).toEqual(step)
+    expect(saved).toEqual({ step })
     await wrapper.get('button[aria-label="Close Tool configuration"]').trigger('click')
     expect(wrapper.emitted('cancel')).toHaveLength(1)
-    expect(wrapper.find('button[disabled]').text()).toContain('New Task Variable')
+    if (step.kind !== 'set_variable') expect(wrapper.text()).toContain('+ New Task Variable')
+  })
+  it('creates a Task Variable draft together with its output mapping', async () => {
+    const step = toolStepSchema.parse(fixtures.valid.find((candidate) => candidate.kind === 'script_execution'))
+    const wrapper = mount(SystemToolPanel, { props: { draft: { host: 'task', context: { kind: 'root' }, nodeId: task.id, kind: step.kind, step: null }, task, variables: [], knowledgeSpaces: [], knowledgeStatus: 'ready', error: null } })
+    const createButton = wrapper.findAll('button').find((button) => button.text() === '+ New Task Variable')
+    if (!createButton) throw new Error('Missing New Task Variable control')
+    await createButton.trigger('click')
+    await wrapper.get('input[placeholder="api_response"]').setValue('script_output')
+    await wrapper.get('textarea.tool-code').setValue('result = 1')
+    await wrapper.get('form').trigger('submit')
+    const saved = wrapper.emitted('save')?.[0]?.[0] as { step: typeof step; newVariable: { id: string; key: string } }
+    expect(saved.newVariable.key).toBe('script_output')
+    expect(saved.step.outputMapping?.targetVariableId).toBe(saved.newVariable.id)
   })
   it.each(['loading', 'empty', 'error', 'loaded'] as const)('renders inventory %s', (status) => {
     const tools = status === 'loaded' ? [{ id: id(5), kind: 'llm_call' as const, source: 'built_in' as const, name: 'LLM Call', category: 'Intelligence', description: 'Run one inference', configurationSchema: {}, inputSchema: {}, outputSchema: {} }] : []

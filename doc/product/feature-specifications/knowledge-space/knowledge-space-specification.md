@@ -150,7 +150,7 @@ Interaction requirements:
 - Provide a visible Add control at the bottom or top of the tree.
 - The same actions may also appear in the folder context menu.
 - Right-click must not be the only way to discover these actions.
-- Clicking a file selects the corresponding graph node and opens its Inspector.
+- Clicking a file navigates directly to the full Document Detail view. The folder tree is a file-system navigation surface, not an Inspector trigger.
 - Expand/collapse state belongs to the user interface and does not affect graph structure.
 
 ### 5.3 Knowledge Space overview
@@ -211,6 +211,8 @@ Graph interaction:
 
 The Inspector is a contextual overlay or side panel that preserves the user's graph context.
 
+The Inspector is opened only from the knowledge graph: single-clicking a document node opens it without leaving the graph. Folder-tree file clicks do not open the Inspector.
+
 It displays:
 
 - Filename.
@@ -231,6 +233,13 @@ The full Document Detail view contains:
 - Editable document metadata at the top of the content area.
 - Document content or preview below.
 - A Back to graph action that restores the previous pan, zoom, and node selection.
+
+Entry behavior:
+
+- Clicking a file in the folder tree navigates directly to Document Detail.
+- Double-clicking a graph node, or choosing `Open document` in the Inspector, navigates to Document Detail.
+- When entered from the graph, Back to graph restores the previous graph viewport and selected node.
+- When entered from the folder tree, Back returns to the Knowledge Space overview without inventing graph selection state.
 
 Editable metadata:
 

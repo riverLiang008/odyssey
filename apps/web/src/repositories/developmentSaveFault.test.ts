@@ -11,4 +11,13 @@ describe('development save fault controller', () => {
     expect(consumeDevelopmentSaveFailure()).toBe(true)
     expect(consumeDevelopmentSaveFailure()).toBe(false)
   })
+
+  it('remains one-shot when the acceptance hook is armed repeatedly', () => {
+    installDevelopmentSaveFaultController()
+    globalThis.window.__ODYSSEY_ACCEPTANCE__?.failNextSave()
+    globalThis.window.__ODYSSEY_ACCEPTANCE__?.failNextSave()
+    globalThis.window.__ODYSSEY_ACCEPTANCE__?.failNextSave()
+    expect(consumeDevelopmentSaveFailure()).toBe(true)
+    expect(consumeDevelopmentSaveFailure()).toBe(false)
+  })
 })

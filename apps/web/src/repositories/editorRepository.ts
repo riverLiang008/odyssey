@@ -12,6 +12,7 @@ import type {
   RemoveGuardrailInput,
   JourneyEditorDocument,
   RepositoryResult,
+  RepositoryError,
   SaveAgentAsTemplateInput,
   SaveAgentAsTemplateSuccess,
   SaveAgentWorkflowInput,
@@ -21,6 +22,28 @@ import type {
   UUID,
   JourneySummary,
   KnowledgeSpaceSummaryPage,
+  KnowledgeSpaceCategorySummary,
+  KnowledgeSpaceDetail,
+  CreateKnowledgeSpaceCategoryInput,
+  CreateKnowledgeSpaceInput,
+  UpdateKnowledgeSpaceInput,
+  KnowledgeSpaceRevisionCommand,
+  DeleteKnowledgeSpaceSuccess,
+  KnowledgeFileTree,
+  KnowledgeGraphOverview,
+  KnowledgeGraphManifest,
+  ValidateKnowledgeGraphManifestResult,
+  ApplyKnowledgeGraphManifestResult,
+  KnowledgeResourceDetail,
+  CreateKnowledgeFolderInput,
+  CreateKnowledgeFolderSuccess,
+  MoveKnowledgeResourceInput,
+  MoveKnowledgeResourceSuccess,
+  DeleteKnowledgeResourceInput,
+  DeleteKnowledgeResourceSuccess,
+  UpdateKnowledgeResourceContentInput,
+  UpdateKnowledgeResourceContentSuccess,
+  CompleteKnowledgeUploadSuccess,
   CreateJourneyInput,
   DeleteJourneyInput,
   DeleteJourneySuccess,
@@ -30,11 +53,57 @@ export interface RepositoryOperationOptions {
   signal?: AbortSignal
 }
 
+export interface UploadKnowledgeFileInput {
+  knowledgeSpaceId: UUID
+  folderId: UUID
+  expectedRevision: number
+  file: File
+}
+
+export type KnowledgeResourcePreview =
+  | { type: 'text'; content: string; truncated: boolean }
+  | { type: 'external' }
+  | { type: 'failed'; error: RepositoryError }
+
+export interface KnowledgeResourceInspection {
+  detail: KnowledgeResourceDetail
+  preview: KnowledgeResourcePreview
+}
+
 export interface KnowledgeSpaceInventoryRepository {
   listKnowledgeSpaces(
-    input?: { query?: string; page?: number; pageSize?: number },
+    input?: { query?: string; page?: number; pageSize?: number; includeArchived?: boolean },
     options?: RepositoryOperationOptions,
   ): Promise<RepositoryResult<KnowledgeSpaceSummaryPage>>
+  listKnowledgeSpaceCategories(
+    options?: RepositoryOperationOptions,
+  ): Promise<RepositoryResult<KnowledgeSpaceCategorySummary[]>>
+  createKnowledgeSpaceCategory(
+    input: CreateKnowledgeSpaceCategoryInput,
+    options?: RepositoryOperationOptions,
+  ): Promise<RepositoryResult<KnowledgeSpaceCategorySummary>>
+  createKnowledgeSpace(
+    input: CreateKnowledgeSpaceInput,
+    options?: RepositoryOperationOptions,
+  ): Promise<RepositoryResult<KnowledgeSpaceDetail>>
+  loadKnowledgeSpace(
+    knowledgeSpaceId: UUID,
+    options?: RepositoryOperationOptions,
+  ): Promise<RepositoryResult<KnowledgeSpaceDetail>>
+  updateKnowledgeSpace(input: UpdateKnowledgeSpaceInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceDetail>>
+  archiveKnowledgeSpace(input: KnowledgeSpaceRevisionCommand, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceDetail>>
+  unarchiveKnowledgeSpace(input: KnowledgeSpaceRevisionCommand, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeSpaceDetail>>
+  deleteKnowledgeSpace(input: KnowledgeSpaceRevisionCommand, options?: RepositoryOperationOptions): Promise<RepositoryResult<DeleteKnowledgeSpaceSuccess>>
+  loadKnowledgeFileTree(knowledgeSpaceId: UUID, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeFileTree>>
+  loadKnowledgeGraph(knowledgeSpaceId: UUID, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeGraphOverview>>
+  validateKnowledgeGraphManifest(knowledgeSpaceId: UUID, expectedRevision: number, manifest: KnowledgeGraphManifest, options?: RepositoryOperationOptions): Promise<RepositoryResult<ValidateKnowledgeGraphManifestResult>>
+  applyKnowledgeGraphManifest(knowledgeSpaceId: UUID, input: { expectedRevision: number; validationToken: string; manifestChecksum: string; manifest: KnowledgeGraphManifest }, options?: RepositoryOperationOptions): Promise<RepositoryResult<ApplyKnowledgeGraphManifestResult>>
+  loadKnowledgeResource(knowledgeSpaceId: UUID, resourceId: UUID, options?: RepositoryOperationOptions): Promise<RepositoryResult<KnowledgeResourceInspection>>
+  createKnowledgeFolder(input: CreateKnowledgeFolderInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<CreateKnowledgeFolderSuccess>>
+  moveKnowledgeResource(input: MoveKnowledgeResourceInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<MoveKnowledgeResourceSuccess>>
+  deleteKnowledgeResource(input: DeleteKnowledgeResourceInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<DeleteKnowledgeResourceSuccess>>
+  updateKnowledgeResourceContent(input: UpdateKnowledgeResourceContentInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<UpdateKnowledgeResourceContentSuccess>>
+  uploadKnowledgeFile(input: UploadKnowledgeFileInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<CompleteKnowledgeUploadSuccess>>
 }
 
 export interface JourneyEditorRepository {
@@ -53,7 +122,7 @@ export interface JourneyEditorRepository {
   ): Promise<RepositoryResult<AgentWorkflowEditorDocument>>
 }
 
-export interface WorkflowEditorRepository extends KnowledgeSpaceInventoryRepository {
+export interface WorkflowEditorRepository extends Pick<KnowledgeSpaceInventoryRepository, 'listKnowledgeSpaces'> {
   listSystemToolDefinitions(options?: RepositoryOperationOptions): Promise<RepositoryResult<SystemToolDefinition[]>>
   loadJourney(
     journeyId: UUID,
@@ -113,4 +182,4 @@ export interface GuardrailLifecycleRepository {
   ): Promise<RepositoryResult<JourneyEditorDocument>>
 }
 
-export type OdysseyEditorRepository = EditorRepository & AgentLifecycleRepository & GuardrailLifecycleRepository & JourneyLifecycleRepository
+export type OdysseyEditorRepository = EditorRepository & KnowledgeSpaceInventoryRepository & AgentLifecycleRepository & GuardrailLifecycleRepository & JourneyLifecycleRepository

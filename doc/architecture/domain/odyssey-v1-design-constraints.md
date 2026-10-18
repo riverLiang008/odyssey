@@ -319,6 +319,12 @@ A Task owns an ordered linear sequence of configured Tool instances. These insta
 
 Tools are not independent Workflow nodes. Workflow-level routing remains the responsibility of Branch, Loop, and Workflow edges.
 
+For the current V1 editor milestone, a configured Task Tool instance may be copied into the owning Agent Workflow's `AgentReusableTools` through `Save to Reusable Tools`. This operation creates an independent Agent-owned snapshot and leaves the Task step unchanged.
+
+The snapshot copies Tool kind and configuration, but it must not retain Task-host bindings such as an output mapping to a Task-local variable. Bindings are resolved independently when the reusable Tool is consumed in another host.
+
+This milestone does not expose Workspace-level `Save as Template` for Tools. Although `ToolTemplate` remains part of the broader architecture, its cross-Agent library UI and creation API require a separate product decision and implementation increment.
+
 ## 10. Knowledge Space Boundary
 
 A Knowledge Space is an independent persistent asset.

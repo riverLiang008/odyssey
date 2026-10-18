@@ -138,19 +138,19 @@ const knowledgeRetrievalToolStepSchema = z.strictObject({
   ...toolStepBase,
   kind: z.literal('knowledge_retrieval'),
   configuration: knowledgeRetrievalConfigurationSchema,
-  outputMapping: outputMappingSchema('retrieved_documents'),
+  outputMapping: outputMappingSchema('retrieved_documents').nullable(),
 })
 const scriptExecutionToolStepSchema = z.strictObject({
   ...toolStepBase,
   kind: z.literal('script_execution'),
   configuration: scriptExecutionConfigurationSchema,
-  outputMapping: outputMappingSchema('result'),
+  outputMapping: outputMappingSchema('result').nullable(),
 })
 const apiRequestToolStepSchema = z.strictObject({
   ...toolStepBase,
   kind: z.literal('api_request'),
   configuration: apiRequestConfigurationSchema,
-  outputMapping: outputMappingSchema('response.data'),
+  outputMapping: outputMappingSchema('response.data').nullable(),
 })
 const setVariableToolStepSchema = z.strictObject({
   ...toolStepBase,
@@ -162,7 +162,7 @@ const llmCallToolStepSchema = z.strictObject({
   ...toolStepBase,
   kind: z.literal('llm_call'),
   configuration: llmCallConfigurationSchema,
-  outputMapping: outputMappingSchema('response.text'),
+  outputMapping: outputMappingSchema('response.text').nullable(),
 })
 
 export const toolStepSchema = z.discriminatedUnion('kind', [

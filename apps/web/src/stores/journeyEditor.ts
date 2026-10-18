@@ -418,6 +418,11 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     cancelInteraction()
   }
 
+  function clearInteractionFeedback() {
+    session.lastDropError = null
+    session.lastDragBoundaryError = null
+  }
+
   function endDrag() { cancelInteraction() }
 
   function evaluateDrag(target: PatternDropTarget) {
@@ -834,6 +839,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     beginDrag,
     rejectDragBoundary,
     rejectDrop,
+    clearInteractionFeedback,
     endDrag,
     evaluateDrag,
     stageDuplicate,

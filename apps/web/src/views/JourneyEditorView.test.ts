@@ -134,6 +134,27 @@ describe('JourneyEditorView integration', () => {
     expect(store.session.lastDropError).toBeNull()
   })
 
+  it('shows a transient centered toast after a rejected drop', async () => {
+    vi.useFakeTimers()
+    try {
+      const { pinia, wrapper } = await mountEditor()
+      const store = useJourneyEditorStore(pinia)
+      store.rejectDrop('SAME_SLOT')
+      await wrapper.vm.$nextTick()
+
+      const toast = globalThis.document.body.querySelector('.journey-interaction-toast')
+      expect(toast?.textContent).toBe('This Agent is already in that Slot.')
+      expect(wrapper.find('.journey-feedback').exists()).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(3200)
+      await wrapper.vm.$nextTick()
+      expect(globalThis.document.body.querySelector('.journey-interaction-toast')).toBeNull()
+      expect(store.session.lastDropError).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('consumes a nested Slot drop once and finishes the drag session', async () => {
     const { journey, pinia, wrapper } = await mountEditor()
     const store = useJourneyEditorStore(pinia)

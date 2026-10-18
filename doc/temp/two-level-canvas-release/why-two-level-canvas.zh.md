@@ -28,8 +28,6 @@ Odyssey 因此选择了双层 Canvas。
 - Tool 和 Knowledge Space 应该出现在系统拓扑上，还是只在具体 Agent 的工作流中出现？
 - 用户移动一个对象时，改变的是系统语义，还是局部布局？
 
-颜色可以稳定地表达 Thinking Ownership，却无法单独消除两种连线语义和两个编辑尺度之间的冲突。如果读者还必须依靠缩放级别或临时边框判断自己正在编辑哪一层，Canvas 就更像一张只有作者知道阅读方式的地图，而不是共享的系统表示。
-
 ## 从 Workflow Builder 到 Agent System Builder
 
 这个冲突并不是“画布里放了太多节点”这么简单。当一个可视化 AI Builder 以 Workflow 为基本编辑单位时，节点可以表示模型调用、条件、工具或数据处理，连线表示执行顺序。对于设计一条流程，这套语言非常直接。
@@ -136,13 +134,17 @@ Agent Slot
 → Full Agent Workflow Canvas
 ```
 
+![从 Journey Canvas 中的 Agent Slot，经只读 Workflow Preview，进入完整 Agent Workflow Canvas](./release/assets/cross-level-transition.png)
+
+*图 5：跨越两层 Canvas 的渐进式进入。① 在 Journey Canvas 中选择已配置的 Agent Slot；② 在不离开系统视图的情况下查看只读 Workflow Preview；③ 需要深入编辑时进入完整 Agent Workflow Canvas。素材来自 Figma `59:2` 与 `62:2`，组合于 2026-10-04。*
+
 选择一个已经配置的 Agent Slot 时，Journey Canvas 仍然保留在原处，右下角出现一个只读 Workflow Preview。Preview 不承担节点配置；它只提供足够的 Workflow 拓扑，让用户确认“这个 Slot 里的 Agent 是怎样工作的”。
 
 只有当用户决定深入编辑时，才通过 Open canvas / fullscreen 进入完整的 Agent Workflow Canvas。
 
 这个 Preview 不是缩小版编辑器。它是两层之间的方向标：既不把全部细节重新塞回 Journey Canvas，也不要求用户在没有预告的情况下离开系统视图。
 
-图 2 同时保留了这次过渡：Research Agent 所占据的 Agent Slot 位于 System configuration 中，右下角则出现对应的只读 Workflow Preview。两者同屏，是为了让用户在进入完整 Canvas 前仍能看见 Agent 在系统里的位置。
+图 5 将这次过渡单独展开：Research Agent 所占据的 Agent Slot 与对应的只读 Workflow Preview 都来自图 2 的 Journey Canvas，最后一步则进入图 4 所示的完整 Agent Workflow Canvas。这样，用户在进入局部编辑前仍能看见 Agent 在系统里的位置。
 
 ## 这个决定让什么变得可理解
 

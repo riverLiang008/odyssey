@@ -456,6 +456,21 @@ describe('workflowEditor store', () => {
     store.setMode('flow')
     expect(store.stageCreationDraft('agent_action', { x: 120, y: 100 })).toBe(false)
   })
+  it('creates, updates and deletes unreferenced Agent Variables through one store mutation each', async () => {
+    const agentDocument = createAgentWorkflowEditorDocumentFixture('minimal')
+    const repository = new InMemoryEditorRepository({ journeys: [createJourneyEditorDocumentFixture()], agentWorkflows: [agentDocument] })
+    const store = useWorkflowEditorStore()
+    await store.load(agentDocument.agent.journeyId, agentDocument.agent.id, repository)
+    const variable = { id: uuidSchema.parse('0195f076-b6e6-7ef0-98db-d721990f8994'), key: 'review_complete', displayName: 'Review complete', description: null, dataType: 'boolean' as const, ownership: 'user_managed' as const, defaultValue: false, readOnly: false }
+    const before = store.persistence.mutationSeq
+    expect(store.saveAgentVariable(variable)).toBe(true)
+    expect(store.persistence.mutationSeq).toBe(before + 1)
+    expect(store.saveAgentVariable({ ...variable, ownership: 'agent_managed', readOnly: true })).toBe(true)
+    expect(store.document?.variables.find((entry) => entry.id === variable.id)?.ownership).toBe('agent_managed')
+    expect(store.deleteAgentVariable(variable.id)).toBe(true)
+    expect(store.document?.variables.some((entry) => entry.id === variable.id)).toBe(false)
+    store.dispose()
+  })
 
   it('creates Agent Actions inside a Loop but refuses nested Loop drafts', async () => {
     const agentDocument = createAgentWorkflowEditorDocumentFixture('loop')

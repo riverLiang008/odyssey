@@ -9,7 +9,7 @@ import {
   type NodeMouseEvent,
   type ViewportTransform,
 } from '@vue-flow/core'
-import type { AgentVariable, SystemToolDefinition, AgentReusableTool, CanvasLayout, LoopBodyGraph, LoopNode, UUID, WorkflowGraph } from '@odyssey/schemas'
+import type { AgentVariable, SystemToolDefinition, AgentReusableTool, CanvasLayout, KnowledgeSpaceSummary, LoopBodyGraph, LoopNode, UUID, WorkflowGraph } from '@odyssey/schemas'
 import type { WorkflowMode } from '@/stores/workflowEditor'
 
 import {
@@ -40,6 +40,7 @@ const props = defineProps<{
   systemTools?: readonly SystemToolDefinition[]
   availableReusableToolIds?: readonly UUID[]
   reusableTools?: readonly AgentReusableTool[]
+  knowledgeSpaces?: readonly KnowledgeSpaceSummary[]
   activeResourceDrag?: WorkflowResourceDragPayload | null
   normalizeInitialViewport?: boolean
 }>()
@@ -50,16 +51,22 @@ const emit = defineEmits<{
   clearError: []
   reject: [error: WorkflowCanvasUiErrorCode]
   editTool: [nodeId: UUID, stepId: UUID]
+  editReusableTool: [nodeId: UUID, reusableToolId: UUID]
   changeTool: [nodeId: UUID, stepId: UUID, operation: 'delete' | 'up' | 'down']
+  reorderTool: [nodeId: UUID, stepId: UUID, targetIndex: number]
+  toolStepContextMenu: [nodeId: UUID, stepId: UUID, point: { x: number; y: number }]
   resourceDrop: [action: WorkflowResourceDropAction]
   updateAgentAction: [nodeId: UUID, details: { name: string; model: string; goal: string }]
+  updateNodeName: [nodeId: UUID, name: string]
+  nodeContextMenu: [nodeId: UUID, point: { x: number; y: number }]
+  edgeContextMenu: [edgeId: UUID, point: { x: number; y: number }]
 }>()
 const root = ref<globalThis.HTMLElement | null>(null)
 const projection = computed(() => projectWorkflowCanvas(props.graph, props.layout, props.mode))
 const { onInit, project: projectPoint, setCenter } = useVueFlow()
 let connectionCommitted = false
 let isApplyingInitialCenter = false
-const resourceDropFeedback = ref<{ nodeId: UUID | null; status: 'idle' | 'valid' | 'invalid' | 'duplicate' | 'unavailable' }>({ nodeId: null, status: 'idle' })
+const resourceDropFeedback = ref<{ nodeId: UUID | null; targetKind: WorkflowResourceDropTarget['kind'] | null; status: 'idle' | 'valid' | 'invalid' | 'duplicate' | 'unavailable' }>({ nodeId: null, targetKind: null, status: 'idle' })
 const initialViewport = computed(() => props.normalizeInitialViewport
   ? { x: 0, y: 0, zoom: 1 }
   : projection.value.viewport)
@@ -108,8 +115,22 @@ function nodeClick(event: NodeMouseEvent) {
   if (origin instanceof globalThis.Element && origin.closest('[data-no-node-inspector="true"]')) return
   emit('intent', { type: 'select-node', nodeId: event.node.id as UUID })
 }
+function nodeContextMenu(event: NodeMouseEvent) {
+  event.event.preventDefault()
+  if (props.mode !== 'configure') return
+  if (!(event.event instanceof globalThis.MouseEvent)) return
+  const node = props.graph.nodes.find((candidate) => candidate.id === event.node.id)
+  if (!node || ['start', 'end', 'loop_start', 'loop_end'].includes(node.type)) return
+  emit('nodeContextMenu', node.id, { x: event.event.clientX, y: event.event.clientY })
+}
 function edgeClick(event: EdgeMouseEvent) {
   emit('intent', { type: 'select-edge', edgeId: event.edge.id as UUID })
+}
+function edgeContextMenu(event: EdgeMouseEvent) {
+  event.event.preventDefault()
+  if (props.mode !== 'configure') return
+  if (!(event.event instanceof globalThis.MouseEvent)) return
+  emit('edgeContextMenu', event.edge.id as UUID, { x: event.event.clientX, y: event.event.clientY })
 }
 function dragStop(event: NodeDragEvent) {
   if (props.mode !== 'configure') return
@@ -157,7 +178,7 @@ function resourceTargetFromEvent(event: globalThis.DragEvent): WorkflowResourceD
   const dropZone = origin.closest<globalThis.HTMLElement>('[data-workflow-resource-drop-target][data-workflow-node-id]')
   const kind = dropZone?.dataset.workflowResourceDropTarget
   const nodeId = dropZone?.dataset.workflowNodeId
-  if (!nodeId || (kind !== 'agent-action-tools' && kind !== 'task-tool-sequence')) return { kind: 'canvas-pane' }
+  if (!nodeId || (kind !== 'agent-action-tools' && kind !== 'agent-action-knowledge-spaces' && kind !== 'task-tool-sequence')) return { kind: 'canvas-pane' }
   return { kind, nodeId: nodeId as UUID }
 }
 function createFromClientPoint(nodeType: WorkflowPaletteNodeType, clientX: number, clientY: number): boolean {
@@ -186,34 +207,38 @@ function handleResourceDrop(payload: WorkflowResourceDragPayload, target: Workfl
   const node = props.graph.nodes.find((candidate) => candidate.id === target.nodeId)
   const evaluation = evaluateWorkflowResourceDrop(payload, target, {
     node: node?.type === 'agent_action' || node?.type === 'task' ? node : null,
-    systemTools: props.systemTools, mode: props.mode, availableReusableToolIds: new Set(props.availableReusableToolIds ?? []),
+    systemTools: props.systemTools, mode: props.mode, availableReusableToolIds: new Set(props.availableReusableToolIds ?? []), availableKnowledgeSpaceIds: new Set((props.knowledgeSpaces ?? []).map((space) => space.id)),
   })
   if (evaluation.status === 'valid') {
-    resourceDropFeedback.value = { nodeId: null, status: 'idle' }
+    resourceDropFeedback.value = { nodeId: null, targetKind: null, status: 'idle' }
     emit('clearError')
     emit('resourceDrop', evaluation.action)
   } else {
-    resourceDropFeedback.value = { nodeId: target.nodeId, status: evaluation.status }
+    resourceDropFeedback.value = { nodeId: target.nodeId, targetKind: target.kind, status: evaluation.status }
   }
 }
 function evaluateResourceTarget(payload: WorkflowResourceDragPayload, target: WorkflowResourceDropTarget) {
-  if (target.kind === 'canvas-pane') return evaluateWorkflowResourceDrop(payload, target, { node: null, systemTools: props.systemTools, mode: props.mode, availableReusableToolIds: new Set(props.availableReusableToolIds ?? []) })
+  if (target.kind === 'canvas-pane') return evaluateWorkflowResourceDrop(payload, target, { node: null, systemTools: props.systemTools, mode: props.mode, availableReusableToolIds: new Set(props.availableReusableToolIds ?? []), availableKnowledgeSpaceIds: new Set((props.knowledgeSpaces ?? []).map((space) => space.id)) })
   const node = props.graph.nodes.find((candidate) => candidate.id === target.nodeId)
   return evaluateWorkflowResourceDrop(payload, target, {
     node: node?.type === 'agent_action' || node?.type === 'task' ? node : null,
-    systemTools: props.systemTools, mode: props.mode, availableReusableToolIds: new Set(props.availableReusableToolIds ?? []),
+    systemTools: props.systemTools, mode: props.mode, availableReusableToolIds: new Set(props.availableReusableToolIds ?? []), availableKnowledgeSpaceIds: new Set((props.knowledgeSpaces ?? []).map((space) => space.id)),
   })
 }
 function resourceEnter(payload: WorkflowResourceDragPayload, target: WorkflowResourceDropTarget) {
   const evaluation = evaluateResourceTarget(payload, target)
-  resourceDropFeedback.value = { nodeId: target.kind === 'canvas-pane' ? null : target.nodeId, status: evaluation.status }
+  resourceDropFeedback.value = { nodeId: target.kind === 'canvas-pane' ? null : target.nodeId, targetKind: target.kind, status: evaluation.status }
 }
 function resourceLeave(target: WorkflowResourceDropTarget) {
-  if (target.kind !== 'canvas-pane' && resourceDropFeedback.value.nodeId === target.nodeId) resourceDropFeedback.value = { nodeId: null, status: 'idle' }
+  if (target.kind !== 'canvas-pane' && resourceDropFeedback.value.nodeId === target.nodeId && resourceDropFeedback.value.targetKind === target.kind) resourceDropFeedback.value = { nodeId: null, targetKind: null, status: 'idle' }
 }
 function unbindTool(nodeId: UUID, reusableToolId: UUID) {
   emit('clearError')
   emit('resourceDrop', { type: 'unbind-reusable-tool', nodeId, reusableToolId })
+}
+function unbindKnowledgeSpace(nodeId: UUID, knowledgeSpaceId: UUID) {
+  emit('clearError')
+  emit('resourceDrop', { type: 'unbind-knowledge-space', nodeId, knowledgeSpaceId })
 }
 function connectStart() {
   connectionCommitted = false
@@ -246,7 +271,9 @@ function connectEnd() {
       :nodes-draggable="mode === 'configure'"
       :nodes-connectable="mode === 'configure'"
       @node-click="nodeClick"
+      @node-context-menu="nodeContextMenu"
       @edge-click="edgeClick"
+      @edge-context-menu="edgeContextMenu"
       @node-drag-stop="dragStop"
       @move-end="moveEnd"
       @pane-click="paneClick"
@@ -259,16 +286,23 @@ function connectEnd() {
           v-bind="nodeProps"
           :configure-expanded="mode === 'configure'"
           :tools="reusableTools ?? []"
+          :knowledge-spaces="knowledgeSpaces ?? []"
           :variables="variables" :active-resource-drag="activeResourceDrag"
           :resource-drop-state="resourceDropFeedback.status"
           :resource-drop-node-id="resourceDropFeedback.nodeId"
+          :resource-drop-target-kind="resourceDropFeedback.targetKind"
           @edit-tool="(nodeId, stepId) => emit('editTool', nodeId, stepId)"
+          @edit-reusable-tool="(nodeId, reusableToolId) => emit('editReusableTool', nodeId, reusableToolId)"
           @change-tool="(nodeId, stepId, operation) => emit('changeTool', nodeId, stepId, operation)"
+          @reorder-tool="(nodeId, stepId, targetIndex) => emit('reorderTool', nodeId, stepId, targetIndex)"
+          @tool-step-context-menu="(nodeId, stepId, point) => emit('toolStepContextMenu', nodeId, stepId, point)"
           @resource-enter="resourceEnter"
           @resource-leave="resourceLeave"
           @resource-drop="handleResourceDrop"
           @unbind-tool="unbindTool"
+          @unbind-knowledge-space="unbindKnowledgeSpace"
           @update-agent-action="(nodeId, details) => emit('updateAgentAction', nodeId, details)"
+          @update-node-name="(nodeId, name) => emit('updateNodeName', nodeId, name)"
         />
       </template>
     </VueFlow>

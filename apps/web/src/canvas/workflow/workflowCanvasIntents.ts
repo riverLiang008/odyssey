@@ -21,6 +21,7 @@ export type WorkflowResourceDropAction =
   | { readonly type: 'bind-reusable-tool'; readonly nodeId: UUID; readonly reusableToolId: UUID }
   | { readonly type: 'unbind-reusable-tool'; readonly nodeId: UUID; readonly reusableToolId: UUID }
   | { readonly type: 'bind-knowledge-space'; readonly nodeId: UUID; readonly knowledgeSpaceId: UUID }
+  | { readonly type: 'unbind-knowledge-space'; readonly nodeId: UUID; readonly knowledgeSpaceId: UUID }
   | { readonly type: 'append-task-tool-step'; readonly nodeId: UUID; readonly reusableToolId: UUID }
 export type WorkflowResourceDropEvaluation =
   | { readonly status: 'valid'; readonly action: WorkflowResourceDropAction }
@@ -89,8 +90,11 @@ export function evaluateWorkflowResourceDrop(
   if (target.kind === 'canvas-pane') return { status: 'invalid', reason: 'INVALID_RESOURCE_TARGET' }
   if (!context.node || context.node.id !== target.nodeId) return { status: 'invalid', reason: 'INVALID_RESOURCE_TARGET' }
   if (payload.kind === 'system-tool-definition') {
-    if (target.kind !== 'task-tool-sequence' || context.node.type !== 'task') return { status: 'invalid', reason: 'INVALID_RESOURCE_TARGET' }
     if (!context.systemTools?.some((t) => t.id === payload.toolDefinitionId && t.kind === payload.toolKind)) return { status: 'unavailable', reason: 'RESOURCE_NOT_AVAILABLE' }
+    if (target.kind === 'agent-action-tools' && context.node.type === 'agent_action') {
+      return { status: 'valid', action: { type: 'configure-system-tool', nodeId: target.nodeId, toolDefinitionId: payload.toolDefinitionId, toolKind: payload.toolKind } }
+    }
+    if (target.kind !== 'task-tool-sequence' || context.node.type !== 'task') return { status: 'invalid', reason: 'INVALID_RESOURCE_TARGET' }
     return { status: 'valid', action: { type: 'configure-system-tool', nodeId: target.nodeId, toolDefinitionId: payload.toolDefinitionId, toolKind: payload.toolKind } }
   }
   if (target.kind === 'task-tool-sequence') {
