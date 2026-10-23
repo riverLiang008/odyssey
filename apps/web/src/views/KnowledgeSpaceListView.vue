@@ -140,13 +140,13 @@ onBeforeUnmount(() => loadController?.abort())
 </script>
 
 <template>
-  <section class="knowledge-list-page" aria-labelledby="knowledge-list-title" :inert="isCreateOpen || undefined">
-    <header class="knowledge-page-heading">
-      <div><span class="knowledge-breadcrumb">OdyJourney / Assets / Knowledge Spaces</span><h1 id="knowledge-list-title">Knowledge Spaces</h1><p>Your file workspaces, organized by category and maintained as knowledge graphs.</p></div>
-      <RouterLink class="knowledge-primary-action" :to="routeLocations.newKnowledgeSpace()">＋ New Knowledge Space</RouterLink>
+  <section class="knowledge-list-page collection-list-page" aria-labelledby="knowledge-list-title" :inert="isCreateOpen || undefined">
+    <header class="knowledge-page-heading collection-page-heading">
+      <div><h1 id="knowledge-list-title">Knowledge Spaces</h1><p>Your file workspaces, organized by category and maintained as knowledge graphs.</p></div>
+      <RouterLink class="knowledge-primary-action collection-primary-action" :to="routeLocations.newKnowledgeSpace()">＋ New Knowledge Space</RouterLink>
     </header>
 
-    <form class="knowledge-toolbar" aria-label="Knowledge Space list controls" @submit.prevent="load">
+    <form class="knowledge-toolbar collection-toolbar" aria-label="Knowledge Space list controls" @submit.prevent="load">
       <input v-model="query" aria-label="Search Knowledge Spaces" placeholder="⌕  Search knowledge spaces" />
       <AppSelect v-model="categoryFilter" control-label="Category filter" :options="categoryOptions" />
       <AppSelect v-model="graphFilter" control-label="Graph status filter" :options="graphOptions" />
@@ -161,7 +161,7 @@ onBeforeUnmount(() => loadController?.abort())
     <div v-else-if="state.spaces.length === 0" class="knowledge-empty" role="status"><strong>Create your first Knowledge Space</strong><span>Organize files and expose them safely to Agents and Tools.</span><RouterLink :to="routeLocations.newKnowledgeSpace()">Create Knowledge Space</RouterLink></div>
     <div v-else-if="visibleSpaces.length === 0" class="knowledge-empty" role="status"><strong>No matching Knowledge Spaces</strong><span>Try another search or clear the filters.</span><button type="button" @click="categoryFilter = 'all'; graphFilter = 'all'; lifecycleFilter = 'active'; query = ''; load()">Clear filters</button></div>
     <section v-for="group in groupedSpaces" v-else :key="group.category.id" class="knowledge-category-section">
-      <header><h2>{{ group.category.name.toLocaleUpperCase() }}</h2><i :style="group.category.colorToken ? { background: `var(--knowledge-category-${group.category.colorToken}, #5073f3)` } : undefined" /></header>
+      <header><h2>{{ group.category.name.toLocaleUpperCase() }}</h2><i /></header>
       <div class="knowledge-card-grid">
         <RouterLink v-for="space in group.spaces" :key="space.id" class="knowledge-space-card" :to="routeLocations.knowledgeSpace(space.id)">
           <div><h3>{{ space.name }}</h3><span class="knowledge-status" :data-status="space.graphStatus"><i />{{ statusLabel(space.graphStatus) }}</span></div>

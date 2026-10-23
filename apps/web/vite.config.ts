@@ -7,5 +7,7 @@ export default defineConfig({
   plugins: [vue()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   server: { port: 4173 },
-  test: { environment: 'jsdom', setupFiles: './src/test/setup.ts' },
+  // Editor route tests load the vendor graph on first navigation. Bound worker
+  // concurrency to avoid memory contention making those imports time out.
+  test: { environment: 'jsdom', setupFiles: './src/test/setup.ts', maxWorkers: 2, testTimeout: 20_000 },
 })

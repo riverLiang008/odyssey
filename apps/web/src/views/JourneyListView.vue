@@ -45,9 +45,9 @@ async function handleCreated(journeyId: JourneySummary['id']) {
 </script>
 
 <template>
-  <section class="journey-list-page" aria-labelledby="journey-list-title" :inert="isCreateOpen || undefined">
-    <div class="journey-list-page__heading"><div><span class="page-eyebrow">OdyJourney</span><h1 id="journey-list-title">Your OdyJourneys</h1><p>Choose a Journey to continue configuring its Resources, Agents, and execution flow.</p></div><RouterLink class="primary-action" :to="routeLocations.newJourney()">＋ New OdyJourney</RouterLink></div>
-    <div class="journey-toolbar" aria-label="Journey list controls"><input aria-label="Search journeys" placeholder="Search by name or description" disabled /><button type="button" disabled>Status</button><button type="button" disabled>Recently updated</button><span v-if="state.type === 'ready'">{{ state.journeys.length }} {{ state.journeys.length === 1 ? 'journey' : 'journeys' }}</span></div>
+  <section class="journey-list-page collection-list-page" aria-labelledby="journey-list-title" :inert="isCreateOpen || undefined">
+    <div class="journey-list-page__heading collection-page-heading"><div><h1 id="journey-list-title">Your OdyJourneys</h1><p>Choose a Journey to continue configuring its Resources, Agents, and execution flow.</p></div><RouterLink class="primary-action collection-primary-action" :to="routeLocations.newJourney()">＋ New OdyJourney</RouterLink></div>
+    <div class="journey-toolbar collection-toolbar" aria-label="Journey list controls"><input aria-label="Search journeys" placeholder="Search by name or description" disabled /><button type="button" disabled>Status</button><button type="button" disabled>Recently updated</button><span v-if="state.type === 'ready'">{{ state.journeys.length }} {{ state.journeys.length === 1 ? 'journey' : 'journeys' }}</span></div>
     <p v-if="state.type === 'loading'" role="status">Loading Journeys…</p>
     <div v-else-if="state.type === 'failed'" class="empty-state" role="alert">Could not load Journeys: {{ state.error.code }} <button type="button" @click="load">Retry</button></div>
     <div v-else-if="state.journeys.length === 0" class="empty-state" role="status">No Journeys yet. Create one and choose its Pattern.</div>

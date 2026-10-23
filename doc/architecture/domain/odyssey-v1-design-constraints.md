@@ -94,11 +94,11 @@ V1 does not provide a completely free-form Pattern route editor.
 
 - **Linear sequence:** users may add or remove Slots and exchange their order. Routes are derived automatically from Slot order.
 - **Solo component:** contains one isolated Slot and no internal Agent route.
-- **Hub and spoke:** users may add or remove supported Slots; the Pattern rule maintains the hub-and-spoke topology.
+- **Hub and spoke:** users may add or remove supported Spokes and configure each existing Hub–Spoke relationship as Hub → Spoke, Spoke → Hub, or bidirectional (two directed routes). Arbitrary and Spoke–Spoke connections remain unsupported.
 - **Diamond loop / Circular Loop:** `diamond_loop` is retained as the persisted compatibility key, but its accepted product semantics are a directed circular loop with one explicit entry and dynamic Slot count. The final Slot routes back to the entry. It has no built-in branch or merge semantics. See [`diamond-loop-pattern-decision.md`](./diamond-loop-pattern-decision.md).
 - **Custom free-form Pattern:** deferred to a future version.
 
-Users do not manually create or delete Pattern Routes in V1. Pattern-specific domain rules maintain valid Routes after a Slot operation.
+Linear and Circular Loop arrows are not editable. Pattern-specific domain rules maintain Routes after Slot operations and supported Hub direction commands; this is not a free-form route editor. See [Pattern → Agent Workflow End 单向同步设计](../execution/pattern-agent-end-routing-decision.md) (accepted 2026-10-21; implementation pending).
 
 ### 3.3 Stable identity
 
@@ -159,6 +159,8 @@ After confirmation, Odyssey creates an `AgentWorkflow` instance containing the m
 ```text
 Start → End
 ```
+
+The diagram above is the historical single-End minimum-graph example. Under the accepted 2026-10-21 routing decision, creation must derive root Ends from the assigned Slot's routes; it must not automatically choose a target when multiple Ends exist. Exact initial wiring and migration from this old factory require coordinated implementation review. See section 8.1.1.
 
 Cancelling the form must not leave an anonymous or orphaned Agent record.
 
@@ -263,6 +265,14 @@ AgentWorkflow
 ```
 
 `WorkflowGraph` must not contain top-level canvas coordinates or Vue Flow implementation objects. `CanvasLayout` must not define workflow execution semantics.
+
+### 8.1.1 Pattern-derived root End boundaries
+
+Root Workflow Ends synchronize only from Pattern to Workflow. Each outgoing route generates one End; an explicit `journey_end` route produces a completion End, and a Slot with no outgoing routes receives one completion End. Users cannot manually add/delete Ends or change their targets; they author internal paths to these boundaries. Multiple Ends replace the old single-End assumption. Targets use Slot identity, including empty Slots with stable default names such as `Agent-1`.
+
+Route deletion removes its End and requires explicit handling of affected internal edges, without reverse-modifying Pattern, silent retargeting, or dangling references. Agent assignment changes preserve surviving boundary identities and incoming paths. Handoff starts the target Agent at Start; it is not call/return. Loop body boundaries are unchanged.
+
+The [accepted routing decision](../execution/pattern-agent-end-routing-decision.md) defines synchronization and unresolved contract/migration requirements. Existing schema/API implementations are not automatically upgraded by this design acceptance.
 
 ### 8.2 Loop body
 

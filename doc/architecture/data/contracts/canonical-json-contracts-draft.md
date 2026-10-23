@@ -9,6 +9,14 @@ The structures and semantics in this document are the accepted source of truth f
 
 The remaining package and single-file size limits are operational import/export limits, not unresolved JSON structure. They do not block implementation of the frozen persistence or editor contracts.
 
+## Implemented routing contract increment (2026-10-22)
+
+Implementation update (2026-10-22): the concrete [Pattern / End routing contract increment](./pattern-agent-end-routing-contract.md) defines supported `1.1.0` Pattern/Workflow shapes, explicit legacy upgrade, revision-bound destructive impact confirmation, and portable exit mapping. It extends this baseline for routing only; remaining `1.0.0` examples retain their historical baseline meaning. See the implementation plan/report for verification status rather than inferring completion from this contract.
+
+[Pattern → Agent Workflow End 单向同步设计](../../execution/pattern-agent-end-routing-decision.md) fixes the new product semantics: generated multiple root Ends, strictly one-way Pattern → End synchronization, Slot-based targets including empty Slots, and restricted Hub direction editing. Linear and Circular Loop arrows remain derived and non-editable. Loop body boundaries are unchanged.
+
+The existing `1.0.0` examples below remain historical baseline examples. Routing-aware clients use the linked `1.1.0` increment; single-End and forward-only Hub examples do not override it. Rendering does not migrate persisted documents. Verification is recorded in the [completion report](../../../planning/implementation/pattern-agent-end-routing-completion-report.md).
+
 ## Contract change process
 
 Future contract changes must be proposed explicitly, reviewed against the accepted domain and persistence boundaries, and recorded as a coordinated schema change. They must not be introduced indirectly from database rows, ORM models, Vue Flow objects, Figma layers, or component-local state.
@@ -322,7 +330,7 @@ Rules:
 - Slot positions are derived and are not persisted for V1 built-in Patterns.
 - Linear Routes are regenerated from `order` after Slot reorder.
 - Non-linear Pattern rules maintain their own valid topology.
-- Users do not manually edit Routes in V1.
+- Users do not freely edit Routes. The accepted routing delta adds restricted Hub–Spoke direction commands; Linear and Circular Loop Routes remain derived. The corresponding contract is defined in the routing increment above.
 
 Proposed Slot field:
 

@@ -1,6 +1,6 @@
 import copy
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,17 +12,35 @@ from odyssey_api.journeys.dto import (
     AgentTemplate,
     AgentTemplateSnapshot,
     AgentWorkflowEditorDocument,
+    ApiRequestConfiguration,
+    ApiRequestToolStep,
+    BranchNode,
     CreateJourneyRequest,
     CreateMinimumAgentResponse,
+    EndNode,
+    FormDataApiRequestBody,
     InstantiateAgentTemplateResponse,
     JourneyEditorDocument,
     JourneySummary,
+    LoopBodyNode,
+    LoopNode,
     PatternConfig,
     RemoveOccupiedSlotRequest,
     RemoveOccupiedSlotResponse,
+    ReusableApiTool,
+    RoutingConfirmation,
+    RoutingImpact,
     SaveAgentAsTemplateRequest,
     SaveAgentWorkflowRequest,
     SaveJourneyRequest,
+    TaskNode,
+    TemplateEndAssignment,
+    WorkflowNode,
+)
+from odyssey_api.journeys.end_routing import (
+    EndRoutingResult,
+    bind_template_exits,
+    reconcile_workflow_ends,
 )
 from odyssey_api.journeys.guardrail_domain import GuardrailSide
 from odyssey_api.journeys.pattern_domain import instantiate_pattern, remove_slot, validate_pattern
@@ -116,6 +134,84 @@ def _validate_transition(current: PatternConfig, candidate: PatternConfig) -> No
         )
 
 
+async def _synchronize_pattern_ends(
+    session: AsyncSession,
+    journey_id: UUID,
+    workspace_id: UUID,
+    pattern: PatternConfig,
+    confirmation: list[RoutingConfirmation] | None,
+) -> None:
+    records = await repository.list_routing_workflows(session, journey_id, workspace_id)
+    assignments = {slot.agent_id: slot for slot in pattern.slots if slot.agent_id is not None}
+    candidates: list[tuple[repository.RoutingWorkflowRecord, EndRoutingResult]] = []
+    impact: list[RoutingImpact] = []
+    for record in records:
+        slot = assignments.get(record.agent_id)
+        if slot is None:
+            # Guardrails/unassigned Agents have no Main Execution Pattern boundary.
+            continue
+        result = reconcile_workflow_ends(record.workflow, record.layout, pattern, slot.id, uuid4)
+        if not result.changed:
+            continue
+        candidates.append((record, result))
+        legacy = any(
+            isinstance(node, EndNode) and node.configuration.binding is None
+            for node in record.workflow.nodes
+        )
+        if result.removed_edge_ids:
+            impact.append(
+                RoutingImpact(
+                    agent_id=record.agent_id,
+                    revision=record.revision,
+                    removed_end_ids=list(result.removed_end_ids),
+                    removed_edge_ids=list(result.removed_edge_ids),
+                    legacy=legacy,
+                )
+            )
+    expected = {
+        (
+            str(item.agent_id),
+            item.revision,
+            tuple(sorted(str(value) for value in item.removed_end_ids)),
+            tuple(sorted(str(value) for value in item.removed_edge_ids)),
+        )
+        for item in impact
+    }
+    confirmed = {
+        (
+            str(item.agent_id),
+            item.revision,
+            tuple(sorted(str(value) for value in item.removed_end_ids)),
+            tuple(sorted(str(value) for value in item.removed_edge_ids)),
+        )
+        for item in confirmation or []
+    }
+    if impact and expected != confirmed:
+        raise ApplicationError(
+            ErrorCode.STATE_CONFLICT,
+            details={
+                "reason": "END_ROUTING_CONFIRMATION_REQUIRED",
+                "routingImpact": [item.model_dump(mode="json", by_alias=True) for item in impact],
+            },
+        )
+    for record, result in candidates:
+        updated = await repository.cas_update_routing_workflow(
+            session,
+            journey_id=journey_id,
+            workspace_id=workspace_id,
+            record=record,
+            workflow=result.workflow,
+            layout=result.layout,
+        )
+        if not updated:
+            current = await repository.get_agent_revision(
+                session, journey_id, record.agent_id, workspace_id
+            )
+            if current is None:
+                raise ApplicationError(ErrorCode.NOT_FOUND)
+            raise _revision_error(record.revision, current)
+
+
 async def save_journey_pattern(
     session: AsyncSession,
     journey_id: UUID,
@@ -123,6 +219,9 @@ async def save_journey_pattern(
     request: SaveJourneyRequest,
 ) -> JourneyEditorDocument:
     async with session.begin():
+        locked = await repository.get_scoped_journey_for_update(session, journey_id, workspace_id)
+        if locked is None:
+            raise ApplicationError(ErrorCode.NOT_FOUND)
         current = await repository.get_journey_document(session, journey_id, workspace_id)
         if current is None:
             raise ApplicationError(ErrorCode.NOT_FOUND)
@@ -135,6 +234,9 @@ async def save_journey_pattern(
         }
         if not candidate_agent_ids.issubset(known_agent_ids):
             raise _validation_error(["AGENT_REFERENCE_INVALID"])
+        await _synchronize_pattern_ends(
+            session, journey_id, workspace_id, request.pattern, request.routing_confirmation
+        )
         updated = await repository.cas_update_pattern(
             session,
             journey_id=journey_id,
@@ -246,6 +348,8 @@ async def create_minimum_agent_and_assign(
         name = next_default_agent_name(await repository.list_agent_names(session, journey_id))
         agent_id = id_factory()
         workflow, layout = create_minimum_workflow(id_factory)
+        routed = reconcile_workflow_ends(workflow, layout, pattern, slot.id, id_factory)
+        workflow, layout = routed.workflow, routed.layout
         await repository.insert_agent_workflow(
             session,
             agent_id=agent_id,
@@ -436,6 +540,30 @@ async def save_agent_workflow(
     del candidate
     references = extract_knowledge_space_references(request.workflow, request.reusable_tools)
     async with session.begin():
+        locked = await repository.get_scoped_journey_for_update(session, journey_id, workspace_id)
+        if locked is None:
+            raise ApplicationError(ErrorCode.NOT_FOUND)
+        current_document = await repository.get_agent_workflow_document(
+            session, journey_id=journey_id, agent_id=agent_id, workspace_id=workspace_id
+        )
+        if current_document is None:
+            raise ApplicationError(ErrorCode.NOT_FOUND)
+        if current_document.agent.revision != request.expected_revision:
+            raise _revision_error(request.expected_revision, current_document.agent.revision)
+        old_ends = {
+            node.id: node.configuration
+            for node in current_document.workflow.nodes
+            if isinstance(node, EndNode)
+        }
+        new_ends = {
+            node.id: node.configuration
+            for node in request.workflow.nodes
+            if isinstance(node, EndNode)
+        }
+        if old_ends != new_ends:
+            raise ApplicationError(
+                ErrorCode.STATE_CONFLICT, details={"reason": "END_BOUNDARY_IMMUTABLE"}
+            )
         requested_tool_kinds = {tool.kind for tool in request.reusable_tools}
         available_tool_kinds = await repository.get_available_tool_definition_kinds(
             session, requested_tool_kinds
@@ -515,6 +643,27 @@ async def _save_agent_as_template_in_transaction(
         variables=copy.deepcopy(document.variables),
         reusable_tools=copy.deepcopy(document.reusable_tools),
     )
+    source_journey = await repository.get_scoped_journey(session, journey_id, workspace_id)
+    source_pattern = (
+        PatternConfig.model_validate(source_journey.pattern_config) if source_journey else None
+    )
+    for node in snapshot.workflow.nodes:
+        if isinstance(node, EndNode):
+            binding = node.configuration.binding
+            if binding and source_pattern:
+                if binding.target.type == "slot":
+                    target_slot = next(
+                        (
+                            slot
+                            for slot in source_pattern.slots
+                            if slot.id == binding.target.slot_id
+                        ),
+                        None,
+                    )
+                    node.name = f"End → {target_slot.label}" if target_slot else "End"
+                else:
+                    node.name = "Complete Journey"
+            node.configuration.binding = None
     return await repository.insert_agent_template(
         session,
         template_id=id_factory(),
@@ -553,7 +702,35 @@ def _remap_template(
     owned.update(str(edge.id) for edge in snapshot.workflow.edges)
     owned.update(str(item.id) for item in snapshot.variables)
     owned.update(str(item.id) for item in snapshot.reusable_tools)
-    mapping = {value: str(id_factory()) for value in owned}
+
+    def collect_api_ids(configuration: ApiRequestConfiguration) -> None:
+        owned.update(str(header.id) for header in configuration.headers)
+        if isinstance(configuration.body, FormDataApiRequestBody):
+            owned.update(str(entry.id) for entry in configuration.body.entries)
+
+    def collect_nodes(nodes: Sequence[WorkflowNode | LoopBodyNode]) -> None:
+        for node in nodes:
+            owned.add(str(node.id))
+            if isinstance(node, BranchNode):
+                owned.add(str(node.configuration.default_case.id))
+                for case in node.configuration.cases:
+                    owned.add(str(case.id))
+                    owned.update(str(condition.id) for condition in case.conditions)
+            elif isinstance(node, TaskNode):
+                owned.update(str(variable.id) for variable in node.configuration.local_variables)
+                for step in node.configuration.steps:
+                    owned.add(str(step.id))
+                    if isinstance(step, ApiRequestToolStep):
+                        collect_api_ids(step.configuration)
+            elif isinstance(node, LoopNode):
+                owned.update(str(edge.id) for edge in node.configuration.body.graph.edges)
+                collect_nodes(node.configuration.body.graph.nodes)
+
+    collect_nodes(snapshot.workflow.nodes)
+    for tool in snapshot.reusable_tools:
+        if isinstance(tool, ReusableApiTool):
+            collect_api_ids(tool.configuration)
+    mapping = {value: str(id_factory()) for value in sorted(owned)}
 
     def remap(value: object) -> object:
         if isinstance(value, str):
@@ -575,6 +752,7 @@ async def instantiate_agent_template(
     slot_id: UUID,
     workspace_id: UUID,
     expected_revision: int,
+    end_assignments: list[TemplateEndAssignment] | None = None,
     id_factory: Callable[[], UUID] = uuid4,
 ) -> InstantiateAgentTemplateResponse:
     async with session.begin():
@@ -592,7 +770,12 @@ async def instantiate_agent_template(
             raise ApplicationError(ErrorCode.NOT_FOUND)
         if slot.agent_id is not None:
             raise ApplicationError(ErrorCode.STATE_CONFLICT, details={"reason": "SLOT_OCCUPIED"})
-        snapshot = _remap_template(template.snapshot, id_factory)
+        prepared = bind_template_exits(template.snapshot, pattern, slot_id, end_assignments)
+        snapshot = _remap_template(prepared, id_factory)
+        routed = reconcile_workflow_ends(
+            snapshot.workflow, snapshot.layout, pattern, slot_id, id_factory
+        )
+        snapshot.workflow, snapshot.layout = routed.workflow, routed.layout
         agent_id = id_factory()
         name = next_default_agent_name(await repository.list_agent_names(session, journey_id))
         await repository.insert_agent_workflow(
@@ -667,6 +850,9 @@ async def remove_occupied_slot(
         issues = validate_pattern(candidate)
         if issues:
             raise _validation_error([issue.code.value for issue in issues])
+        await _synchronize_pattern_ends(
+            session, journey_id, workspace_id, candidate, request.routing_confirmation
+        )
         await repository.delete_agent_workflow(session, request.expected_agent_id)
         updated = await repository.cas_update_pattern(
             session,

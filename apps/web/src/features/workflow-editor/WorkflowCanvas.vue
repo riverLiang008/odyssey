@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { workflowRouting } from '@odyssey/design-tokens'
 import { computed, ref } from 'vue'
 import {
   VueFlow,
@@ -9,7 +10,7 @@ import {
   type NodeMouseEvent,
   type ViewportTransform,
 } from '@vue-flow/core'
-import type { AgentVariable, SystemToolDefinition, AgentReusableTool, CanvasLayout, KnowledgeSpaceSummary, LoopBodyGraph, LoopNode, UUID, WorkflowGraph } from '@odyssey/schemas'
+import type { JourneyEditorDocument, AgentVariable, SystemToolDefinition, AgentReusableTool, CanvasLayout, KnowledgeSpaceSummary, LoopBodyGraph, LoopNode, UUID, WorkflowGraph } from '@odyssey/schemas'
 import type { WorkflowMode } from '@/stores/workflowEditor'
 
 import {
@@ -31,6 +32,7 @@ import {
 import WorkflowNodeRenderer from './WorkflowNodeRenderer.vue'
 
 const props = defineProps<{
+  routingJourney?: JourneyEditorDocument | null
   graph: WorkflowGraph | LoopBodyGraph
   layout: CanvasLayout | LoopNode['config']['body']['layout']
   mode: WorkflowMode
@@ -44,10 +46,12 @@ const props = defineProps<{
   activeResourceDrag?: WorkflowResourceDragPayload | null
   normalizeInitialViewport?: boolean
 }>()
+type CanvasTargetContext = { kind: 'root' } | { kind: 'loop-body'; loopNodeId: UUID }
 const emit = defineEmits<{
-  intent: [intent: WorkflowCanvasIntent]
-  connect: [connection: Connection]
-  create: [nodeType: WorkflowPaletteNodeType, point: { x: number; y: number }]
+  intent: [context: CanvasTargetContext, intent: WorkflowCanvasIntent]
+  connect: [context: CanvasTargetContext, connection: Connection]
+  create: [context: CanvasTargetContext, nodeType: WorkflowPaletteNodeType, point: { x: number; y: number }]
+  resize: [nodeId: UUID, size: { width: number; height: number }]
   clearError: []
   reject: [error: WorkflowCanvasUiErrorCode]
   editTool: [nodeId: UUID, stepId: UUID]
@@ -58,12 +62,12 @@ const emit = defineEmits<{
   resourceDrop: [action: WorkflowResourceDropAction]
   updateAgentAction: [nodeId: UUID, details: { name: string; model: string; goal: string }]
   updateNodeName: [nodeId: UUID, name: string]
-  nodeContextMenu: [nodeId: UUID, point: { x: number; y: number }]
-  edgeContextMenu: [edgeId: UUID, point: { x: number; y: number }]
+  nodeContextMenu: [context: CanvasTargetContext, nodeId: UUID, point: { x: number; y: number }]
+  edgeContextMenu: [context: CanvasTargetContext, edgeId: UUID, point: { x: number; y: number }]
 }>()
 const root = ref<globalThis.HTMLElement | null>(null)
-const projection = computed(() => projectWorkflowCanvas(props.graph, props.layout, props.mode))
-const { onInit, project: projectPoint, setCenter } = useVueFlow()
+const projection = computed(() => projectWorkflowCanvas(props.graph, props.layout, props.mode, props.routingJourney))
+const { onInit, project: projectPoint, setCenter, setViewport: setCanvasViewport } = useVueFlow()
 let connectionCommitted = false
 let isApplyingInitialCenter = false
 const resourceDropFeedback = ref<{ nodeId: UUID | null; targetKind: WorkflowResourceDropTarget['kind'] | null; status: 'idle' | 'valid' | 'invalid' | 'duplicate' | 'unavailable' }>({ nodeId: null, targetKind: null, status: 'idle' })
@@ -93,6 +97,21 @@ onInit(async () => {
     isApplyingInitialCenter = false
     return
   }
+  const viewport = props.layout.viewport
+  const boundaryOnly = props.graph.nodes.every((node) => node.type === 'start' || node.type === 'end')
+  if (boundaryOnly && props.graph.nodes.filter((node) => node.type === 'end').length > 1
+      && viewport.x === 0 && viewport.y === 0 && viewport.zoom === 1 && root.value) {
+    const positions = projection.value.nodes.map((node) => node.position)
+    const maxX = Math.max(...positions.map((point) => point.x)) + Number.parseFloat(workflowRouting.exitWidth)
+    const maxY = Math.max(...positions.map((point) => point.y)) + Number.parseFloat(workflowRouting.exitMinHeight)
+    const zoom = Math.max(.35, Math.min(1,
+      (root.value.clientWidth - workflowRouting.viewportLeftInset - workflowRouting.viewportPadding) / maxX,
+      (root.value.clientHeight - workflowRouting.viewportTopInset - workflowRouting.viewportPadding) / maxY))
+    isApplyingInitialCenter = true
+    await setCanvasViewport({ x: workflowRouting.viewportLeftInset, y: workflowRouting.viewportTopInset, zoom })
+    isApplyingInitialCenter = false
+    return
+  }
   if (!shouldCenterMinimumWorkflow.value) return
   const placements = new Map(props.layout.nodePlacements.map((placement) => [placement.nodeId, placement]))
   const start = props.graph.nodes.find((node) => node.type === 'start' || node.type === 'loop_start')
@@ -113,37 +132,61 @@ onInit(async () => {
 function nodeClick(event: NodeMouseEvent) {
   const origin = event.event.target
   if (origin instanceof globalThis.Element && origin.closest('[data-no-node-inspector="true"]')) return
-  emit('intent', { type: 'select-node', nodeId: event.node.id as UUID })
+  emit('intent', (event.node.data.context ?? { kind: 'root' }) as CanvasTargetContext, { type: 'select-node', nodeId: event.node.id as UUID })
 }
 function nodeContextMenu(event: NodeMouseEvent) {
   event.event.preventDefault()
   if (props.mode !== 'configure') return
   if (!(event.event instanceof globalThis.MouseEvent)) return
-  const node = props.graph.nodes.find((candidate) => candidate.id === event.node.id)
+  const node = event.node.data.node
   if (!node || ['start', 'end', 'loop_start', 'loop_end'].includes(node.type)) return
-  emit('nodeContextMenu', node.id, { x: event.event.clientX, y: event.event.clientY })
+  emit('nodeContextMenu', (event.node.data.context ?? { kind: 'root' }) as CanvasTargetContext, node.id, { x: event.event.clientX, y: event.event.clientY })
 }
 function edgeClick(event: EdgeMouseEvent) {
-  emit('intent', { type: 'select-edge', edgeId: event.edge.id as UUID })
+  emit('intent', contextForNodeId(event.edge.source as UUID), { type: 'select-edge', edgeId: event.edge.id as UUID })
 }
 function edgeContextMenu(event: EdgeMouseEvent) {
   event.event.preventDefault()
   if (props.mode !== 'configure') return
   if (!(event.event instanceof globalThis.MouseEvent)) return
-  emit('edgeContextMenu', event.edge.id as UUID, { x: event.event.clientX, y: event.event.clientY })
+  emit('edgeContextMenu', contextForNodeId(event.edge.source as UUID), event.edge.id as UUID, { x: event.event.clientX, y: event.event.clientY })
 }
 function dragStop(event: NodeDragEvent) {
   if (props.mode !== 'configure') return
-  const position = fromWorkflowCanvasPosition(event.node.position, props.layout, props.mode)
-  emit('intent', { type: 'move-node', nodeId: event.node.id as UUID, x: position.x, y: position.y })
+  const context = (event.node.data.context ?? { kind: 'root' }) as CanvasTargetContext
+  const position = context.kind === 'root' ? fromWorkflowCanvasPosition(event.node.position, props.layout, props.mode) : event.node.position
+  emit('intent', context, { type: 'move-node', nodeId: event.node.id as UUID, x: position.x, y: position.y })
 }
 function moveEnd({ flowTransform: viewport }: { event: unknown; flowTransform: ViewportTransform }) {
   if (isApplyingInitialCenter) return
-  emit('intent', { type: 'update-viewport', x: viewport.x, y: viewport.y, zoom: viewport.zoom })
+  emit('intent', { kind: 'root' }, { type: 'update-viewport', x: viewport.x, y: viewport.y, zoom: viewport.zoom })
 }
 function paneClick() {
-  emit('intent', { type: 'select-node', nodeId: null })
-  emit('intent', { type: 'select-edge', edgeId: null })
+  emit('intent', { kind: 'root' }, { type: 'select-node', nodeId: null })
+  emit('intent', { kind: 'root' }, { type: 'select-edge', edgeId: null })
+}
+function contextForNodeId(nodeId: UUID): CanvasTargetContext {
+  if ('schemaVersion' in props.graph) {
+    for (const node of props.graph.nodes) if (node.type === 'loop' && node.config.body.graph.nodes.some((child) => child.id === nodeId)) return { kind: 'loop-body', loopNodeId: node.id }
+  }
+  return { kind: 'root' }
+}
+function creationTarget(nodeType: WorkflowPaletteNodeType, position: { x: number; y: number }): { context: CanvasTargetContext; point: { x: number; y: number } } | null {
+  if (!('schemaVersion' in props.graph)) return { context: { kind: 'root' }, point: position }
+  const placements = new Map(props.layout.nodePlacements.map((placement) => [placement.nodeId, placement]))
+  const loop = [...props.graph.nodes].reverse().find((node) => {
+    if (node.type !== 'loop') return false
+    const placement = placements.get(node.id)
+    if (!placement) return false
+    const width = placement.width ?? 720
+    const height = placement.height ?? 480
+    return position.x >= placement.x && position.x <= placement.x + width && position.y >= placement.y + 58 && position.y <= placement.y + height
+  })
+  if (!loop || loop.type !== 'loop') return { context: { kind: 'root' }, point: position }
+  if (nodeType !== 'task' && nodeType !== 'agent_action') return null
+  const placement = placements.get(loop.id)
+  if (!placement) return null
+  return { context: { kind: 'loop-body', loopNodeId: loop.id }, point: { x: Math.max(12, position.x - placement.x), y: Math.max(70, position.y - placement.y) } }
 }
 function drop(event: globalThis.DragEvent) {
   event.preventDefault()
@@ -169,7 +212,9 @@ function drop(event: globalThis.DragEvent) {
     x: event.clientX - bounds.left,
     y: event.clientY - bounds.top,
   }), props.layout, props.mode)
-  emit('create', payload.nodeType, position)
+  const target = creationTarget(payload.nodeType, position)
+  if (!target) { emit('reject', 'INVALID_DROP_PAYLOAD'); return }
+  emit('create', target.context, payload.nodeType, target.point)
 }
 
 function resourceTargetFromEvent(event: globalThis.DragEvent): WorkflowResourceDropTarget {
@@ -194,7 +239,9 @@ function createFromClientPoint(nodeType: WorkflowPaletteNodeType, clientX: numbe
     props.layout,
     props.mode,
   )
-  emit('create', nodeType, position)
+  const target = creationTarget(nodeType, position)
+  if (!target) { emit('reject', 'INVALID_DROP_PAYLOAD'); return false }
+  emit('create', target.context, nodeType, target.point)
   return true
 }
 defineExpose({ createFromClientPoint })
@@ -251,7 +298,13 @@ function connect(connection: Connection) {
     return
   }
   connectionCommitted = true
-  emit('connect', connection)
+  const sourceContext = contextForNodeId(connection.source as UUID)
+  const targetContext = contextForNodeId(connection.target as UUID)
+  if (sourceContext.kind !== targetContext.kind || (sourceContext.kind === 'loop-body' && targetContext.kind === 'loop-body' && sourceContext.loopNodeId !== targetContext.loopNodeId)) {
+    emit('reject', 'INVALID_CONNECTION')
+    return
+  }
+  emit('connect', sourceContext, connection)
 }
 function connectEnd() {
   if (!connectionCommitted) emit('reject', 'INVALID_CONNECTION')
@@ -284,7 +337,8 @@ function connectEnd() {
       <template #node-workflow="nodeProps">
         <WorkflowNodeRenderer
           v-bind="nodeProps"
-          :configure-expanded="mode === 'configure'"
+          :configure-expanded="mode === 'configure' && ((nodeProps.data.context?.kind ?? 'root') === 'root' || nodeProps.data.node.type === 'branch')"
+          :read-only="nodeProps.data.node.type === 'branch' ? mode !== 'configure' : undefined"
           :tools="reusableTools ?? []"
           :knowledge-spaces="knowledgeSpaces ?? []"
           :variables="variables" :active-resource-drag="activeResourceDrag"
@@ -303,6 +357,7 @@ function connectEnd() {
           @unbind-knowledge-space="unbindKnowledgeSpace"
           @update-agent-action="(nodeId, details) => emit('updateAgentAction', nodeId, details)"
           @update-node-name="(nodeId, name) => emit('updateNodeName', nodeId, name)"
+          @resize-node="(nodeId, size) => emit('resize', nodeId, size)"
         />
       </template>
     </VueFlow>

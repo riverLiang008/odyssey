@@ -234,6 +234,24 @@ Current node concepts visible in the draft include:
 
 A Task contains a linear sequence of configured tool instances. Tools are not independent workflow nodes. Branching occurs at the workflow level through Branch nodes.
 
+#### 5.3.1 Loop as a compound node
+
+Loop is a resizable compound node rendered directly on the root Agent Workflow Canvas. It is not a link to, or a mode switch into, a separate canvas.
+
+The Loop container owns a distinct body graph while presenting that graph inline:
+
+- the root workflow treats the Loop as one node, and root-level edges connect only to the Loop boundary;
+- the Loop body displays its fixed Loop Start and Loop End nodes, child Task and Agent Action nodes, and body edges inside the container;
+- dragging a Task or Agent Action from the node palette into the Loop body creates a child in the Loop body graph, with coordinates stored relative to the Loop container;
+- child nodes can be moved and connected inside the Loop, but cannot be dragged outside its boundary;
+- moving the Loop moves the complete visual group while preserving child-relative coordinates;
+- resizing the Loop changes the visible working area and is persisted as editor layout state;
+- nested Loop nodes are not supported in the Loop body for V1.
+
+Creation and selection are separate interactions. Dropping any node onto the canvas must not automatically open a side panel or creation dialog. A newly dropped Loop is created immediately with valid defaults and can be configured afterward. Clicking the Loop header or border selects the Loop and opens its configuration panel; clicking a child selects that child and may open the child's configuration. The editor must keep one continuous canvas presentation and must not replace the root canvas with an `InlineLoopCanvas` view.
+
+Implementation boundary: although the Loop body is presented inside the root canvas, it remains a separately owned graph and layout in the domain document. The Canvas adapter is responsible for projecting that nested ownership into the single visual surface; UI components must not flatten or directly mutate the persisted domain graph.
+
 ### 5.4 Knowledge Space List
 
 Primary responsibilities:

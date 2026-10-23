@@ -11,6 +11,7 @@ const props = defineProps<{
   modelValue: string
   options: readonly ToolSelectOption[]
   controlLabel: string
+  disabled?: boolean
 }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 const open = ref(false)
@@ -18,7 +19,7 @@ const root = ref<globalThis.HTMLDivElement | null>(null)
 const selectedLabel = computed(() => props.options.find((option) => option.value === props.modelValue)?.label ?? props.options[0]?.label ?? '')
 
 function select(option: ToolSelectOption) {
-  if (option.disabled) return
+  if (props.disabled || option.disabled) return
   open.value = false
   if (option.value !== props.modelValue) emit('update:modelValue', option.value)
 }
@@ -31,7 +32,7 @@ function closeOnFocusOut(event: globalThis.FocusEvent) {
 
 <template>
   <div ref="root" class="tool-select" @focusout="closeOnFocusOut" @keydown.escape.stop="open = false">
-    <button type="button" class="tool-select-trigger" aria-haspopup="listbox" :aria-expanded="open" :aria-label="`${controlLabel}: ${selectedLabel}`" @click="open = !open">
+    <button type="button" class="tool-select-trigger" aria-haspopup="listbox" :aria-expanded="open" :aria-label="`${controlLabel}: ${selectedLabel}`" :disabled="disabled" @click="open = !open">
       <span>{{ selectedLabel }}</span><i aria-hidden="true" />
     </button>
     <div v-if="open" class="tool-select-menu" role="listbox" :aria-label="controlLabel">
@@ -46,6 +47,7 @@ function closeOnFocusOut(event: globalThis.FocusEvent) {
 .tool-select { position:relative; width:100%; min-width:0; }
 .tool-select-trigger { width:100%; min-height:34px; box-sizing:border-box; border:1px solid var(--tool-border,#d8deea); border-radius:var(--tool-radius,8px); padding:7px 10px; display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--tool-soft,#eef2f8); color:var(--tool-ink,#172033); font:inherit; line-height:17px; text-align:left; cursor:pointer; transition:border-color .14s ease,background .14s ease,box-shadow .14s ease; }
 .tool-select-trigger:hover { border-color:color-mix(in srgb,var(--tool-primary,#4d72f2) 45%,var(--tool-border,#d8deea)); background:color-mix(in srgb,var(--tool-primary,#4d72f2) 4%,var(--tool-soft,#eef2f8)); }
+.tool-select-trigger:disabled { opacity:.58; cursor:not-allowed; }
 .tool-select-trigger:focus-visible,.tool-select:focus-within .tool-select-trigger { outline:0; border-color:var(--tool-primary,#4d72f2); background:var(--tool-surface,#fff); box-shadow:0 0 0 2px rgba(77,114,242,.15); }
 .tool-select-trigger i { width:7px; height:7px; flex:0 0 7px; border-right:1.5px solid var(--tool-muted,#69758c); border-bottom:1.5px solid var(--tool-muted,#69758c); transform:translateY(-2px) rotate(45deg); transition:transform .14s ease; }
 .tool-select-trigger[aria-expanded="true"] i { transform:translateY(2px) rotate(225deg); }

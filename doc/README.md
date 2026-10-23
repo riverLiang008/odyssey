@@ -48,6 +48,9 @@ doc/
 | Canonical JSON contract | [`architecture/data/contracts/canonical-json-contracts-draft.md`](architecture/data/contracts/canonical-json-contracts-draft.md) | Working baseline |
 | V1 数据库设计 | [`architecture/data/database/reviews/v1-database-design-review-draft.md`](architecture/data/database/reviews/v1-database-design-review-draft.md) | Implementation baseline |
 | V1 对象存储设计 | [`architecture/data/storage/v1-object-storage-design.md`](architecture/data/storage/v1-object-storage-design.md) | Implementation baseline |
+| Pattern → Workflow End 路由与单向同步 | [`architecture/execution/pattern-agent-end-routing-decision.md`](architecture/execution/pattern-agent-end-routing-decision.md) | 已实施编辑器与 HTTP 持久化；覆盖旧单 End 与 Hub 单向假设 |
+| Pattern → Workflow End 实施 TODO | [`planning/implementation/pattern-agent-end-routing-implementation-plan.md`](planning/implementation/pattern-agent-end-routing-implementation-plan.md) | 实施记录；含原子同步、Canvas 与兼容验收，剩余范围见完成报告 |
+| Pattern / End 路由合同增量 | [`architecture/data/contracts/pattern-agent-end-routing-contract.md`](architecture/data/contracts/pattern-agent-end-routing-contract.md) | 本次实施合同；版本、删除确认、并发与可移植出口 |
 | Workflow/Canvas 执行模型 | [`architecture/execution/Canvas Execution Model.md`](<architecture/execution/Canvas Execution Model.md>) | Current design |
 | Knowledge Space 产品规格 | [`product/feature-specifications/knowledge-space/knowledge-space-specification.md`](product/feature-specifications/knowledge-space/knowledge-space-specification.md) | Product specification；已确认的 V1 database/storage 决策可覆盖其中的旧持久化建议 |
 | 前端工程规范 | [`frontend-engineering-guidelines.md`](frontend-engineering-guidelines.md) | Authoritative |
@@ -127,3 +130,7 @@ Obsidian 工作区和插件配置。该目录不属于项目文档分类，不�
 6. 评审反馈应与被评审文档放在相邻的 `reviews/` 目录中。
 
 文档同时涉及多个主题时，应按其主要目的归档，并通过相对链接引用相关文档，避免复制出多份内容。
+
+## 产品案例
+
+- [First Case: Moonberry Island Guide (Solo, English)](product/cases/first-case-knowledge-qa/README.md)：English case design, two Workflow DSL variants, four fictional game guides, and acceptance questions.

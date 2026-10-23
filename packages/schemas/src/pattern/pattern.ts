@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { jsonObjectSchema, schemaVersionSchema, uuidSchema } from '../common'
+import { jsonObjectSchema, uuidSchema } from '../common'
 
 export const PATTERN_KINDS = [
   'hub_and_spoke',
@@ -8,6 +8,12 @@ export const PATTERN_KINDS = [
   'linear_sequence',
   'solo_component',
 ] as const
+
+export const hubSpokeDirectionSchema = z.enum(['hub_to_spoke', 'spoke_to_hub', 'bidirectional'])
+export type HubSpokeDirection = z.infer<typeof hubSpokeDirectionSchema>
+export function getHubSpokeDirection(slot: { configuration: { [key: string]: unknown } }): HubSpokeDirection {
+  return hubSpokeDirectionSchema.parse(slot.configuration.direction ?? 'hub_to_spoke')
+}
 
 export const patternKindSchema = z.enum(PATTERN_KINDS)
 export const patternTemplateKeySchema = z.enum(PATTERN_KINDS)
@@ -43,7 +49,7 @@ export const patternRouteSchema = z.strictObject({
 
 export const patternConfigSchema = z
   .strictObject({
-    schemaVersion: schemaVersionSchema,
+    schemaVersion: z.enum(['1.0.0', '1.1.0']),
     id: uuidSchema,
     templateKey: patternTemplateKeySchema,
     kind: patternKindSchema,
@@ -63,6 +69,9 @@ export const patternConfigSchema = z
         })
       }
       slotIds.add(slot.id)
+      if (slot.configuration.direction !== undefined && (pattern.schemaVersion !== '1.1.0' || pattern.kind !== 'hub_and_spoke' || slot.topologyRole !== 'spoke' || !hubSpokeDirectionSchema.safeParse(slot.configuration.direction).success)) {
+        context.addIssue({ code: 'custom', message: 'Direction belongs to a Hub spoke and must be a supported direction', path: ['slots', index, 'configuration', 'direction'] })
+      }
     })
 
     const routeIds = new Set<string>()

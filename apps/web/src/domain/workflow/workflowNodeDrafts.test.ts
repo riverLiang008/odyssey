@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { uuidSchema, type AgentVariable } from '@odyssey/schemas'
 
-import { createAgentActionFromDraft, createLoopFromDraft } from './workflowNodeDrafts'
+import { createAgentActionFromDraft, createDefaultLoop, createLoopFromDraft } from './workflowNodeDrafts'
 
 const ids = Array.from({ length: 8 }, (_, index) => uuidSchema.parse(`0195f076-b6e6-7ef0-98db-d721990f${(9100 + index).toString()}`))
 function factory() {
@@ -37,5 +37,20 @@ describe('workflow node draft factories', () => {
   it('rejects invalid Loop prerequisites and typed values', () => {
     expect(createLoopFromDraft({ name: 'Retry', maxTurns: 0, variableId: variable.id, operator: 'eq', comparisonValue: '1' }, [variable], factory())).toEqual({ ok: false, error: { code: 'MAX_TURNS_INVALID' } })
     expect(createLoopFromDraft({ name: 'Retry', maxTurns: 2, variableId: variable.id, operator: 'eq', comparisonValue: 'abc' }, [variable], factory())).toEqual({ ok: false, error: { code: 'COMPARISON_VALUE_INVALID' } })
+  })
+
+  it('creates a dropped Loop immediately with valid defaults', () => {
+    const result = createDefaultLoop([variable], factory())
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value).toMatchObject({
+      type: 'loop',
+      name: 'New Loop',
+      config: {
+        maxTurns: 10,
+        exitCondition: { variableId: variable.id, operator: 'eq', value: 0 },
+      },
+    })
+    expect(createDefaultLoop([], factory())).toEqual({ ok: false, error: { code: 'VARIABLE_REQUIRED' } })
   })
 })

@@ -1,7 +1,13 @@
+import { applyBranchEdit } from '@/domain/workflow/branchCommands'
+import type { BranchEditIntent } from '@/domain/workflow/branchDrafts'
 import { computed, reactive, shallowRef, toRaw } from 'vue'
 import { defineStore } from 'pinia'
 import {
+  agentWorkflowEditorDocumentSchema,
+  agentWorkflowExportDocumentSchema,
   uuidSchema,
+  type JourneyEditorDocument,
+  type AgentWorkflowExportDocument,
   type SystemToolDefinition,
   type AgentVariable,
   type AgentReusableTool,
@@ -15,6 +21,7 @@ import {
   type UUID,
 } from '@odyssey/schemas'
 
+import { bindImportedEnds, type ImportEndMapping } from '@/domain/workflow-import/importEndBindings'
 import { changeTaskTool, type TaskToolSaveDraft, type ToolEditIntent } from '@/domain/workflow/systemToolCommands'
 import { agentVariableReferenceCount, changeAgentVariable as changeAgentVariableCommand } from '@/domain/workflow/agentVariableCommands'
 import type { WorkflowEditorRepository } from '@/repositories'
@@ -24,6 +31,7 @@ import {
   createLoopBodyNodeAt,
   moveLoopBodyNode,
   moveNodePlacement,
+  resizeNodePlacement,
   removeLoopBodyDocumentEdge,
   removeLoopBodyNodeAndPlacement,
   removeWorkflowNodeAndPlacement,
@@ -70,6 +78,7 @@ import {
   type LoopDraftValues,
   type WorkflowDraftResult,
   type WorkflowIdFactory,
+  validateWorkflowGraph,
 } from '@/domain/workflow'
 import {
   applyPersistenceFailure,
@@ -117,6 +126,15 @@ export type WorkflowInteractionState =
   | { type: 'connecting'; sourceNodeId: UUID; sourceHandleId?: UUID }
   | { type: 'creating-node'; nodeType: 'branch' | 'loop' | 'agent_action' | 'task' }
 
+export type WorkflowImportApplyResult =
+  | { readonly ok: true; readonly value: null }
+  | {
+      readonly ok: false
+      readonly error: {
+        readonly code: 'IMPORT_NOT_READY' | 'IMPORT_BLOCKED_BY_SAVE' | 'IMPORT_BLOCKED_BY_CONFLICT' | 'IMPORT_DOCUMENT_INVALID' | 'IMPORT_END_MAPPING_REQUIRED'
+      }
+    }
+
 function createSaveInput(document: AgentWorkflowEditorDocument): SaveAgentWorkflowInput {
   return {
     journeyId: document.agent.journeyId,
@@ -133,6 +151,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   // The repository returns a validated aggregate snapshot. Store actions
   // replace it as a unit, so deep proxy unwrapping adds no useful behavior and
   // makes the recursive Workflow JSON types exceed TypeScript's depth limit.
+  const routingJourney = shallowRef<JourneyEditorDocument | null>(null)
   const document = shallowRef<AgentWorkflowEditorDocument | null>(null)
   const session = reactive({
     selectedNodeId: null as UUID | null,
@@ -300,6 +319,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     })
     const knowledgeResultPromise = repository.listKnowledgeSpaces({ page: 1, pageSize: session.resourceBrowser.pageSize }, { signal: controller.signal })
 
+    routingJourney.value = null
     const journeyResult = await repository.loadJourney(journeyId, { signal: controller.signal })
     if (request !== activeRequest || controller.signal.aborted) return
     if (!journeyResult.ok) {
@@ -320,7 +340,12 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
       && agentResult.value.agent.journeyId === journeyId
       && agentResult.value.agent.id === agentId
     ) {
+      routingJourney.value = journeyResult.value
       document.value = agentResult.value
+      if (agentResult.value.workflow.nodes.every((node) => node.type === 'start' || node.type === 'end')
+          && agentResult.value.workflow.nodes.filter((node) => node.type === 'end').length > 1) {
+        session.resourceBrowser.collapsed = true
+      }
       persistenceState.value = createCleanPersistenceState(agentResult.value.agent.revision)
       loadState.status = 'ready'
       const knowledgeResult = await knowledgeResultPromise
@@ -343,6 +368,18 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
 
   function setMode(mode: WorkflowMode) { session.mode = mode; if (mode === 'flow') systemToolDraft.value = null }
   function setPanel(panel: WorkflowPanel) {
+    if (panel?.type === 'node-inspector') {
+      const context = session.context
+      const graph = context.kind === 'root' ? document.value?.workflow : findLoop(context.loopNodeId)?.config.body.graph
+      const node = graph?.nodes.find((candidate) => candidate.id === panel.nodeId)
+      if (node && (node.type === 'start' || node.type === 'end' || node.type === 'loop_start' || node.type === 'loop_end')) {
+        if (session.panel?.type === 'node-inspector' || session.panel?.type === 'loop-inspector') {
+          session.panel = null
+          session.resourceBrowser.collapsed = true
+        }
+        return
+      }
+    }
     session.panel = panel
     if (panel?.type === 'node-inspector' || panel?.type === 'edge-inspector' || panel?.type === 'loop-inspector') {
       session.resourceBrowser.collapsed = false
@@ -352,6 +389,12 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   function setPaletteCollapsed(collapsed: boolean) { session.paletteCollapsed = collapsed }
   function selectNode(nodeId: UUID | null) { session.selectedNodeId = nodeId }
   function selectEdge(edgeId: UUID | null) { session.selectedEdgeId = edgeId }
+  function closeInspector() {
+    session.selectedNodeId = null
+    session.selectedEdgeId = null
+    session.panel = null
+    session.resourceBrowser.collapsed = true
+  }
   function setInteraction(interaction: WorkflowInteractionState) { session.interaction = interaction }
   function stageCreationDraft(nodeType: 'agent_action' | 'loop', point: WorkflowPoint) {
     if (session.mode !== 'configure') return false
@@ -445,6 +488,88 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     if (persistenceState.value.type === 'dirty') scheduleAutosave()
   }
 
+  function resetSessionAfterWorkflowImport() {
+    systemToolDraft.value = null
+    toolError.value = null
+    variableError.value = null
+    lastDomainError.value = null
+    lastCanvasError.value = null
+    session.selectedNodeId = null
+    session.selectedEdgeId = null
+    session.panel = { type: 'tools' }
+    session.interaction = { type: 'idle' }
+    session.context = { kind: 'root' }
+    session.loopPresentation = { type: 'collapsed' }
+    session.creationDraft = { type: 'closed' }
+    contextSessions.clear()
+  }
+
+  function replaceWorkflowFromImport(candidate: AgentWorkflowExportDocument, mapping?: readonly ImportEndMapping[]): WorkflowImportApplyResult {
+    const current = document.value
+    const state = persistenceState.value
+    if (!current || !state || loadState.status !== 'ready') return { ok: false, error: { code: 'IMPORT_NOT_READY' } }
+    if (state.type === 'saving') return { ok: false, error: { code: 'IMPORT_BLOCKED_BY_SAVE' } }
+    if (state.type === 'conflict') return { ok: false, error: { code: 'IMPORT_BLOCKED_BY_CONFLICT' } }
+
+    const parsed = agentWorkflowExportDocumentSchema.safeParse(candidate)
+    if (!parsed.success) return { ok: false, error: { code: 'IMPORT_DOCUMENT_INVALID' } }
+    const adapted = bindImportedEnds(parsed.data, toRaw(current), mapping)
+    if (!adapted) return { ok: false, error: { code: 'IMPORT_END_MAPPING_REQUIRED' } }
+    const aggregate = agentWorkflowEditorDocumentSchema.safeParse({ agent: current.agent, ...adapted })
+    if (!aggregate.success) return { ok: false, error: { code: 'IMPORT_DOCUMENT_INVALID' } }
+    const validation = validateWorkflowGraph(parsed.data.workflow)
+    if (!validation.isStructurallyValid) return { ok: false, error: { code: 'IMPORT_DOCUMENT_INVALID' } }
+
+    clearAutosaveTimer()
+    document.value = {
+      ...current,
+      workflow: structuredClone(aggregate.data.workflow),
+      layout: structuredClone(aggregate.data.layout),
+      variables: structuredClone(aggregate.data.variables),
+      reusableTools: structuredClone(aggregate.data.reusableTools),
+    }
+    resetSessionAfterWorkflowImport()
+    markDirty()
+    scheduleAutosave(0)
+    return { ok: true, value: null }
+  }
+
+  /** Same-document DSL transaction: retain identity and editor UI, never use import remapping. */
+  function applyCompiledWorkflow(candidate: AgentWorkflowExportDocument, expectedMutationSeq: number): { ok: true } | { ok: false; error: { code: string } } {
+    const current = document.value
+    if (!current || !isReady.value) return { ok: false, error: { code: 'DSL_NOT_READY' } }
+    if (session.mode !== 'configure') return { ok: false, error: { code: 'DSL_READ_ONLY' } }
+    if (persistence.mutationSeq !== expectedMutationSeq) return { ok: false, error: { code: 'DSL_STALE' } }
+    if (persistenceState.value?.type === 'saving' || persistenceState.value?.type === 'conflict') return { ok: false, error: { code: 'DSL_SAVE_BLOCKED' } }
+    const parsed = agentWorkflowEditorDocumentSchema.safeParse({ agent: current.agent, ...candidate })
+    if (!parsed.success || !validateWorkflowGraph(candidate.workflow).isStructurallyValid) return { ok: false, error: { code: 'DSL_INVALID' } }
+    const ends = current.workflow.nodes.filter((node) => node.type === 'end')
+    const nextEnds = parsed.data.workflow.nodes.filter((node) => node.type === 'end')
+    if (ends.length !== nextEnds.length || ends.some((end) => !nextEnds.some((next) => next.id === end.id && JSON.stringify(next.config) === JSON.stringify(end.config)))) return { ok: false, error: { code: 'DSL_ENDS_IMMUTABLE' } }
+    clearAutosaveTimer()
+    document.value = parsed.data
+    if (session.context.kind === 'loop-body') {
+      const loopId = session.context.loopNodeId
+      if (!parsed.data.workflow.nodes.some((node) => node.id === loopId && node.type === 'loop')) { session.context = { kind: 'root' }; session.loopPresentation = { type: 'collapsed' } }
+    }
+    if (session.loopPresentation.type === 'expanded-inline') {
+      const loopId = session.loopPresentation.loopNodeId
+      if (!parsed.data.workflow.nodes.some((node) => node.id === loopId && node.type === 'loop')) session.loopPresentation = { type: 'collapsed' }
+    }
+    const contextLoopId = session.context.kind === 'loop-body' ? session.context.loopNodeId : null
+    const contextLoop = parsed.data.workflow.nodes.find((node) => node.type === 'loop' && node.id === contextLoopId)
+    const selectionGraph = contextLoop?.type === 'loop' ? contextLoop.config.body.graph : parsed.data.workflow
+    if (session.selectedNodeId && !selectionGraph.nodes.some((node) => node.id === session.selectedNodeId)) session.selectedNodeId = null
+    if (session.selectedEdgeId && !selectionGraph.edges.some((edge) => edge.id === session.selectedEdgeId)) session.selectedEdgeId = null
+    session.panel = { type: 'dsl-edit' }
+    session.resourceBrowser.category = 'dsl-edit'
+    session.resourceBrowser.collapsed = false
+    session.interaction = { type: 'idle' }
+    markDirty()
+    scheduleAutosave()
+    return { ok: true }
+  }
+
   function applyGraphResult(result: WorkflowCommandResult<AgentWorkflowEditorDocument['workflow']>) {
     if (!result.ok) {
       lastDomainError.value = result.error
@@ -497,6 +622,17 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     const current = document.value
     if (!current) return null
     return applyGraphResult(updateWorkflowNodeConfigCommand(current.workflow, intent))
+  }
+
+  function applyWorkflowBranchEdit(context: WorkflowCanvasContext, intent: BranchEditIntent) {
+    const current = document.value
+    if (!current || session.mode !== 'configure' || persistenceState.value?.type === 'conflict') return false
+    const loop = context.kind === 'loop-body' ? findLoop(context.loopNodeId) : null
+    if (context.kind === 'loop-body' && !loop) return false
+    if (!loop) return applyGraphResult(applyBranchEdit(current.workflow, { kind: 'agent-workflow' }, intent, current.variables)).ok
+    const result = applyBranchEdit(loop.config.body.graph, { kind: 'loop-body', loopNodeId: loop.id }, intent, current.variables)
+    if (!result.ok) { lastDomainError.value = result.error; return false }
+    return applyLoopApplicationResult(loop.id, { ok: true, value: { graph: result.value, layout: structuredClone(loop.config.body.layout) } }).ok
   }
 
   function updateWorkflowAgentActionDetails(
@@ -897,7 +1033,8 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     if (result?.ok) {
       session.selectedNodeId = node.id
       session.selectedEdgeId = null
-      session.panel = node.type === 'agent_action' ? { type: session.resourceBrowser.category } : { type: 'node-inspector', nodeId: node.id }
+      session.panel = null
+      session.resourceBrowser.collapsed = true
     }
     return result
   }
@@ -914,7 +1051,8 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     if (draft.context.kind === 'loop-body') {
       session.selectedNodeId = candidate.value.id
       session.selectedEdgeId = null
-      session.panel = { type: 'node-inspector', nodeId: candidate.value.id }
+      session.panel = null
+      session.resourceBrowser.collapsed = true
     }
     closeCreationDraft()
     return { ok: true, value: null }
@@ -929,7 +1067,6 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     const result = createWorkflowNode(candidate.value, draft.point)
     if (!result?.ok) return { ok: false, error: { code: 'DRAFT_SCHEMA_INVALID' } }
     closeCreationDraft()
-    expandLoopInline(candidate.value.id)
     return { ok: true, value: null }
   }
 
@@ -948,6 +1085,17 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     const current = document.value
     if (!current) return null
     const result = moveNodePlacement(current.layout, nodeId, point)
+    if (result.ok) {
+      document.value = { ...current, layout: result.value }
+      markDirty()
+    }
+    return result
+  }
+
+  function resizeWorkflowNode(nodeId: UUID, size: { width: number; height: number }) {
+    const current = document.value
+    if (!current) return null
+    const result = resizeNodePlacement(current.layout, nodeId, size)
     if (result.ok) {
       document.value = { ...current, layout: result.value }
       markDirty()
@@ -1060,12 +1208,12 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   return {
     toolKnowledgeSpaces, toolKnowledgeStatus, systemTools, systemToolStatus, systemToolDraft, toolError, toolTask, openSystemTool, editSystemTool, cancelSystemTool, changeSystemTool, saveSystemTool, saveAgentReusableTool, editAgentReusableTool, editLibraryReusableTool, deleteLibraryReusableTool, reusableToolReferenceCount,
     variableError, variableReferenceCount, saveAgentVariable, deleteAgentVariable,
-    document, session, persistence, persistenceState, hasUnsavedChanges, knowledgeSpaces, knowledgeInventory, lastDomainError, lastCanvasError, isReady, load, setMode, setPanel, setFocusMode, setPaletteCollapsed,
-    selectNode, selectEdge, setInteraction, stageCreationDraft, closeCreationDraft, submitAgentActionDraft, submitLoopDraft, clearWorkflowErrors, rejectCanvasInteraction,
+    routingJourney, document, session, persistence, persistenceState, hasUnsavedChanges, knowledgeSpaces, knowledgeInventory, lastDomainError, lastCanvasError, isReady, load, setMode, setPanel, setFocusMode, setPaletteCollapsed,
+    selectNode, selectEdge, closeInspector, setInteraction, stageCreationDraft, closeCreationDraft, submitAgentActionDraft, submitLoopDraft, clearWorkflowErrors, rejectCanvasInteraction,
     setResourceBrowserCollapsed, setResourceBrowserCategory, setResourceBrowserQuery, setResourceBrowserPage, loadKnowledgeSpaces,
     addWorkflowNode, removeWorkflowNode, connectWorkflowNodes, removeWorkflowEdge,
-    updateWorkflowNodeConfig, updateWorkflowAgentActionDetails, renameWorkflowNode, updateWorkflowLoopSettings, updateWorkflowLoopDetails, createWorkflowNode,
-    removeWorkflowNodeWithLayout, moveWorkflowNode, setViewport, save, retrySave, reloadAfterConflict, overwriteAfterConflict, toSaveInput, dispose,
+    applyWorkflowBranchEdit, updateWorkflowNodeConfig, updateWorkflowAgentActionDetails, renameWorkflowNode, updateWorkflowLoopSettings, updateWorkflowLoopDetails, createWorkflowNode,
+    removeWorkflowNodeWithLayout, moveWorkflowNode, resizeWorkflowNode, setViewport, replaceWorkflowFromImport, applyCompiledWorkflow, save, retrySave, reloadAfterConflict, overwriteAfterConflict, toSaveInput, dispose,
     switchCanvasContext, expandLoopInline, collapseInlineLoop,
     createWorkflowLoopBodyNode, removeWorkflowLoopBodyNode, moveWorkflowLoopBodyNode,
     connectWorkflowLoopBodyNodes, removeWorkflowLoopBodyEdge, setWorkflowLoopBodyViewport,

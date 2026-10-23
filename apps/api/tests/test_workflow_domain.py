@@ -1,5 +1,9 @@
 from uuid import UUID
 
+import pytest
+from pydantic import ValidationError
+
+from odyssey_api.journeys.dto import NodePlacement
 from odyssey_api.journeys.workflow_domain import create_minimum_workflow
 
 
@@ -27,3 +31,37 @@ def test_minimum_workflow_is_start_to_end_with_separate_layout() -> None:
         (200.0, 0.0),
     ]
     assert "x" not in graph.model_dump_json()
+
+
+def test_node_placement_accepts_optional_compound_node_size() -> None:
+    placement = NodePlacement.model_validate(
+        {
+            "nodeId": "00000000-0000-4000-8000-000000000100",
+            "x": 40,
+            "y": 80,
+            "width": 720,
+            "height": 480,
+        }
+    )
+
+    assert placement.width == 720
+    assert placement.height == 480
+    assert placement.model_dump(by_alias=True, mode="json")["width"] == 720
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("width", 419), ("width", 1601), ("height", 299), ("height", 1201)],
+)
+def test_node_placement_rejects_out_of_range_compound_node_size(
+    field: str, value: int
+) -> None:
+    payload = {
+        "nodeId": "00000000-0000-4000-8000-000000000100",
+        "x": 40,
+        "y": 80,
+        field: value,
+    }
+
+    with pytest.raises(ValidationError):
+        NodePlacement.model_validate(payload)

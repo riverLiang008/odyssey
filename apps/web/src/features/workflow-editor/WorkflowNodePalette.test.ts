@@ -52,4 +52,17 @@ describe('WorkflowNodePalette', () => {
     expect(wrapper.get('button.is-agent_action').attributes('disabled')).toBeDefined()
     expect(wrapper.get('button.is-task').attributes('disabled')).toBeDefined()
   })
+
+  it('keeps the Figma-style Nodes rail available while collapsed', async () => {
+    const wrapper = mount(WorkflowNodePalette, { props: { collapsed: true } })
+    expect(wrapper.classes()).toContain('is-collapsed')
+    expect(wrapper.find('.palette-group').exists()).toBe(false)
+    expect(wrapper.findAll('.compact-palette-item')).toHaveLength(4)
+    expect(wrapper.get('.compact-palette-item.is-branch').attributes('data-tooltip')).toBe('Branch')
+    expect(wrapper.get('.palette-collapse').attributes('aria-label')).toBe('Expand Workflow nodes')
+    await wrapper.get('.compact-palette-item.is-task').trigger('click')
+    expect(wrapper.emitted('create')).toEqual([['task']])
+    await wrapper.get('.palette-collapse').trigger('click')
+    expect(wrapper.emitted('collapse')).toEqual([[false]])
+  })
 })

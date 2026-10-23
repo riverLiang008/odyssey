@@ -46,6 +46,10 @@ scope for this built-in Pattern.
 - Geometry is derived presentation state and must not be persisted in
   `PatternConfig`.
 
+## Agent Workflow boundary clarification (2026-10-21)
+
+The [Pattern → Agent Workflow End decision](../execution/pattern-agent-end-routing-decision.md) applies to this Pattern: arrows are not user-editable, and each outgoing circular route generates its root Workflow End through one-way synchronization. This does not add a `journey_end` route to the circle. Explicit runtime exit/termination rules remain unresolved and must be designed before executable support is claimed.
+
 ## Implementation handoff
 
 Before implementing dynamic Circular Loop behavior, update the Pattern strategy,

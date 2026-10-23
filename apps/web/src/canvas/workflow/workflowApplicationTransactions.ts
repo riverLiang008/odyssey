@@ -59,6 +59,10 @@ export function createWorkflowNodeAt(
   if (!graph.ok) return { ok: false, error: { kind: 'graph', error: graph.error } }
   const layout = addNodePlacement(current.layout, graph.value, node.id, point)
   if (!layout.ok) return { ok: false, error: { kind: 'layout', error: layout.error } }
+  if (node.type === 'loop') {
+    const placement = layout.value.nodePlacements.find((candidate) => candidate.nodeId === node.id)
+    if (placement) Object.assign(placement, { width: 720, height: 480 })
+  }
   return { ok: true, value: { graph: graph.value, layout: layout.value } }
 }
 

@@ -19,17 +19,17 @@ function slot(idFactory: PatternIdFactory, label: string, topologyRole: string |
 
 function initialSlots(kind: PatternKind, idFactory: PatternIdFactory): PatternSlot[] {
   switch (kind) {
-    case 'solo_component': return [slot(idFactory, 'Solo', 'solo', null)]
-    case 'linear_sequence': return Array.from({ length: 4 }, (_, index) => slot(idFactory, `Stage ${index + 1}`, null, index))
+    case 'solo_component': return [slot(idFactory, 'Agent-1', 'solo', null)]
+    case 'linear_sequence': return Array.from({ length: 4 }, (_, index) => slot(idFactory, `Agent-${index + 1}`, null, index))
     case 'hub_and_spoke': return [
-      slot(idFactory, 'Hub', 'hub', null),
-      ...Array.from({ length: 4 }, (_, index) => slot(idFactory, `Spoke ${index + 1}`, 'spoke', null)),
+      slot(idFactory, 'Agent-1', 'hub', null),
+      ...Array.from({ length: 4 }, (_, index) => slot(idFactory, `Agent-${index + 2}`, 'spoke', null)),
     ]
     case 'diamond_loop': return [
-      slot(idFactory, 'Entry', 'entry', 0),
-      slot(idFactory, 'Stage 2', 'loop', 1),
-      slot(idFactory, 'Stage 3', 'loop', 2),
-      slot(idFactory, 'Stage 4', 'loop', 3),
+      slot(idFactory, 'Agent-1', 'entry', 0),
+      slot(idFactory, 'Agent-2', 'loop', 1),
+      slot(idFactory, 'Agent-3', 'loop', 2),
+      slot(idFactory, 'Agent-4', 'loop', 3),
     ]
   }
 }

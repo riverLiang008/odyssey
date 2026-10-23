@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import type { BranchPanelSession } from './branchPanelSession'
+import BranchConfigPanel from './BranchConfigPanel.vue'
+import ToolSelect, { type ToolSelectOption } from './ToolSelect.vue'
+import type { BranchEditIntent } from '@/domain/workflow/branchDrafts'
 import { computed, ref, watch } from 'vue'
 import { jsonValueSchema, type AgentReusableTool, type AgentVariable, type JsonValue, type KnowledgeSpaceSummary, type LoopBodyNode, type LoopNode, type UUID, type WorkflowEdge, type WorkflowNode } from '@odyssey/schemas'
 import {
@@ -9,8 +13,8 @@ import {
   type WorkflowResourceDropErrorCode,
 } from '@/canvas/workflow'
 
-const props = defineProps<{ node: WorkflowNode | LoopBodyNode | null; edge: WorkflowEdge | null; tools?: AgentReusableTool[]; variables?: AgentVariable[]; knowledgeSpaces?: KnowledgeSpaceSummary[]; knowledgeStatus?: 'idle' | 'loading' | 'ready' | 'error'; loopExpanded?: boolean; readOnly?: boolean }>()
-const emit = defineEmits<{ close: []; openLoop: [loopNodeId: string]; updateLoop: [details: Pick<LoopNode, 'name'> & Pick<LoopNode['config'], 'maxTurns' | 'exitCondition'>]; bindTool: [toolId: UUID]; unbindTool: [toolId: UUID]; bindKnowledgeSpace: [knowledgeSpaceId: UUID]; unbindKnowledgeSpace: [knowledgeSpaceId: UUID]; rejectResource: [reason: WorkflowResourceDropErrorCode] }>()
+const props = defineProps<{ branchDraftCache?: Map<UUID, BranchPanelSession>; branchEdges?: WorkflowEdge[]; branchTargetNames?: Readonly<Record<string, string>>; branchBlocked?: boolean; branchError?: string | null; branchCreating?: boolean; node: WorkflowNode | LoopBodyNode | null; edge: WorkflowEdge | null; tools?: AgentReusableTool[]; variables?: AgentVariable[]; knowledgeSpaces?: KnowledgeSpaceSummary[]; knowledgeStatus?: 'idle' | 'loading' | 'ready' | 'error'; loopExpanded?: boolean; readOnly?: boolean }>()
+const emit = defineEmits<{ branchDirtyChange: []; applyBranch: [intent: BranchEditIntent]; close: []; openLoop: [loopNodeId: string]; updateLoop: [details: Pick<LoopNode, 'name'> & Pick<LoopNode['config'], 'maxTurns' | 'exitCondition'>]; bindTool: [toolId: UUID]; unbindTool: [toolId: UUID]; bindKnowledgeSpace: [knowledgeSpaceId: UUID]; unbindKnowledgeSpace: [knowledgeSpaceId: UUID]; rejectResource: [reason: WorkflowResourceDropErrorCode] }>()
 const loopName = ref('')
 const loopMaxTurns = ref('1')
 const loopVariableId = ref('')
@@ -18,6 +22,25 @@ const loopOperator = ref<LoopNode['config']['exitCondition']['operator']>('eq')
 const loopValue = ref('')
 const loopError = ref<string | null>(null)
 const selectedLoopVariable = computed(() => props.variables?.find((variable) => variable.id === loopVariableId.value) ?? null)
+const loopVariableOptions = computed<readonly ToolSelectOption[]>(() => [
+  { value: '', label: 'Choose a Variable', disabled: true },
+  ...(props.variables ?? []).map((variable) => ({ value: variable.id, label: variable.displayName })),
+])
+const loopOperatorOptions: readonly ToolSelectOption[] = [
+  { value: 'eq', label: 'Equals (=)' },
+  { value: 'neq', label: 'Does not equal (≠)' },
+  { value: 'gt', label: 'Greater than (>)' },
+  { value: 'gte', label: 'Greater than or equal (≥)' },
+  { value: 'lt', label: 'Less than (<)' },
+  { value: 'lte', label: 'Less than or equal (≤)' },
+]
+
+function selectLoopOperator(value: string) {
+  switch (value) {
+    case 'eq': case 'neq': case 'gt': case 'gte': case 'lt': case 'lte':
+      loopOperator.value = value
+  }
+}
 
 watch(() => props.node, (node) => {
   if (node?.type !== 'loop') return
@@ -108,26 +131,25 @@ function startKnowledgeDrag(event: globalThis.DragEvent, space: KnowledgeSpaceSu
 </script>
 
 <template>
-  <aside class="workflow-side-panel" aria-label="Workflow inspector">
+  <BranchConfigPanel v-if="node?.type === 'branch'" :key="node.id" :draft-cache="branchDraftCache" :node="node" :edges="branchEdges ?? []" :variables="variables ?? []" :target-names="branchTargetNames" :read-only="readOnly" :blocked="branchBlocked" :error="branchError" :creating="branchCreating" @dirty-change="emit('branchDirtyChange')" @apply="emit('applyBranch', $event)" @close="emit('close')" />
+  <aside v-else-if="node?.type !== 'start' && node?.type !== 'end' && node?.type !== 'loop_start' && node?.type !== 'loop_end'" class="workflow-side-panel" aria-label="Workflow inspector">
     <div class="side-panel-heading"><div><p class="workflow-eyebrow">INSPECTOR</p><h2>{{ node?.name ?? (edge ? 'Route' : 'Nothing selected') }}</h2></div><button type="button" aria-label="Close inspector" @click="$emit('close')">×</button></div>
     <template v-if="node">
-      <dl><dt>Node type</dt><dd>{{ node.type.replace('_', ' ') }}</dd><dt>Identity</dt><dd>{{ node.id }}</dd></dl>
-      <p v-if="node.type === 'start' || node.type === 'end'" class="inspector-note">Start and End are fixed workflow boundaries.</p>
-      <form v-else-if="node.type === 'loop'" class="loop-config-form" @submit.prevent="submitLoop">
+      <dl v-if="node.type !== 'loop'"><dt>Node type</dt><dd>{{ node.type.replace('_', ' ') }}</dd><dt>Identity</dt><dd>{{ node.id }}</dd></dl>
+      <form v-if="node.type === 'loop'" class="loop-config-form" @submit.prevent="submitLoop">
         <p class="inspector-note">Structured iteration · variable comparison + maximum turns</p>
         <label>Name<input v-model="loopName" type="text" autocomplete="off" :disabled="readOnly" /></label>
         <p class="workflow-eyebrow">EXECUTION SETTINGS</p>
         <label>Maximum turns<input v-model="loopMaxTurns" type="number" min="1" step="1" inputmode="numeric" :disabled="readOnly" /></label>
         <p class="workflow-eyebrow">EXIT CONDITION</p>
-        <label>Variable<select v-model="loopVariableId" :disabled="readOnly"><option disabled value="">Choose a Variable</option><option v-for="variable in variables" :key="variable.id" :value="variable.id">{{ variable.displayName }}</option></select></label>
+        <label>Variable<ToolSelect v-model="loopVariableId" :options="loopVariableOptions" control-label="Exit condition Variable" :disabled="readOnly" /></label>
         <div class="loop-condition-row">
-          <label>Operator<select v-model="loopOperator" :disabled="readOnly"><option value="eq">=</option><option value="neq">≠</option><option value="gt">&gt;</option><option value="gte">≥</option><option value="lt">&lt;</option><option value="lte">≤</option></select></label>
+          <label>Operator<ToolSelect :model-value="loopOperator" :options="loopOperatorOptions" control-label="Exit condition Operator" :disabled="readOnly" @update:model-value="selectLoopOperator" /></label>
           <label>Value<input v-model="loopValue" type="text" :disabled="readOnly" /></label>
         </div>
         <p v-if="loopError" class="field-error" role="alert">{{ loopError }}</p>
         <button type="submit" class="primary-panel-button" :disabled="readOnly">Apply Loop settings</button>
-        <button type="button" class="secondary-panel-button" @click="$emit('openLoop', node.id)">{{ loopExpanded ? 'Focus Loop Body' : 'Open Loop Body' }} →</button>
-        <div class="loop-body-summary"><strong>{{ node.config.body.graph.nodes.length }} nodes · {{ node.config.body.graph.edges.length }} edges</strong><small>Includes Loop Start and Loop End sentinels</small></div>
+        <div class="loop-body-summary"><strong>{{ node.config.body.graph.nodes.length }} nodes · {{ node.config.body.graph.edges.length }} edges</strong><small>The Loop body is editable directly on the workflow canvas.</small></div>
       </form>
       <section v-else-if="node.type === 'agent_action'" class="agent-action-resource-config">
         <h3>Tools</h3>

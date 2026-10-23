@@ -1,0 +1,48 @@
+workflow "Research Agent" version "0.1" {
+  variables {
+    string user_managed research_topic = "Odyssey";
+    string shared research_brief;
+    boolean user_managed published = false;
+  }
+
+  nodes {
+    start;
+    end;
+    agent_action "research" {
+      model "gpt-5";
+      goal "Research ${agent.research_topic} using the available knowledge; update research_brief.";
+      knowledge ["Product Docs"];
+      toolbox ["Product Lookup"];
+    }
+
+    task "publish" {
+      steps {
+        step send_report using system_tool api_request {
+          config {
+            method = POST;
+            url = "https://example.invalid/reports";
+            headers = [];
+            body = {
+              kind: form_data,
+              entries: [{ name: "brief", value: agent.research_brief }]
+            };
+          }
+          on_failure fail_task;
+        }
+        step mark_published using system_tool set_variable {
+          config {
+            targetVariableId = agent.published;
+            operation = assign;
+            value = true;
+          }
+        }
+      }
+    }
+  }
+
+  edges {
+    start -> "research";
+    "research" -> "publish";
+    "publish" -> end;
+  }
+}

@@ -6,6 +6,8 @@ export const nodePlacementSchema = z.strictObject({
   nodeId: uuidSchema,
   x: z.number().finite(),
   y: z.number().finite(),
+  width: z.preprocess((value) => value === null ? undefined : value, z.number().finite().min(420).max(1600).optional()),
+  height: z.preprocess((value) => value === null ? undefined : value, z.number().finite().min(300).max(1200).optional()),
 })
 
 export const canvasViewportSchema = z.strictObject({

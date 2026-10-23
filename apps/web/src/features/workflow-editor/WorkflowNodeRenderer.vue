@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import BranchNodeContent from './BranchNodeContent.vue'
+import { radii, workflowRouting, workflowBranch } from '@odyssey/design-tokens'
 import { computed, nextTick, ref } from 'vue'
 import { Handle, Position, type NodeProps } from '@vue-flow/core'
 import type { AgentVariable, AgentReusableTool, KnowledgeSpaceSummary, UUID } from '@odyssey/schemas'
@@ -13,6 +15,7 @@ import {
 const props = defineProps<NodeProps<WorkflowCanvasNodeData> & {
   variables?: readonly AgentVariable[]
   configureExpanded: boolean
+  readOnly?: boolean
   tools?: readonly AgentReusableTool[]
   knowledgeSpaces?: readonly KnowledgeSpaceSummary[]
   activeResourceDrag?: WorkflowResourceDragPayload | null
@@ -33,6 +36,7 @@ const emit = defineEmits<{
   editReusableTool: [nodeId: UUID, reusableToolId: UUID]
   updateAgentAction: [nodeId: UUID, details: { name: string; model: string; goal: string }]
   updateNodeName: [nodeId: UUID, name: string]
+  resizeNode: [nodeId: UUID, size: { width: number; height: number }]
 }>()
 const node = computed(() => props.data.node)
 const isEditingName = ref(false)
@@ -40,6 +44,24 @@ const nameDraft = ref('')
 const nameInput = ref<globalThis.HTMLInputElement | null>(null)
 const modelMenuOpen = ref(false)
 const modelSelectRoot = ref<globalThis.HTMLDivElement | null>(null)
+let resizeCleanup: (() => void) | null = null
+function startLoopResize(event: globalThis.PointerEvent) {
+  if (!props.data.compoundLoop || !props.configureExpanded) return
+  event.preventDefault()
+  event.stopPropagation()
+  const card = event.currentTarget instanceof globalThis.HTMLElement ? event.currentTarget.closest<globalThis.HTMLElement>('.workflow-node-card') : null
+  if (!card) return
+  const start = { x: event.clientX, y: event.clientY, width: card.offsetWidth, height: card.offsetHeight }
+  const move = (moveEvent: globalThis.PointerEvent) => emit('resizeNode', node.value.id, {
+    width: Math.min(1600, Math.max(420, start.width + moveEvent.clientX - start.x)),
+    height: Math.min(1200, Math.max(300, start.height + moveEvent.clientY - start.y)),
+  })
+  const stop = () => { globalThis.window.removeEventListener('pointermove', move); globalThis.window.removeEventListener('pointerup', stop); resizeCleanup = null }
+  resizeCleanup?.()
+  resizeCleanup = stop
+  globalThis.window.addEventListener('pointermove', move)
+  globalThis.window.addEventListener('pointerup', stop, { once: true })
+}
 type StepReorderState = { type: 'idle' } | { type: 'dragging'; stepId: UUID; overStepId: UUID; placement: 'before' | 'after' }
 const stepReorder = ref<StepReorderState>({ type: 'idle' })
 const protectedNode = computed(() => ['start', 'end', 'loop_start', 'loop_end'].includes(node.value.type))
@@ -51,7 +73,8 @@ const subtitle = computed(() => node.value.type === 'agent_action'
       ? `Max turns · ${node.value.config.maxTurns}`
       : node.value.type === 'branch'
         ? `${props.data.branchHandles.length} routes`
-        : protectedNode.value ? 'Fixed boundary' : '')
+        : node.value.type === 'end' && node.value.config.binding ? 'Pattern-managed exit'
+          : protectedNode.value ? 'Fixed boundary' : '')
 
 function valueSourceSummary(): string {
   if (node.value.type !== 'agent_action') return ''
@@ -114,7 +137,7 @@ function closeModelMenuOnFocusOut(event: globalThis.FocusEvent) {
 function boundToolName(toolId: UUID): string { return toolById.value.get(toolId)?.name ?? 'Unavailable Tool' }
 function boundKnowledgeSpaceName(knowledgeSpaceId: UUID): string { return knowledgeSpaceById.value.get(knowledgeSpaceId)?.name ?? 'Unavailable Knowledge Space' }
 async function beginNameEdit() {
-  if (!['agent_action', 'task', 'branch'].includes(node.value.type)) return
+  if (!['agent_action', 'task', 'branch', 'loop'].includes(node.value.type)) return
   nameDraft.value = node.value.name
   isEditingName.value = true
   await nextTick()
@@ -122,7 +145,7 @@ async function beginNameEdit() {
   nameInput.value?.select()
 }
 function finishNameEdit(commit: boolean) {
-  if (!['agent_action', 'task', 'branch'].includes(node.value.type)) return
+  if (!['agent_action', 'task', 'branch', 'loop'].includes(node.value.type)) return
   const nextName = nameDraft.value.trim()
   isEditingName.value = false
   if (!commit || !nextName || nextName === node.value.name) return
@@ -234,10 +257,33 @@ function stepReorderClass(stepId: UUID): string {
 </script>
 
 <template>
-  <article class="workflow-node-card" :class="[`is-${node.type}`, { 'is-protected': protectedNode, 'is-selected': selected, 'is-configure-expanded': configureExpanded && !protectedNode }]">
+  <article class="workflow-node-card" :style="data.boundaryLabel ? { '--workflow-exit-width': workflowRouting.exitWidth, '--workflow-exit-min-height': workflowRouting.exitMinHeight, '--workflow-exit-padding': workflowRouting.exitPadding, '--workflow-exit-radius': radii.sm } : node.type === 'branch' ? { '--branch-border': workflowBranch.border, '--branch-radius': workflowBranch.radius, '--branch-width': configureExpanded ? workflowBranch.configureWidth : workflowBranch.flowWidth, '--branch-padding': workflowBranch.padding } : undefined" :data-loop-body-id="data.compoundLoop ? node.id : undefined" :class="[`is-${node.type}`, { 'is-protected': protectedNode, 'is-managed-exit': Boolean(data.boundaryLabel), 'is-selected': selected, 'is-configure-expanded': configureExpanded && !protectedNode && !data.compoundLoop, 'is-compound-loop': data.compoundLoop }]">
     <Handle v-if="node.type !== 'start' && node.type !== 'loop_start'" type="target" :position="Position.Left" class="workflow-handle" />
-    <template v-if="protectedNode">
-      <strong>{{ node.name }}</strong>
+    <template v-if="data.compoundLoop && node.type === 'loop'">
+      <header class="compound-loop-header">
+        <span class="node-accent" aria-hidden="true" />
+        <div>
+          <div v-if="configureExpanded && !readOnly" class="node-name-editor nodrag nopan" data-no-node-inspector="true" @pointerdown.stop @click.stop>
+            <button v-if="!isEditingName" type="button" aria-label="Edit loop name" @click="beginNameEdit">LOOP · {{ node.name }}</button>
+            <input v-else :id="`name-${node.id}`" ref="nameInput" v-model="nameDraft" aria-label="loop name" @blur="finishNameEdit(true)" @keydown.enter.prevent="finishNameEdit(true)" @keydown.escape.prevent="finishNameEdit(false)" />
+          </div>
+          <strong v-else>LOOP · {{ node.name }}</strong>
+          <small>Max turns {{ node.config.maxTurns }} · drag Task or Agent Action into this area</small>
+        </div>
+      </header>
+      <div class="compound-loop-body" aria-hidden="true"><span>Loop body</span></div>
+      <button v-if="configureExpanded && !readOnly" type="button" class="compound-loop-resize nodrag nopan" aria-label="Resize Loop" data-no-node-inspector="true" @pointerdown="startLoopResize">↘</button>
+    </template>
+    <template v-else-if="protectedNode">
+      <span class="boundary-symbol" aria-hidden="true" />
+      <span class="boundary-copy">
+        <strong>{{ node.type === 'start' || node.type === 'loop_start' ? 'Start' : 'End' }}</strong>
+        <small v-if="data.boundaryLabel">{{ data.boundaryLabel }}</small>
+      </span>
+    </template>
+    <template v-else-if="node.type === 'branch'">
+      <span class="node-accent" aria-hidden="true" />
+      <BranchNodeContent :node="node" :expanded="configureExpanded" :variables="variables ?? []" :connected-handles="data.branchConnectedHandles ?? []" :read-only="readOnly" @rename="emit('updateNodeName', node.id, $event)" />
     </template>
     <template v-else>
       <span class="node-accent" aria-hidden="true" />
@@ -306,7 +352,7 @@ function stepReorderClass(stepId: UUID): string {
               <small>{{ stepOutput(index) }}</small>
             </button>
             <span class="task-tool-step-actions" aria-label="Step actions">
-              <button type="button" draggable="true" aria-label="Drag to reorder step" title="Drag to reorder" @dragstart="startStepReorder($event, step.id)" @dragend="finishStepReorder">⠿</button>
+              <button type="button" :draggable="!readOnly" aria-label="Drag to reorder step" title="Drag to reorder" @dragstart="startStepReorder($event, step.id)" @dragend="finishStepReorder">⠿</button>
               <button type="button" :disabled="index === 0" aria-label="Move step up" @click="emit('changeTool', node.id, step.id, 'up')">↑</button>
               <button type="button" :disabled="index === node.config.steps.length - 1" aria-label="Move step down" @click="emit('changeTool', node.id, step.id, 'down')">↓</button>
               <button type="button" aria-label="Delete step" @click="emit('changeTool', node.id, step.id, 'delete')">×</button>
@@ -318,31 +364,12 @@ function stepReorderClass(stepId: UUID): string {
           <strong v-if="dropStatusText('task-tool-sequence')" class="resource-drop-status" role="status">{{ dropStatusText('task-tool-sequence') }}</strong>
         </div>
       </section>
-      <section v-else-if="configureExpanded && node.type === 'branch'" class="node-config-detail node-config-branch">
-        <p>Route by variables · {{ node.config.cases.length + 1 }} routes</p>
-        <ul>
-          <li v-for="branchCase in node.config.cases" :key="branchCase.id"><strong>{{ branchCase.label }}</strong><small>{{ branchCase.conditions.length }} conditions · match all</small></li>
-          <li><strong>{{ node.config.defaultCase.label }}</strong><small>Default route</small></li>
-        </ul>
-      </section>
       <section v-else-if="configureExpanded && node.type === 'loop'" class="node-config-detail node-config-loop">
         <div><span>Max turns</span><strong>{{ node.config.maxTurns }}</strong></div>
         <div><span>Exit condition</span><strong>{{ loopExitSummary() }}</strong></div>
         <div><span>Loop body</span><strong>{{ node.config.body.graph.nodes.length }} nodes · {{ node.config.body.graph.edges.length }} edges</strong></div>
       </section>
     </template>
-    <template v-if="node.type === 'branch'">
-      <Handle
-        v-for="(handle, index) in data.branchHandles"
-        :id="handle.id"
-        :key="handle.id"
-        type="source"
-        :position="Position.Right"
-        class="workflow-handle branch-handle"
-        :style="{ top: `${((index + 1) / (data.branchHandles.length + 1)) * 100}%` }"
-        :title="handle.label"
-      />
-    </template>
-    <Handle v-else-if="node.type !== 'end' && node.type !== 'loop_end'" type="source" :position="Position.Right" class="workflow-handle" />
+    <Handle v-if="node.type !== 'branch' && node.type !== 'end' && node.type !== 'loop_end'" type="source" :position="Position.Right" class="workflow-handle" />
   </article>
 </template>

@@ -1,3 +1,4 @@
+import { getHubSpokeDirection } from '@odyssey/schemas'
 import type { PatternKind, PatternRoute, PatternRouteTarget, PatternSlot, UUID } from '@odyssey/schemas'
 
 import type { PatternIdFactory } from './patternIdFactory'
@@ -35,7 +36,13 @@ export function deriveRouteEndpoints(kind: PatternKind, slots: readonly PatternS
     if (!hub) return []
     return slots
       .filter((slot) => slot.topologyRole === 'spoke')
-      .map((spoke) => ({ sourceSlotId: hub.id, target: { type: 'slot', slotId: spoke.id } }))
+      .flatMap((spoke): RouteEndpoint[] => {
+        const direction = getHubSpokeDirection(spoke)
+        return [
+          ...(direction !== 'spoke_to_hub' ? [{ sourceSlotId: hub.id, target: { type: 'slot' as const, slotId: spoke.id } }] : []),
+          ...(direction !== 'hub_to_spoke' ? [{ sourceSlotId: spoke.id, target: { type: 'slot' as const, slotId: hub.id } }] : []),
+        ]
+      })
   }
 
   const ordered = [...slots].sort((left, right) => (left.order ?? 0) - (right.order ?? 0))

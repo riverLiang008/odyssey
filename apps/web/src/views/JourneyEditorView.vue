@@ -2,12 +2,12 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
-import { uuidSchema, type GuardrailSide, type UUID } from '@odyssey/schemas'
+import { getHubSpokeDirection, uuidSchema, type GuardrailSide, type UUID } from '@odyssey/schemas'
 
 import { useEditorRepository } from '@/app/editorRepository'
 import RouteBoundary from '@/app/RouteBoundary.vue'
 import { createSystemCanvasViewModel, SYSTEM_PATTERN_BOUNDS, type CanvasBounds } from '@/canvas/system'
-import { cryptoPatternIdFactory } from '@/domain/pattern'
+import { cryptoPatternIdFactory, nextDefaultSlotLabel } from '@/domain/pattern'
 import { routeLocations, journeyTabs, parseJourneyRoute, type JourneyTab } from '@/router/routeContracts'
 import { useJourneyEditorStore } from '@/stores/journeyEditor'
 import { ODYSSEY_DRAG_MIME, parseOdysseyDragPayload, type OdysseyDragPayloadV1, type PatternDragPayload } from '@/canvas/interaction'
@@ -15,6 +15,8 @@ import AgentLibrary from '@/features/journey-editor/AgentLibrary.vue'
 import AgentSlotContextMenu from '@/features/journey-editor/AgentSlotContextMenu.vue'
 import ExecutionTemplateLibrary from '@/features/journey-editor/ExecutionTemplateLibrary.vue'
 import SystemCanvas from '@/features/journey-editor/SystemCanvas.vue'
+import TemplateExitMappingDialog from '@/features/journey-editor/TemplateExitMappingDialog.vue'
+import RoutingImpactDialog from '@/features/journey-editor/RoutingImpactDialog.vue'
 import SaveAgentTemplateDialog from '@/features/journey-editor/SaveAgentTemplateDialog.vue'
 import GuardrailContextMenu from '@/features/journey-editor/GuardrailContextMenu.vue'
 import WorkflowPreview from '@/features/journey-editor/WorkflowPreview.vue'
@@ -26,12 +28,19 @@ const route = useRoute()
 const router = useRouter()
 const repository = useEditorRepository()
 const store = useJourneyEditorStore()
-const { agentTemplates, document, guardrailOperation, lifecycle, persistence, hasUnsavedChanges, previewDocument, previewState, session } = storeToRefs(store)
+const { templateExitMapping, routingImpact, agentTemplates, document, guardrailOperation, lifecycle, persistence, hasUnsavedChanges, previewDocument, previewState, session } = storeToRefs(store)
 const patternStageBounds = ref<CanvasBounds>(SYSTEM_PATTERN_BOUNDS)
 const identity = computed(() => parseJourneyRoute(route.params.journeyId, route.query.tab))
 const canvasModel = computed(() => document.value
   ? createSystemCanvasViewModel(document.value, session.value.selectedSlotId, patternStageBounds.value)
   : null)
+const templateMappingTargets = computed(() => templateExitMapping.value?.bindings.map(binding => {
+  const target = binding.target
+  return { id: target.type === 'slot' ? target.slotId : binding.sourceSlotId,
+    name: target.type === 'slot' ? (document.value?.pattern.slots.find(slot => slot.id === target.slotId)?.label ?? 'Unavailable Slot') : 'Complete Journey' }
+}) ?? [])
+const selectedHubSpoke = computed(() => document.value?.pattern.kind === 'hub_and_spoke'
+  ? document.value.pattern.slots.find((slot) => slot.id === session.value.selectedSlotId && slot.topologyRole === 'spoke') : undefined)
 const selectedSlot = computed(() => canvasModel.value?.slots.find((slot) => slot.id === session.value.selectedSlotId) ?? null)
 const interactionFeedback = computed(() => session.value.interaction.type === 'dragging' ? session.value.interaction.feedback : null)
 const isDropForbidden = computed(() => interactionFeedback.value?.tone === 'invalid')
@@ -48,6 +57,7 @@ const guardrailPendingSide = computed(() => guardrailOperation.value.type === 'a
   ? guardrailOperation.value.side
   : null)
 const saveLabel = computed(() => {
+  if (routingImpact.value.length) return 'Review exit changes'
   if (persistence.value.saveStatus === 'saving') return 'Saving…'
   if (persistence.value.saveStatus === 'saved') return 'Saved'
   if (persistence.value.saveStatus === 'error') return 'Save failed'
@@ -221,9 +231,7 @@ async function menuAction(action: 'open' | 'save-template' | 'replace' | 'duplic
   if (action === 'move-earlier' && slot?.order !== null && slot?.order !== undefined) reorder(slotId, slot.order - 1)
   if (action === 'move-later' && slot?.order !== null && slot?.order !== undefined) reorder(slotId, slot.order + 1)
   if ((action === 'add-before' || action === 'add-after') && document.value) {
-    const label = document.value.pattern.kind === 'hub_and_spoke'
-      ? `Spoke ${document.value.pattern.slots.length}`
-      : `Stage ${document.value.pattern.slots.length + 1}`
+    const label = nextDefaultSlotLabel(document.value.pattern.slots)
     store.addSlot(label, cryptoPatternIdFactory, { slotId, placement: action === 'add-before' ? 'before' : 'after' })
     store.cancelInteraction()
   }
@@ -306,7 +314,7 @@ async function saveTemplate() {
       <button v-for="tab in journeyTabs" :key="tab" type="button" :class="{ 'is-active': session.activeTab === tab }" @click="selectTab(tab)">{{ tab }}</button>
     </nav>
     <header class="editor-page__heading"><h1>OdyJourney · {{ document.journey.name }}</h1><span role="status">{{ saveLabel }} · Revision {{ document.journey.revision }}</span><button v-if="persistence.saveStatus === 'conflict'" type="button" @click="conflictDialogOpen = true">Resolve conflict</button></header>
-    <div v-if="persistence.error && persistence.error.code !== 'REVISION_CONFLICT'" class="journey-feedback" role="alert">
+    <div v-if="persistence.error && !routingImpact.length && persistence.error.code !== 'REVISION_CONFLICT'" class="journey-feedback" role="alert">
       <span>The Journey could not be saved. Your local pattern is preserved.</span>
       <button type="button" @click="retrySave">Retry save</button>
     </div>
@@ -318,6 +326,7 @@ async function saveTemplate() {
         <SystemCanvas :model="canvasModel" :input-guardrail="document.inputGuardrail" :output-guardrail="document.outputGuardrail" :agents="document.agents" :guardrail-pending-side="guardrailPendingSide" :disabled="lifecycle.operationStatus === 'loading'" :over-slot-id="overSlotId" :over-order="overOrder" :feedback="interactionFeedback" @select-slot="selectSlot" @open-menu="openMenu" @add-guardrail="addGuardrail" @select-guardrail="selectGuardrail" @open-guardrail-menu="openGuardrailMenu" @resize-pattern-stage="resizePatternStage" @drag-start="beginDrag" @reorder-drag-start="beginDrag" @drag-over-slot="dragOverSlot" @drag-over-order="dragOverOrder" @drop-payload="dropOnSlot" @drop-order-payload="dropOrder" @drop-rejected="store.rejectDragBoundary" @drop-unsupported="store.rejectDrop('TARGET_KIND_UNSUPPORTED')" @drag-end="store.endDrag" @reorder="reorder" />
         <WorkflowPreview
           v-if="previewState.type !== 'closed' && session.previewAgentId"
+          :journey="document"
           :agent-id="session.previewAgentId"
           :agent-name="previewDocument?.agent.name ?? document.agents.find((agent) => agent.id === session.previewAgentId)?.name ?? 'Agent'"
           :status="previewState.type"
@@ -337,7 +346,7 @@ async function saveTemplate() {
       </Transition>
     </Teleport>
     <Teleport to="body">
-      <AgentSlotContextMenu v-if="session.interaction.type === 'menu-open' && lifecycle.operationStatus !== 'loading'" class="journey-context-menu" :style="{ left: `${session.interaction.anchor.x}px`, top: `${session.interaction.anchor.y}px` }" :slot-id="session.interaction.slotId" :configured="selectedSlot?.assignment === 'configured'" :can-add-sibling="selectedSlot?.canAddSibling" :can-remove-slot="selectedSlot?.canRemove" :can-reorder="selectedSlot?.canReorder" :can-move-earlier="(selectedSlot?.order ?? 0) > 0" :can-move-later="selectedSlot?.order !== null && selectedSlot?.order !== undefined && selectedSlot.order < canvasModel.slots.length - 1" @action="menuAction" @close="store.cancelInteraction" />
+      <AgentSlotContextMenu v-if="session.interaction.type === 'menu-open' && lifecycle.operationStatus !== 'loading'" class="journey-context-menu" :style="{ left: `${session.interaction.anchor.x}px`, top: `${session.interaction.anchor.y}px` }" :hub-direction="selectedHubSpoke ? getHubSpokeDirection(selectedHubSpoke) : undefined" :slot-id="session.interaction.slotId" :configured="selectedSlot?.assignment === 'configured'" :can-add-sibling="selectedSlot?.canAddSibling" :can-remove-slot="selectedSlot?.canRemove" :can-reorder="selectedSlot?.canReorder" :can-move-earlier="(selectedSlot?.order ?? 0) > 0" :can-move-later="selectedSlot?.order !== null && selectedSlot?.order !== undefined && selectedSlot.order < canvasModel.slots.length - 1" @direction="(slotId, direction) => { store.setHubSpokeDirection(slotId, direction, cryptoPatternIdFactory); store.cancelInteraction() }" @action="menuAction" @close="store.cancelInteraction" />
       <GuardrailContextMenu v-if="session.guardrailInteraction.type === 'menu-open'" class="journey-context-menu" :style="{ position: 'fixed', left: `${session.guardrailInteraction.anchor.x}px`, top: `${session.guardrailInteraction.anchor.y}px` }" :side="session.guardrailInteraction.side" :agent-id="session.guardrailInteraction.agentId" @open="openGuardrailWorkflow" @remove="confirmGuardrailRemoval" @close="store.cancelInteraction" />
     </Teleport>
     <SaveAgentTemplateDialog v-if="session.interaction.type === 'naming-template'" :loading="lifecycle.operationStatus === 'loading'" :error="lifecycle.operationStatus === 'error' ? lifecycle.error?.code : null" @submit="(name, description) => { templateDraft.name = name; templateDraft.description = description ?? ''; void saveTemplate() }" @close="store.cancelInteraction" />
@@ -380,6 +389,8 @@ async function saveTemplate() {
     <section v-if="session.interaction.type === 'agent-replacement-requested' || session.interaction.type === 'duplicate-requested' || session.interaction.type === 'slot-removal-requested'" class="journey-staged-dialog" role="status">
       <h2>Transaction request ready</h2><p>The canonical document is unchanged. A future trusted transaction boundary can consume this typed request.</p><button @click="store.cancelInteraction">Close</button>
     </section>
+    <TemplateExitMappingDialog v-if="templateExitMapping" :sources="templateExitMapping.sources" :targets="templateMappingTargets" :busy="lifecycle.operationStatus === 'loading'" :error="lifecycle.error?.code" @confirm="store.confirmTemplateExitMapping" @cancel="store.cancelTemplateExitMapping" />
+    <RoutingImpactDialog v-if="routingImpact.length" :impact="routingImpact" :agents="document.agents" :busy="persistence.saveStatus === 'saving' || lifecycle.operationStatus === 'loading'" @confirm="store.confirmRoutingChanges" @cancel="store.cancelRoutingChanges" />
     <RevisionConflictDialog v-if="conflictDialogOpen" subject="Journey" @stay="conflictDialogOpen = false" @reload="reloadServerVersion" @overwrite="overwriteServerVersion" />
     <UnsavedChangesDialog v-if="unsavedChangesGuard.confirmationOpen.value" @stay="unsavedChangesGuard.stay" @leave="unsavedChangesGuard.leave" />
   </section>

@@ -6,6 +6,12 @@ import ReusableToolsPanel from './ReusableToolsPanel.vue'
 describe('ReusableToolsPanel', () => {
   const tools = createAgentWorkflowEditorDocumentFixture('minimal').reusableTools
 
+  it('closes from the shared icon control', async () => {
+    const wrapper = mount(ReusableToolsPanel, { props: { agentName: 'Research Agent', tools, referenceCount: () => 0 } })
+    await wrapper.get('button[aria-label="Close resources"]').trigger('click')
+    expect(wrapper.emitted('collapse')).toHaveLength(1)
+  })
+
   it('filters the Agent-owned inventory and exposes edit', async () => {
     const wrapper = mount(ReusableToolsPanel, { props: { agentName: 'Research Agent', tools, referenceCount: () => 0 } })
     expect(wrapper.text()).toContain('Saved within Research Agent')

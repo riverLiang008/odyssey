@@ -56,52 +56,23 @@ Action nodes perform actual work.
 
 # Start & End
 
-Every Agent Workflow contains an implicit Start and End node.
-
-```
-Start
-   │
- Workflow
-   │
- End
-```
-
-These nodes cannot be removed.
+Root Agent Workflows contain one required Start and Pattern-derived End boundaries. The accepted 2026-10-21 design is defined in [Pattern → Agent Workflow End 单向同步设计](./pattern-agent-end-routing-decision.md). This design supersedes the previous single-End assumption; implementation and frozen contract updates remain pending.
 
 ## Start
 
-The Start node represents the entry point of the Agent Workflow.
-
-It contains no configurable fields.
-
-Its only responsibility is to receive the execution context from the parent Agent.
+Start is the entry point, has no configurable fields, and receives execution context from the parent Agent.
 
 ## End
 
-The End node represents successful completion of the Agent Workflow.
+Synchronization is strictly **Pattern → Agent Workflow End**. Each outgoing Pattern route generates an End; a route to `journey_end` generates a completion End. A Slot with no outgoing routes receives one completion End. Users cannot add/delete Ends or change their targets in the Workflow Canvas. They connect internal execution paths to the generated Ends, using explicit Branch rules where selection is necessary. No `next_agent` variable or LLM routing decision is required.
 
-The next destination is determined by the selected Pattern inside the OdyJourney rather than the workflow itself.
+End targets reference stable Slot IDs. Empty targets remain visible with stable default names such as `Agent-1` and a pending-configuration state; they are not skipped. Assignment changes update presentation without replacing the boundary or its incoming edges.
 
-For example, under a Linear Pattern:
+Linear derives its next destination from Slot order. Circular Loop keeps its directed cycle. Neither exposes arrow editing. Hub allows direction changes only on existing Hub–Spoke relationships: Hub → Spoke, Spoke → Hub, or both directed routes. Every generated End visibly identifies its destination.
 
-```
-Agent A
-   │
-   ▼
-Agent B
-   ▼
-Agent C
-```
+Pattern route removal deletes its corresponding End in the same direction of synchronization. Affected internal incoming edges require explicit impact handling; stale Ends must not preserve deleted routes, and dangling edges or silent retargeting are prohibited.
 
-The End node of Agent A automatically routes to Agent B.
-
-This route is displayed inside the workflow canvas for visualization only.
-
-Users cannot modify it directly.
-
-To change the routing, users must modify the Pattern configuration in the OdyJourney.
-
-This keeps Agent Workflows reusable across different collaboration patterns.
+Reaching a handoff End completes the current invocation and starts the target Agent at Start. A reverse route to Hub restarts Hub; it does not resume a suspended call. Call/return, cyclic termination, and handoff payload protocols remain separate unresolved designs. Loop Start/End boundaries are unchanged.
 
 ---
 

@@ -1,7 +1,8 @@
 import { z } from 'zod'
 
-import { jsonValueSchema, schemaVersionSchema, uuidSchema } from '../common'
+import { jsonValueSchema, uuidSchema } from '../common'
 import { embeddedCanvasLayoutSchema } from './layout'
+import { endBindingSchema } from './routing'
 import { toolStepSchema } from './tools'
 import { taskLocalVariableSchema } from './variables'
 import { valueSourceSchema } from './values'
@@ -20,7 +21,7 @@ export const startNodeSchema = z.strictObject({
 export const endNodeSchema = z.strictObject({
   ...nodeBase,
   type: z.literal('end'),
-  config: emptyConfigSchema,
+  config: z.strictObject({ binding: z.preprocess((value) => value === null ? undefined : value, endBindingSchema.optional()) }),
 })
 
 const uniqueUuidArraySchema = z.array(uuidSchema).superRefine((ids, context) => {
@@ -235,11 +236,16 @@ export const workflowNodeSchema = z.discriminatedUnion('type', [
 
 export const workflowGraphSchema = z
   .strictObject({
-    schemaVersion: schemaVersionSchema,
+    schemaVersion: z.enum(['1.0.0', '1.1.0']),
     nodes: z.array(workflowNodeSchema),
     edges: z.array(workflowEdgeSchema),
   })
-  .superRefine(addGraphReferenceIssues)
+  .superRefine((graph, context) => {
+    addGraphReferenceIssues(graph, context)
+    if (graph.schemaVersion === '1.0.0' && graph.nodes.some((node) => node.type === 'end' && node.config.binding)) {
+      context.addIssue({ code: 'custom', message: 'Pattern-bound exits require Workflow schemaVersion 1.1.0', path: ['schemaVersion'] })
+    }
+  })
 
 export type StartNode = z.infer<typeof startNodeSchema>
 export type EndNode = z.infer<typeof endNodeSchema>

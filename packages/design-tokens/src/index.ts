@@ -22,3 +22,22 @@ export const shell = {
   headerHeight: '58px',
 } as const
 
+
+export const workflowRouting = {
+  exitWidth: '240px',
+  exitMinHeight: '64px',
+  exitPadding: '12px',
+  viewportLeftInset: 240,
+  viewportTopInset: 80,
+  viewportPadding: 40,
+} as const
+
+export const workflowBranch = {
+  border: '#e9c46a',
+  surface: '#eef2f8',
+  radius: '12px',
+  configureWidth: '390px',
+  flowWidth: '330px',
+  padding: '20px',
+  gap: '12px',
+} as const

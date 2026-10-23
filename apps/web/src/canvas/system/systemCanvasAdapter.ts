@@ -23,6 +23,7 @@ export interface SystemCanvasSlotViewModel {
   readonly canRemove?: boolean
 }
 export interface SystemCanvasRouteViewModel {
+  readonly bidirectional?: boolean
   readonly id: UUID
   readonly sourceSlotId: UUID
   readonly targetSlotId: UUID | null
@@ -73,7 +74,9 @@ export function createSystemCanvasViewModel(
     }
   })
   const slotById = new Map(slots.map((slot) => [slot.id, slot]))
-  const routes = presentation.routes.flatMap<SystemCanvasRouteViewModel>((route) => {
+  const routes = presentation.routes.flatMap<SystemCanvasRouteViewModel>((route, index) => {
+    const reverseIndex = presentation.routes.findIndex((other) => other.sourceSlotId === route.targetSlotId && other.targetSlotId === route.sourceSlotId)
+    if (reverseIndex >= 0 && reverseIndex < index) return []
     // A route without a target Slot represents the Pattern's hand-off to the
     // surrounding Journey. System Canvas only visualizes execution between Slots.
     if (route.targetSlotId === null) return []
@@ -83,7 +86,7 @@ export function createSystemCanvasViewModel(
       diagnostics.push({ code: 'ROUTE_ENDPOINT_MISSING', id: route.routeId })
       return []
     }
-    return [{ id: route.routeId, sourceSlotId: route.sourceSlotId, targetSlotId: route.targetSlotId,
+    return [{ bidirectional: reverseIndex >= 0, id: route.routeId, sourceSlotId: route.sourceSlotId, targetSlotId: route.targetSlotId,
       source: anchorToward(source.position, target.position, nodeRadius),
       target: anchorToward(target.position, source.position, nodeRadius) }]
   })

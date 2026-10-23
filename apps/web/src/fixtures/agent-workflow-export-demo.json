@@ -1,0 +1,58 @@
+{
+  "kind": "odyssey.agent-workflow",
+  "formatVersion": 1,
+  "exportedAt": "2026-10-18T06:00:00.000Z",
+  "source": {
+    "journeyId": "00000000-0000-4000-8000-000000000001",
+    "agentId": "00000000-0000-4000-8000-000000000002",
+    "agentName": "Demo Agent"
+  },
+  "document": {
+    "workflow": {
+      "schemaVersion": "1.0.0",
+      "nodes": [
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "name": "Start",
+          "type": "start",
+          "config": {}
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000004",
+          "name": "End",
+          "type": "end",
+          "config": {}
+        }
+      ],
+      "edges": [
+        {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "sourceNodeId": "00000000-0000-4000-8000-000000000003",
+          "targetNodeId": "00000000-0000-4000-8000-000000000004"
+        }
+      ]
+    },
+    "layout": {
+      "schemaVersion": "1.0.0",
+      "nodePlacements": [
+        {
+          "nodeId": "00000000-0000-4000-8000-000000000003",
+          "x": 120,
+          "y": 220
+        },
+        {
+          "nodeId": "00000000-0000-4000-8000-000000000004",
+          "x": 520,
+          "y": 220
+        }
+      ],
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "zoom": 1
+      }
+    },
+    "variables": [],
+    "reusableTools": []
+  }
+}

@@ -24,7 +24,12 @@ from odyssey_api.db.session import async_session_factory
 from odyssey_api.dependencies.workspace import CurrentWorkspace, get_current_workspace
 from odyssey_api.errors import ApplicationError, ErrorCode
 from odyssey_api.journeys import repository
-from odyssey_api.journeys.dto import CreateJourneyRequest, PatternKind, SaveAgentWorkflowRequest
+from odyssey_api.journeys.dto import (
+    CreateJourneyRequest,
+    PatternKind,
+    SaveAgentWorkflowRequest,
+    WorkflowGraph,
+)
 from odyssey_api.journeys.service import (
     create_journey,
     create_minimum_agent_and_assign,
@@ -397,9 +402,7 @@ async def test_staged_upload_finalize_is_persisted_revisioned_and_idempotent() -
             assert document.status_code == 200
             document_body = document.json()
             assert document_body["name"] == "notes.md"
-            assert document_body["checksumSha256"] == hashlib.sha256(
-                b"hello knowledge"
-            ).hexdigest()
+            assert document_body["checksumSha256"] == hashlib.sha256(b"hello knowledge").hexdigest()
             assert document_body["downloadUrl"].startswith("http://objects.test/")
             assert "objectKey" not in document_body
 
@@ -441,8 +444,7 @@ async def test_staged_upload_finalize_is_persisted_revisioned_and_idempotent() -
             assert updated_body["resource"]["sizeBytes"] == len(replacement_content.encode())
             assert original_object_key not in storage.prepared
             assert any(
-                content == replacement_content.encode()
-                for _, content in storage.prepared.values()
+                content == replacement_content.encode() for _, content in storage.prepared.values()
             )
 
         async with async_session_factory() as session:
@@ -666,7 +668,7 @@ async def test_knowledge_space_mutations_use_cas_archive_visibility_and_protecte
 
 
 def _workflow_request(
-    *, revision: int, space_ids: list[UUID], reusable_tool_id: UUID
+    *, revision: int, space_ids: list[UUID], reusable_tool_id: UUID, boundaries: WorkflowGraph
 ) -> SaveAgentWorkflowRequest:
     root_id, loop_id, nested_id, task_id, step_id = uuid4(), uuid4(), uuid4(), uuid4(), uuid4()
     output_variable_id = uuid4()
@@ -675,9 +677,10 @@ def _workflow_request(
         {
             "expectedRevision": revision,
             "workflow": {
-                "schemaVersion": "1.0.0",
+                "schemaVersion": boundaries.schema_version,
                 "edges": [],
                 "nodes": [
+                    *[node.model_dump(mode="json", by_alias=True) for node in boundaries.nodes],
                     {
                         "id": str(root_id),
                         "name": "Root",
@@ -771,7 +774,7 @@ def _workflow_request(
     )
 
 
-async def _create_agent(workspace_id: UUID) -> tuple[UUID, UUID]:
+async def _create_agent(workspace_id: UUID) -> tuple[UUID, UUID, WorkflowGraph]:
     async with async_session_factory() as session:
         journey = await create_journey(
             session,
@@ -790,7 +793,7 @@ async def _create_agent(workspace_id: UUID) -> tuple[UUID, UUID]:
             workspace_id=workspace_id,
             expected_revision=1,
         )
-    return journey.journey.id, result.agent.agent.id
+    return journey.journey.id, result.agent.agent.id, result.agent.workflow
 
 
 @pytest.mark.integration
@@ -825,9 +828,11 @@ async def test_workflow_reference_sync_cleanup_hidden_not_found_and_rollback(
                 created_knowledge_definition = True
             else:
                 tool_definition_id = existing_definition_id
-        journey_id, agent_id = await _create_agent(workspace_id)
+        journey_id, agent_id, boundaries = await _create_agent(workspace_id)
         reusable_tool_id = uuid4()
-        request = _workflow_request(revision=1, space_ids=ids, reusable_tool_id=reusable_tool_id)
+        request = _workflow_request(
+            boundaries=boundaries, revision=1, space_ids=ids, reusable_tool_id=reusable_tool_id
+        )
         async with async_session_factory() as session:
             saved = await save_agent_workflow(session, journey_id, agent_id, workspace_id, request)
         assert saved.agent.revision == 2
@@ -852,7 +857,13 @@ async def test_workflow_reference_sync_cleanup_hidden_not_found_and_rollback(
             {
                 **request.model_dump(mode="json", by_alias=True),
                 "expectedRevision": 2,
-                "workflow": {"schemaVersion": "1.0.0", "nodes": [], "edges": []},
+                "workflow": {
+                    "schemaVersion": boundaries.schema_version,
+                    "nodes": [
+                        node.model_dump(mode="json", by_alias=True) for node in boundaries.nodes
+                    ],
+                    "edges": [],
+                },
                 "reusableTools": [],
             }
         )
@@ -873,10 +884,16 @@ async def test_workflow_reference_sync_cleanup_hidden_not_found_and_rollback(
             )
 
         foreign = _workflow_request(
-            revision=3, space_ids=[foreign_id, *ids[1:]], reusable_tool_id=uuid4()
+            boundaries=boundaries,
+            revision=3,
+            space_ids=[foreign_id, *ids[1:]],
+            reusable_tool_id=uuid4(),
         )
         missing = _workflow_request(
-            revision=3, space_ids=[uuid4(), *ids[1:]], reusable_tool_id=uuid4()
+            boundaries=boundaries,
+            revision=3,
+            space_ids=[uuid4(), *ids[1:]],
+            reusable_tool_id=uuid4(),
         )
         for rejected in (foreign, missing):
             async with async_session_factory() as session:
@@ -897,7 +914,9 @@ async def test_workflow_reference_sync_cleanup_hidden_not_found_and_rollback(
                     journey_id,
                     agent_id,
                     workspace_id,
-                    _workflow_request(revision=3, space_ids=ids, reusable_tool_id=uuid4()),
+                    _workflow_request(
+                        boundaries=boundaries, revision=3, space_ids=ids, reusable_tool_id=uuid4()
+                    ),
                 )
         async with async_session_factory() as session:
             assert (
@@ -927,7 +946,13 @@ async def test_workflow_reference_sync_cleanup_hidden_not_found_and_rollback(
         script_request = SaveAgentWorkflowRequest.model_validate(
             {
                 "expectedRevision": 3,
-                "workflow": {"schemaVersion": "1.0.0", "nodes": [], "edges": []},
+                "workflow": {
+                    "schemaVersion": boundaries.schema_version,
+                    "nodes": [
+                        node.model_dump(mode="json", by_alias=True) for node in boundaries.nodes
+                    ],
+                    "edges": [],
+                },
                 "layout": {
                     "schemaVersion": "1.0.0",
                     "nodePlacements": [],
@@ -1014,10 +1039,12 @@ async def test_concurrent_workflow_save_has_one_cas_winner() -> None:
     ids, _, category_ids = await _seed_spaces(workspace_id, other_workspace_id)
     journey_id: UUID | None = None
     try:
-        journey_id, agent_id = await _create_agent(workspace_id)
+        journey_id, agent_id, boundaries = await _create_agent(workspace_id)
 
         async def attempt() -> object:
-            request = _workflow_request(revision=1, space_ids=ids, reusable_tool_id=uuid4())
+            request = _workflow_request(
+                boundaries=boundaries, revision=1, space_ids=ids, reusable_tool_id=uuid4()
+            )
             async with async_session_factory() as session:
                 try:
                     return await save_agent_workflow(

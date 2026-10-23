@@ -4,6 +4,8 @@ import type { SystemToolDefinition, AgentReusableTool, KnowledgeSpaceSummary, UU
 import { serializeWorkflowResourceDragPayload, WORKFLOW_RESOURCE_DRAG_MIME } from '@/canvas/workflow'
 import type { WorkflowResourceDragPayload } from '@/canvas/workflow'
 import type { KnowledgeInventoryStatus, WorkflowResourceCategory } from '@/stores/workflowEditor'
+import ResourcePanelCloseButton from './ResourcePanelCloseButton.vue'
+import ToolSelect from './ToolSelect.vue'
 
 const props = defineProps<{
   systemTools?: readonly SystemToolDefinition[]
@@ -46,11 +48,19 @@ const filteredTools = computed(() => props.tools.filter((tool) => {
   return matchesQuery && (toolKind.value === 'all' || tool.kind === toolKind.value)
 }))
 const toolKinds = computed(() => [...new Set([...props.tools, ...(props.systemTools ?? [])].map((tool) => tool.kind))])
+const toolKindOptions = computed(() => [
+  { value: 'all', label: 'All kinds' },
+  ...toolKinds.value.map((kind) => ({ value: kind, label: kind.replaceAll('_', ' ').replace(/^./, (character) => character.toUpperCase()) })),
+])
 const toolPageItems = computed(() => filteredTools.value.slice((props.page - 1) * props.pageSize, props.page * props.pageSize))
 const total = computed(() => props.category === 'tools' ? filteredTools.value.length : props.knowledgeTotal)
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / props.pageSize)))
 
 function submitSearch() { emit('search', searchText.value.trim()) }
+function selectToolKind(value: string) {
+  toolKind.value = value
+  emit('page', 1)
+}
 function isKnowledgeSelectable(space: KnowledgeSpaceSummary) {
   return ['ready', 'syncing'].includes(space.lifecycleStatus) && ['healthy', 'needs_review'].includes(space.graphStatus)
 }
@@ -82,7 +92,7 @@ function startSystemDrag(event: globalThis.DragEvent, tool: SystemToolDefinition
   <aside class="workflow-resource-browser" :class="{ 'is-collapsed': collapsed }" aria-label="Workflow resources">
     <header>
       <div><p class="workflow-eyebrow">RESOURCES</p><h2>{{ categoryLabels[category] }}</h2></div>
-      <button type="button" class="resource-browser-collapse" :aria-expanded="!collapsed" :aria-label="collapsed ? 'Expand resources' : 'Collapse resources'" @click="emit('collapse', !collapsed)">{{ collapsed ? '‹' : 'Collapse' }}</button>
+      <ResourcePanelCloseButton v-if="!collapsed" @close="emit('collapse', true)" />
     </header>
 
     <template v-if="!collapsed && isInventoryCategory">
@@ -92,7 +102,7 @@ function startSystemDrag(event: globalThis.DragEvent, tool: SystemToolDefinition
       </form>
       <div v-if="category === 'tools'" class="resource-browser-filters">
         <button type="button" :class="{ 'is-active': toolKind === 'all' }" @click="toolKind = 'all'; emit('page', 1)">All tools</button>
-        <select v-model="toolKind" aria-label="Filter Tool kind" @change="emit('page', 1)"><option value="all">All kinds</option><option v-for="kind in toolKinds" :key="kind" :value="kind">{{ kind.replaceAll('_', ' ') }}</option></select>
+        <ToolSelect :model-value="toolKind" :options="toolKindOptions" control-label="Filter Tool kind" @update:model-value="selectToolKind" />
       </div>
 
       <div v-if="category === 'tools'" class="resource-browser-items">

@@ -94,10 +94,34 @@ onUnmounted(cancelPointerDrag)
 <template>
   <aside class="workflow-node-palette" :class="{ 'is-read-only-mode': disabled, 'is-collapsed': collapsed }" aria-label="Workflow node palette">
     <header class="palette-heading">
-      <p class="workflow-eyebrow">{{ collapsed ? 'NODES' : 'WORKFLOW NODES' }}</p>
+      <p v-if="!collapsed" class="workflow-eyebrow">WORKFLOW NODES</p>
       <button type="button" class="palette-collapse" :aria-label="collapsed ? 'Expand Workflow nodes' : 'Collapse Workflow nodes'" :aria-expanded="!collapsed" @click="emit('collapse', !collapsed)">{{ collapsed ? '›' : '‹' }}</button>
     </header>
-    <template v-if="!collapsed">
+    <div v-if="collapsed" class="compact-palette" aria-label="Workflow node shortcuts">
+      <section v-for="group in groups" :key="group.label" class="compact-palette-group" :aria-label="group.label">
+        <button
+          v-for="item in group.items"
+          :key="item.type"
+          type="button"
+          class="compact-palette-item"
+          :class="[`is-${item.type}`, { 'is-disabled': !isEnabled(item) }]"
+          :disabled="disabled || !isEnabled(item)"
+          :aria-label="isEnabled(item) ? `Add ${item.name}` : itemDescription(item)"
+          :data-tooltip="isEnabled(item) ? item.name : itemDescription(item)"
+          @click="activate(item.type)"
+          @pointerdown="startPointerDrag($event, item.type, isEnabled(item))"
+          @dragstart="startDrag($event, item.type, isEnabled(item))"
+        >
+          <svg v-if="item.type === 'branch'" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="5" r="2" /><circle cx="18" cy="5" r="2" /><circle cx="12" cy="19" r="2" /><path d="M6 7v3c0 2 1.5 3 3.5 3H12m6-6v3c0 2-1.5 3-3.5 3H12m0 0v4" /></svg>
+          <svg v-else-if="item.type === 'loop'" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.5 8A7 7 0 0 0 6 6.5L3.5 9M5.5 16A7 7 0 0 0 18 17.5l2.5-2.5M3.5 5v4h4M20.5 19v-4h-4" /></svg>
+          <svg v-else-if="item.type === 'agent_action'" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="7" width="16" height="13" rx="3" /><path d="M12 3v4M8 12h.01M16 12h.01M8 16h8" /></svg>
+          <svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3" /><path d="m8 12 2.5 2.5L16 9" /></svg>
+          <i aria-hidden="true" />
+        </button>
+      </section>
+      <span class="compact-palette-grip" aria-hidden="true"><i /><i /><i /><i /></span>
+    </div>
+    <template v-else>
       <section v-for="group in groups" :key="group.label" class="palette-group">
         <p class="palette-group-label">{{ group.label }}</p>
         <button

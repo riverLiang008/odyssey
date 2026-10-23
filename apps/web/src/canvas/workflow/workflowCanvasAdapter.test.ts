@@ -83,4 +83,26 @@ describe('workflow canvas adapter', () => {
     expect(parseWorkflowNodeDragPayload('{"kind":"resource","nodeType":"task"}')).toBeNull()
     expect(parseWorkflowNodeDragPayload('unknown')).toBeNull()
   })
+
+  it('projects a Loop body inline as constrained visual children without flattening domain ownership', () => {
+    const graph = createWorkflowGraphFixture('loop')
+    const layout = createCanvasLayoutFixture(graph)
+    const loop = graph.nodes.find((node) => node.type === 'loop')
+    if (!loop || loop.type !== 'loop') throw new Error('Fixture mismatch')
+    const placement = layout.nodePlacements.find((candidate) => candidate.nodeId === loop.id)
+    if (!placement) throw new Error('Fixture mismatch')
+    Object.assign(placement, { width: 760, height: 520 })
+    const before = structuredClone({ graph, layout })
+
+    const projection = projectWorkflowCanvas(graph, layout)
+    const loopView = projection.nodes.find((node) => node.id === loop.id)
+    const bodyViews = projection.nodes.filter((node) => node.data?.context?.kind === 'loop-body')
+
+    expect(loopView?.data?.compoundLoop).toBe(true)
+    expect(loopView?.style).toMatchObject({ width: '760px', height: '520px' })
+    expect(bodyViews).toHaveLength(loop.config.body.graph.nodes.length)
+    expect(bodyViews.every((node) => node.parentNode === loop.id && node.extent === 'parent')).toBe(true)
+    expect(projection.edges).toHaveLength(graph.edges.length + loop.config.body.graph.edges.length)
+    expect({ graph, layout }).toEqual(before)
+  })
 })

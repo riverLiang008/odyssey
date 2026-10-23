@@ -1,0 +1,75 @@
+workflow "Iterative Brief" version "0.1" {
+  variables {
+    string user_managed topic = "Odyssey workflow boundaries";
+    json user_managed references = [];
+    string shared brief = "";
+    boolean user_managed approved = false;
+  }
+
+  nodes {
+    start;
+    end;
+    task "retrieve" {
+      steps {
+        step search using system_tool knowledge_retrieval {
+          config {
+            knowledgeSpaceId = "Product Docs";
+            query = agent.topic;
+            topK = 5;
+          }
+          output "retrieved_documents" -> agent.references;
+        }
+      }
+    }
+
+    loop "refine" {
+      max_turns 3;
+      exit_when agent.approved == true;
+
+      nodes {
+        loop_start;
+        loop_end;
+        agent_action "revise" {
+          model "gpt-5";
+          goal "Read the topic and references variables. Improve brief, keeping it grounded in the references, and update brief.";
+          knowledge ["Product Docs"];
+        }
+
+        task "validate" {
+          variables {
+            boolean passed = false;
+          }
+          steps {
+            step check_length using system_tool script_execution {
+              config {
+                language = javascript;
+                inputs = [{ alias: "brief", variableId: agent.brief }];
+                script = "return typeof brief === 'string' && brief.length >= 120;";
+              }
+              output "result" -> task.passed;
+            }
+            step save_check using system_tool set_variable {
+              config {
+                targetVariableId = agent.approved;
+                operation = assign;
+                value = task.passed;
+              }
+            }
+          }
+        }
+      }
+
+      edges {
+        loop_start -> "revise";
+        "revise" -> "validate";
+        "validate" -> loop_end;
+      }
+    }
+  }
+
+  edges {
+    start -> "retrieve";
+    "retrieve" -> "refine";
+    "refine" -> end;
+  }
+}

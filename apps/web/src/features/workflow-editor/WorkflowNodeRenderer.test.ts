@@ -1,8 +1,9 @@
 import { shallowMount } from '@vue/test-utils'
 import type { NodeProps } from '@vue-flow/core'
 import { describe, expect, it } from 'vitest'
-import { uuidSchema, type AgentActionNode, type BranchNode, type KnowledgeSpaceSummary, type LoopNode, type TaskNode, type UUID, type WorkflowNode } from '@odyssey/schemas'
+import { uuidSchema, type AgentActionNode, type BranchNode, type KnowledgeSpaceSummary, type LoopBodyNode, type LoopNode, type TaskNode, type UUID, type WorkflowNode } from '@odyssey/schemas'
 import type { WorkflowCanvasNodeData } from '@/canvas/workflow'
+import BranchNodeContent from './BranchNodeContent.vue'
 import WorkflowNodeRenderer from './WorkflowNodeRenderer.vue'
 
 function id(value: number): UUID {
@@ -34,7 +35,7 @@ const knowledgeSpace: KnowledgeSpaceSummary = {
   updatedAt: '2026-10-02T00:00:00.000Z',
 }
 
-function rendererProps(nodeInput: WorkflowNode, configureExpanded: boolean): NodeProps<WorkflowCanvasNodeData> & { configureExpanded: boolean } {
+function rendererProps(nodeInput: WorkflowNode | LoopBodyNode, configureExpanded: boolean): NodeProps<WorkflowCanvasNodeData> & { configureExpanded: boolean } {
   const data: WorkflowCanvasNodeData = {
     node: nodeInput,
     branchHandles: nodeInput.type === 'branch'
@@ -93,6 +94,21 @@ describe('WorkflowNodeRenderer', () => {
     expect(wrapper.find('.node-config-preview').exists()).toBe(false)
   })
 
+  it('renders protected boundaries as semantic terminal pills', () => {
+    const start: WorkflowNode = { id: id(6), type: 'start', name: 'Start', config: {} }
+    const end: WorkflowNode = { id: id(7), type: 'end', name: 'End', config: {} }
+    const loopStart: LoopBodyNode = { id: id(8), type: 'loop_start', name: 'Loop Start', config: {} }
+
+    const startWrapper = shallowMount(WorkflowNodeRenderer, { props: rendererProps(start, false) })
+    const endWrapper = shallowMount(WorkflowNodeRenderer, { props: rendererProps(end, false) })
+    const loopStartWrapper = shallowMount(WorkflowNodeRenderer, { props: rendererProps(loopStart, false) })
+
+    expect(startWrapper.get('.boundary-copy').text()).toBe('Start')
+    expect(endWrapper.get('.boundary-copy').text()).toBe('End')
+    expect(loopStartWrapper.get('.boundary-copy').text()).toBe('Start')
+    expect(startWrapper.find('.boundary-symbol').exists()).toBe(true)
+  })
+
   it('expands Task, Branch, and Loop configuration summaries', () => {
     const task: TaskNode = { id: id(10), type: 'task', name: 'Publish brief', config: { localVariables: [], steps: [] } }
     const branch: BranchNode = { id: id(11), type: 'branch', name: 'Quality gate', config: { cases: [], defaultCase: { id: id(12), label: 'Continue' } } }
@@ -105,7 +121,7 @@ describe('WorkflowNodeRenderer', () => {
     }
 
     expect(shallowMount(WorkflowNodeRenderer, { props: rendererProps(task, true) }).get('.node-config-task').text()).toContain('Drop Tool')
-    expect(shallowMount(WorkflowNodeRenderer, { props: rendererProps(branch, true) }).get('.node-config-branch').text()).toContain('Default route')
+    expect(shallowMount(WorkflowNodeRenderer, { props: rendererProps(branch, true) }).getComponent(BranchNodeContent).props('node')).toEqual(branch)
     expect(shallowMount(WorkflowNodeRenderer, { props: rendererProps(loop, true) }).get('.node-config-loop').text()).toContain('3')
   })
 
@@ -168,11 +184,28 @@ describe('WorkflowNodeRenderer', () => {
 
     const branch: BranchNode = { id: id(31), type: 'branch', name: 'New Branch', config: { cases: [], defaultCase: { id: id(32), label: 'Default' } } }
     const branchWrapper = shallowMount(WorkflowNodeRenderer, { props: rendererProps(branch, true) })
-    expect(branchWrapper.get('.node-name-editor button').text()).toBe('BRANCH · New Branch')
-    await branchWrapper.get('.node-name-editor button').trigger('click')
-    await branchWrapper.get(`#name-${branch.id}`).setValue('Quality gate')
-    await branchWrapper.get(`#name-${branch.id}`).trigger('blur')
+    branchWrapper.getComponent(BranchNodeContent).vm.$emit('rename', 'Quality gate')
     expect(branchWrapper.emitted('updateNodeName')).toEqual([[branch.id, 'Quality gate']])
+  })
+
+  it('edits a compound Loop name inline in Configure mode', async () => {
+    const loop: LoopNode = {
+      id: id(33), type: 'loop', name: 'New Loop', config: {
+        maxTurns: 3,
+        exitCondition: { kind: 'variable_comparison', variableId: id(34), operator: 'eq', value: true },
+        body: { graph: { nodes: [], edges: [] }, layout: { nodePlacements: [], viewport: { x: 0, y: 0, zoom: 1 } } },
+      },
+    }
+    const props = rendererProps(loop, true)
+    const wrapper = shallowMount(WorkflowNodeRenderer, {
+      props: { ...props, data: { ...props.data, compoundLoop: true } },
+    })
+
+    await wrapper.get('[aria-label="Edit loop name"]').trigger('click')
+    await wrapper.get(`#name-${loop.id}`).setValue('Research iteration')
+    await wrapper.get(`#name-${loop.id}`).trigger('blur')
+
+    expect(wrapper.emitted('updateNodeName')).toEqual([[loop.id, 'Research iteration']])
   })
 
   it('exposes typed drop targets for Canvas-level resource drop coordination', () => {

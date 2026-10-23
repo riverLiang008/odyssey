@@ -64,7 +64,7 @@ class PatternRoute(ApiModel):
 
 
 class PatternConfig(ApiModel):
-    schema_version: SchemaVersion
+    schema_version: Literal["1.0.0", "1.1.0"]
     id: UUID
     template_key: PatternKind
     kind: PatternKind
@@ -81,6 +81,14 @@ class PatternConfig(ApiModel):
         route_ids = [route.id for route in self.routes]
         if len(set(route_ids)) != len(route_ids):
             raise ValueError("Pattern route IDs must be unique")
+        for slot in self.slots:
+            direction = slot.configuration.get("direction")
+            if direction is not None and (
+                self.kind is not PatternKind.HUB_AND_SPOKE
+                or slot.topology_role != "spoke"
+                or direction not in ("hub_to_spoke", "spoke_to_hub", "bidirectional")
+            ):
+                raise ValueError("Direction belongs to a Hub spoke and must be supported")
         slot_id_set = set(slot_ids)
         for route in self.routes:
             if route.source_slot_id not in slot_id_set:
@@ -185,9 +193,21 @@ class CreateJourneyRequest(ApiModel):
     pattern_template_key: PatternKind
 
 
+class RoutingConfirmation(ApiModel):
+    agent_id: UUID
+    revision: Revision
+    removed_end_ids: list[UUID]
+    removed_edge_ids: list[UUID]
+
+
+class RoutingImpact(RoutingConfirmation):
+    legacy: bool
+
+
 class SaveJourneyRequest(ApiModel):
     expected_revision: Revision
     pattern: PatternConfig
+    routing_confirmation: list[RoutingConfirmation] | None = None
 
 
 class JourneySummary(ApiModel):
@@ -555,11 +575,20 @@ class StartNode(ApiModel):
     configuration: EmptyConfig = Field(alias="config")
 
 
+class EndBinding(ApiModel):
+    source_slot_id: UUID
+    target: PatternRouteTarget
+
+
+class EndConfig(ApiModel):
+    binding: EndBinding | None = None
+
+
 class EndNode(ApiModel):
     id: UUID
     name: Annotated[str, Field(min_length=1)]
     type: Literal["end"]
-    configuration: EmptyConfig = Field(alias="config")
+    configuration: EndConfig = Field(alias="config")
 
 
 class LoopStartNode(ApiModel):
@@ -608,6 +637,8 @@ class NodePlacement(ApiModel):
     node_id: UUID
     x: Annotated[float, Field(allow_inf_nan=False)]
     y: Annotated[float, Field(allow_inf_nan=False)]
+    width: Annotated[float, Field(ge=420, le=1600, allow_inf_nan=False)] | None = None
+    height: Annotated[float, Field(ge=300, le=1200, allow_inf_nan=False)] | None = None
 
 
 class CanvasViewport(ApiModel):
@@ -707,13 +738,18 @@ def _validate_graph_references(
 
 
 class WorkflowGraph(ApiModel):
-    schema_version: SchemaVersion
+    schema_version: Literal["1.0.0", "1.1.0"]
     nodes: list[WorkflowNode]
     edges: list[WorkflowEdge]
 
     @model_validator(mode="after")
     def validate_references(self) -> "WorkflowGraph":
         _validate_graph_references(self.nodes, self.edges)
+        if self.schema_version == "1.0.0" and any(
+            isinstance(node, EndNode) and node.configuration.binding is not None
+            for node in self.nodes
+        ):
+            raise ValueError("Pattern-bound exits require Workflow schemaVersion 1.1.0")
         return self
 
 
@@ -796,8 +832,7 @@ def _validate_agent_reusable_tool_references(
         for node in nodes:
             if isinstance(node, AgentActionNode):
                 if any(
-                    tool_id not in available_ids
-                    for tool_id in node.configuration.reusable_tool_ids
+                    tool_id not in available_ids for tool_id in node.configuration.reusable_tool_ids
                 ):
                     raise ValueError(
                         "Agent Action must reference a reusable Tool owned by the Agent"
@@ -877,8 +912,14 @@ class AgentTemplate(ApiModel):
     updated_at: datetime
 
 
+class TemplateEndAssignment(ApiModel):
+    end_node_id: UUID
+    target: PatternRouteTarget
+
+
 class InstantiateAgentTemplateRequest(ApiModel):
     expected_revision: Revision
+    end_assignments: list[TemplateEndAssignment] | None = None
 
 
 class InstantiateAgentTemplateResponse(ApiModel):
@@ -902,6 +943,7 @@ RemoveAgentAction = Annotated[
 
 
 class RemoveOccupiedSlotRequest(ApiModel):
+    routing_confirmation: list[RoutingConfirmation] | None = None
     expected_revision: Revision
     expected_agent_id: UUID
     agent_action: RemoveAgentAction

@@ -1,0 +1,49 @@
+workflow "Brief Review" version "0.1" {
+  variables {
+    string shared brief = "Initial draft";
+    boolean user_managed approved = false;
+  }
+
+  nodes {
+    start;
+    end;
+    task "evaluate" {
+      steps {
+        step check using system_tool script_execution {
+          config {
+            language = javascript;
+            inputs = [{ alias: "brief", variableId: agent.brief }];
+            script = "return typeof brief === 'string' && brief.length >= 80;";
+          }
+          output "result" -> agent.approved;
+        }
+      }
+    }
+
+    branch "review" {
+      case "Approved" {
+        when agent.approved == true;
+      }
+      default "Needs revision";
+    }
+
+    agent_action "accept" {
+      model "gpt-5";
+      goal "Prepare a final response from ${agent.brief}.";
+    }
+
+    agent_action "revise" {
+      model "gpt-5";
+      goal "Expand and improve ${agent.brief}; update brief.";
+    }
+  }
+
+  edges {
+    start -> "evaluate";
+    "evaluate" -> "review";
+    "review"."Approved" -> "accept";
+    "review".default -> "revise";
+    "accept" -> end;
+    "revise" -> end;
+  }
+}

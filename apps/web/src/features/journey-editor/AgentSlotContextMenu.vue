@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import type { UUID } from '@odyssey/schemas'
+import type { HubSpokeDirection, UUID } from '@odyssey/schemas'
 const props = defineProps<{
+  hubDirection?: HubSpokeDirection
   slotId: UUID
   configured?: boolean
   canReorder?: boolean
@@ -12,6 +13,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   action: [action: 'open' | 'save-template' | 'replace' | 'duplicate' | 'add-before' | 'add-after' | 'move-earlier' | 'move-later' | 'remove-slot' | 'remove', slotId: UUID]
+  direction: [slotId: UUID, direction: HubSpokeDirection]
   close: []
 }>()
 const root = ref<globalThis.HTMLElement | null>(null)
@@ -47,6 +49,11 @@ onMounted(() => {
   globalThis.document.addEventListener('keydown', keydown)
   globalThis.document.addEventListener('pointerdown', pointerdown)
   listenersRegistered = true
+  if (root.value) {
+    const rect = root.value.getBoundingClientRect()
+    root.value.style.left = `${Math.max(12, Math.min(rect.left, globalThis.window.innerWidth - rect.width - 12))}px`
+    root.value.style.top = `${Math.max(12, Math.min(rect.top, globalThis.window.innerHeight - rect.height - 12))}px`
+  }
   enabledItems()[0]?.focus()
 })
 onBeforeUnmount(() => {
@@ -66,6 +73,11 @@ onBeforeUnmount(() => {
       <button class="is-danger" role="menuitem" :disabled="!configured" @click="$emit('action', 'remove', props.slotId)">Remove agent</button>
     </div>
     <div class="agent-menu__divider" role="separator" />
+    <div v-if="hubDirection" class="agent-menu__group" role="group" aria-label="Hub connection direction">
+      <button role="menuitemradio" :aria-checked="hubDirection === 'hub_to_spoke'" @click="emit('direction', slotId, 'hub_to_spoke')">Hub → Spoke</button>
+      <button role="menuitemradio" :aria-checked="hubDirection === 'spoke_to_hub'" @click="emit('direction', slotId, 'spoke_to_hub')">Spoke → Hub</button>
+      <button role="menuitemradio" :aria-checked="hubDirection === 'bidirectional'" @click="emit('direction', slotId, 'bidirectional')">Hub ↔ Spoke</button>
+    </div>
     <div class="agent-menu__group agent-menu__group--slot">
       <button role="menuitem" :disabled="!configured" @click="$emit('action', 'save-template', props.slotId)">Save as template</button>
       <button v-if="canAddSibling" role="menuitem" @click="$emit('action', 'add-before', props.slotId)">Add slot before</button>

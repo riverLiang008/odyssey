@@ -1,0 +1,24 @@
+workflow "Review Routing" version "0.1" {
+  variables {
+    boolean user_managed approved = false;
+  }
+  nodes {
+    branch "review" {
+      case "approved" {
+        when agent.approved == true;
+      }
+      default;
+    }
+    end "accepted" {
+      exit "Accepted";
+    }
+    end "rejected" {
+      exit "Rejected";
+    }
+  }
+  edges {
+    start -> "review";
+    "review"."approved" -> "accepted";
+    "review".default -> "rejected";
+  }
+}

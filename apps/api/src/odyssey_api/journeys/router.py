@@ -288,6 +288,7 @@ async def instantiate_agent_template_route(
         slot_id=slot_id,
         workspace_id=workspace.id,
         expected_revision=request.expected_revision,
+        end_assignments=request.end_assignments,
     )
 
 

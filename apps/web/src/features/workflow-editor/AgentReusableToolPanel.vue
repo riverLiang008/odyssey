@@ -38,6 +38,16 @@ const variableOptions = computed<ToolVariableOption[]>(() => props.variables.map
   writable: !variable.readOnly,
 })))
 const writableVariables = computed(() => variableOptions.value.filter((variable) => variable.writable))
+const targetOptions = computed(() => [
+  { value: '', label: 'Choose a writable variable', disabled: true },
+  ...writableVariables.value.map((variable) => ({ value: variable.id, label: variable.name })),
+])
+const operationOptions = [
+  { value: 'assign', label: 'Assign' },
+  { value: 'append', label: 'Append' },
+  { value: 'increment', label: 'Increment' },
+  { value: 'toggle', label: 'Toggle' },
+]
 const outputOptions = computed(() => [
   { value: '', label: 'No output binding' },
   ...writableVariables.value.map((variable) => ({ value: variable.id, label: variable.name })),
@@ -135,8 +145,8 @@ function submit() {
         <label>Request body · optional<select :value="form.body.kind" @change="setBody"><option value="none">None</option><option value="json">JSON</option><option value="form_data">Form data</option></select></label>
       </template>
       <template v-else-if="kind === 'set_variable'">
-        <label>Target Agent Variable *<select v-model="form.target" required><option disabled value="">Choose a writable variable</option><option v-for="variable in writableVariables" :key="variable.id" :value="variable.id">{{ variable.name }}</option></select></label>
-        <label>Operation *<select v-model="form.operation"><option value="assign">Assign</option><option value="append">Append</option><option value="increment">Increment</option><option value="toggle">Toggle</option></select></label>
+        <label>Target Agent Variable *<ToolSelect v-model="form.target" :options="targetOptions" control-label="Target Agent Variable" /></label>
+        <label>Operation *<ToolSelect v-model="form.operation" :options="operationOptions" control-label="Operation" /></label>
         <ToolValueInput v-if="form.operation !== 'toggle'" v-model="form.value" label="Value" :variables="variableOptions" />
       </template>
       <template v-else>

@@ -1,9 +1,14 @@
-import type { CanvasLayout, LoopBodyGraph, LoopBodyNode, LoopNode, UUID, WorkflowGraph, WorkflowNode } from '@odyssey/schemas'
+import { describeEndTarget } from '@/domain/workflow/workflowEndRouting'
+import type { JourneyEditorDocument, CanvasLayout, LoopBodyGraph, LoopBodyNode, LoopNode, UUID, WorkflowGraph, WorkflowNode } from '@odyssey/schemas'
 import { MarkerType, Position, type Edge, type Node, type ViewportTransform } from '@vue-flow/core'
 
 export interface WorkflowCanvasNodeData {
+  readonly branchConnectedHandles?: readonly UUID[]
+  readonly boundaryLabel?: string
   readonly node: WorkflowNode | LoopBodyNode
   readonly branchHandles: readonly { readonly id: UUID; readonly label: string }[]
+  readonly context?: { readonly kind: 'root' } | { readonly kind: 'loop-body'; readonly loopNodeId: UUID }
+  readonly compoundLoop?: boolean
 }
 
 export interface WorkflowCanvasDiagnostic { readonly code: 'MISSING_PLACEMENT'; readonly nodeId: UUID }
@@ -57,6 +62,7 @@ export function projectWorkflowCanvas(
   graph: WorkflowGraph | LoopBodyGraph,
   layout: CanvasLayout | LoopNode['config']['body']['layout'],
   presentationMode: 'flow' | 'configure' = 'flow',
+  routingJourney?: JourneyEditorDocument | null,
 ): WorkflowCanvasProjection {
   const placements = new Map(layout.nodePlacements.map((placement) => [placement.nodeId, placement]))
   const projectedPlacements = layout.nodePlacements.length
@@ -80,12 +86,36 @@ export function projectWorkflowCanvas(
       })(),
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
-      data: { node: structuredClone(node), branchHandles: branchHandles(node) },
+      data: { ...(node.type === 'end' && node.config.binding && routingJourney ? { boundaryLabel: describeEndTarget(node.config.binding, routingJourney.pattern, routingJourney.agents) } : {}), node: structuredClone(node), branchHandles: branchHandles(node), ...(node.type === 'branch' ? { branchConnectedHandles: graph.edges.flatMap(e => e.sourceNodeId === node.id && e.sourceHandleId ? [e.sourceHandleId] : []) } : {}), context: { kind: 'root' }, compoundLoop: node.type === 'loop' && 'schemaVersion' in graph },
+      ...(node.type === 'loop' && 'schemaVersion' in graph ? { style: { width: `${placement?.width ?? 720}px`, height: `${placement?.height ?? 480}px` } } : {}),
       draggable: true,
       selectable: true,
       deletable: !['start', 'end', 'loop_start', 'loop_end'].includes(node.type),
     }
   })
+  if ('schemaVersion' in graph) {
+    for (const loop of graph.nodes.filter((candidate): candidate is LoopNode => candidate.type === 'loop')) {
+      const childPlacements = new Map(loop.config.body.layout.nodePlacements.map((placement) => [placement.nodeId, placement]))
+      loop.config.body.graph.nodes.forEach((node, index) => {
+        const placement = childPlacements.get(node.id)
+        if (!placement) diagnostics.push({ code: 'MISSING_PLACEMENT', nodeId: node.id })
+        nodes.push({
+          id: node.id,
+          type: 'workflow',
+          position: placement ? { x: placement.x, y: placement.y } : fallbackPosition(index),
+          parentNode: loop.id,
+          extent: 'parent',
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
+          data: { node: structuredClone(node), branchHandles: branchHandles(node), ...(node.type === 'branch' ? { branchConnectedHandles: loop.config.body.graph.edges.flatMap(e => e.sourceNodeId === node.id && e.sourceHandleId ? [e.sourceHandleId] : []) } : {}), context: { kind: 'loop-body', loopNodeId: loop.id }, compoundLoop: false },
+          draggable: true,
+          selectable: true,
+          deletable: !['loop_start', 'loop_end'].includes(node.type),
+          zIndex: 2,
+        })
+      })
+    }
+  }
   const edges = graph.edges.map((edge): Edge => ({
     id: edge.id,
     source: edge.sourceNodeId,
@@ -95,6 +125,20 @@ export function projectWorkflowCanvas(
     markerEnd: MarkerType.ArrowClosed,
     style: { stroke: '#4d72f2', strokeWidth: 2 },
   }))
+  if ('schemaVersion' in graph) {
+    for (const loop of graph.nodes.filter((candidate): candidate is LoopNode => candidate.type === 'loop')) {
+      edges.push(...loop.config.body.graph.edges.map((edge): Edge => ({
+        id: edge.id,
+        source: edge.sourceNodeId,
+        target: edge.targetNodeId,
+        ...(edge.sourceHandleId ? { sourceHandle: edge.sourceHandleId } : {}),
+        type: 'smoothstep',
+        markerEnd: MarkerType.ArrowClosed,
+        style: { stroke: '#c8942f', strokeWidth: 2 },
+        zIndex: 3,
+      })))
+    }
+  }
   return {
     nodes,
     edges,

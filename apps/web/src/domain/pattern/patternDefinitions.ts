@@ -8,6 +8,7 @@ export type PatternOperation =
   | 'add_slot'
   | 'remove_slot'
   | 'reorder_slot'
+  | 'set_direction'
 
 export interface PatternDefinition {
   readonly kind: PatternKind
@@ -30,7 +31,7 @@ export const PATTERN_DEFINITIONS = {
     templateKey: 'hub_and_spoke',
     name: 'Hub and spoke',
     initialSlotCount: 5,
-    supportedOperations: [...ASSIGNMENT_OPERATIONS, 'add_slot', 'remove_slot'],
+    supportedOperations: [...ASSIGNMENT_OPERATIONS, 'add_slot', 'remove_slot', 'set_direction'],
   },
   diamond_loop: {
     kind: 'diamond_loop',

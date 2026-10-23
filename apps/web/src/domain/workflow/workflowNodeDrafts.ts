@@ -111,3 +111,25 @@ export function createLoopFromDraft(
   })
   return parsed.success ? { ok: true, value: parsed.data } : failure('DRAFT_SCHEMA_INVALID')
 }
+
+export function createDefaultLoop(
+  variables: readonly AgentVariable[],
+  idFactory: Pick<WorkflowIdFactory, 'nodeId' | 'edgeId'>,
+): WorkflowDraftResult<LoopNode> {
+  const variable = variables[0]
+  if (!variable) return failure('VARIABLE_REQUIRED')
+  const defaultComparisonValue = variable.dataType === 'number'
+    ? '0'
+    : variable.dataType === 'boolean'
+      ? 'false'
+      : variable.dataType === 'json'
+        ? '{}'
+        : ''
+  return createLoopFromDraft({
+    name: 'New Loop',
+    maxTurns: 10,
+    variableId: variable.id,
+    operator: 'eq',
+    comparisonValue: defaultComparisonValue,
+  }, variables, idFactory)
+}

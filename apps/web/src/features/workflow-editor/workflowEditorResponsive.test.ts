@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const workflowEditorCss = readFileSync(resolve(process.cwd(), 'src/features/workflow-editor/workflow-editor.css'), 'utf8')
+const workflowViewSource = readFileSync(resolve(process.cwd(), 'src/views/AgentWorkflowView.vue'), 'utf8')
 
 describe('Workflow editor responsive persistence status', () => {
   it('never hides the only visible save status at narrow viewports', () => {
@@ -22,12 +23,21 @@ describe('Workflow editor responsive persistence status', () => {
     expect(workflowEditorCss).not.toContain('.workflow-node-palette.is-mode-disabled')
   })
 
+  it('uses the Figma Nodes rail and removes a collapsed resource panel from the layout', () => {
+    expect(workflowEditorCss).toContain('.workflow-editor-layout.is-palette-collapsed { --workflow-palette-width:78px; }')
+    expect(workflowEditorCss).toContain('.workflow-node-palette.is-collapsed { padding:12px; overflow:visible; border-radius:16px; }')
+    expect(workflowEditorCss).toContain('.compact-palette-item { position:relative; width:38px; height:38px;')
+    expect(workflowViewSource).toContain('<div v-if="rightPanelVisible" class="workflow-right-panel-host">')
+    expect(workflowViewSource).not.toContain("'is-resource-collapsed': session.resourceBrowser.collapsed")
+  })
+
   it('matches the compact Figma canvas controls', () => {
     expect(workflowEditorCss).toContain('.workflow-canvas-controls .mode-toggle { width:174px; height:34px')
     expect(workflowEditorCss).toContain('.workflow-canvas-controls .mode-toggle button:first-child { width:68px; }')
     expect(workflowEditorCss).toContain('.workflow-canvas-controls .mode-toggle button:last-child { width:98px; }')
-    expect(workflowEditorCss).toContain('.workflow-canvas-controls .focus-button { width:36px; height:34px')
+    expect(workflowEditorCss).toContain('.workflow-canvas-controls .focus-button,.workflow-canvas-controls .workflow-tools__trigger { width:36px; height:34px')
     expect(workflowEditorCss).toContain('.workflow-canvas-controls .focus-button img { width:18px; height:18px')
+    expect(workflowViewSource).toContain('<WorkflowToolsMenu @import="openWorkflowImport" @export="exportWorkflow" />')
   })
 
   it('uses text-only highlighting for the active resource category', () => {

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "key": "browser-acceptance",
+  "documents": [
+    {
+      "key": "why-odyssey-scope",
+      "path": "Test/why-odyssey-scope.md",
+      "summary": "Defines the current product scope and the boundaries of the Odyssey demo.",
+      "guide": "Use this document when deciding whether a feature belongs in the current Odyssey milestone.",
+      "tags": ["product-scope"],
+      "status": "indexed"
+    }
+  ],
+  "tags": [
+    {
+      "key": "product-scope",
+      "name": "Product scope",
+      "colorToken": "blue"
+    }
+  ],
+  "relations": [],
+  "issues": [],
+  "graph": {
+    "status": "healthy"
+  }
+}

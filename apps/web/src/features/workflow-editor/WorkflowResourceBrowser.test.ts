@@ -7,14 +7,30 @@ describe('WorkflowResourceBrowser', () => {
   const tools = createAgentWorkflowEditorDocumentFixture('minimal').reusableTools
   const baseProps = { collapsed: false, category: 'tools' as const, query: '', page: 1, pageSize: 6, tools, knowledgeSpaces: [], knowledgeStatus: 'ready' as const, knowledgeTotal: 0 }
 
-  it('offers a vertical Tool sidebar with filtering, search, and collapse controls', async () => {
+  it('offers a vertical Tool sidebar with filtering, search, and a close control', async () => {
     const wrapper = mount(WorkflowResourceBrowser, { props: baseProps })
     expect(wrapper.findAll('.resource-browser-items article')).toHaveLength(tools.length)
     await wrapper.get('input[aria-label="Search resources"]').setValue('missing')
     await wrapper.get('form[role="search"]').trigger('submit')
     expect(wrapper.emitted('search')).toEqual([['missing']])
-    await wrapper.get('.resource-browser-collapse').trigger('click')
+    const closeButton = wrapper.get('button[aria-label="Close resources"]')
+    expect(closeButton.find('svg').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('Collapse')
+    await closeButton.trigger('click')
     expect(wrapper.emitted('collapse')).toEqual([[true]])
+  })
+
+  it('uses the styled Tool kind listbox and resets pagination when filtering', async () => {
+    const wrapper = mount(WorkflowResourceBrowser, { props: baseProps })
+
+    await wrapper.get('button[aria-label^="Filter Tool kind:"]').trigger('click')
+    expect(wrapper.get('[role="listbox"]').attributes('aria-label')).toBe('Filter Tool kind')
+    const option = wrapper.findAll('[role="option"]')[1]
+    expect(option).toBeDefined()
+    if (!option) return
+    await option.trigger('click')
+
+    expect(wrapper.emitted('page')).toEqual([[1]])
   })
 
   it('renders the category selected by the Product Header without mixing inventory state', async () => {

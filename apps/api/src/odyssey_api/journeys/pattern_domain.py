@@ -54,17 +54,17 @@ def _slot(
 
 def _initial_slots(kind: PatternKind, id_factory: Callable[[], UUID]) -> list[PatternSlot]:
     if kind is PatternKind.SOLO_COMPONENT:
-        return [_slot(id_factory, "Solo", "solo", None)]
+        return [_slot(id_factory, "Agent-1", "solo", None)]
     if kind is PatternKind.LINEAR_SEQUENCE:
-        return [_slot(id_factory, f"Stage {index + 1}", None, index) for index in range(4)]
+        return [_slot(id_factory, f"Agent-{index + 1}", None, index) for index in range(4)]
     if kind is PatternKind.HUB_AND_SPOKE:
         return [
-            _slot(id_factory, "Hub", "hub", None),
-            *[_slot(id_factory, f"Spoke {index + 1}", "spoke", None) for index in range(4)],
+            _slot(id_factory, "Agent-1", "hub", None),
+            *[_slot(id_factory, f"Agent-{index + 2}", "spoke", None) for index in range(4)],
         ]
     return [
-        _slot(id_factory, "Entry", "entry", 0),
-        *[_slot(id_factory, f"Stage {index + 2}", "loop", index + 1) for index in range(3)],
+        _slot(id_factory, "Agent-1", "entry", 0),
+        *[_slot(id_factory, f"Agent-{index + 2}", "loop", index + 1) for index in range(3)],
     ]
 
 
@@ -83,7 +83,16 @@ def _route_targets(
         hub = next((slot for slot in slots if slot.topology_role == "hub"), None)
         if hub is None:
             return []
-        return [(hub.id, slot.id) for slot in slots if slot.topology_role == "spoke"]
+        targets: list[tuple[UUID, UUID | None]] = []
+        for slot in slots:
+            if slot.topology_role != "spoke":
+                continue
+            direction = slot.configuration.get("direction", "hub_to_spoke")
+            if direction != "spoke_to_hub":
+                targets.append((hub.id, slot.id))
+            if direction != "hub_to_spoke":
+                targets.append((slot.id, hub.id))
+        return targets
     ordered = sorted(slots, key=lambda slot: slot.order if slot.order is not None else -1)
     entry_index = next(
         (index for index, slot in enumerate(ordered) if slot.topology_role == "entry"), -1
@@ -98,10 +107,18 @@ def _derive_routes(
     kind: PatternKind,
     slots: Sequence[PatternSlot],
     id_factory: Callable[[], UUID],
+    existing: Sequence[PatternRoute] = (),
 ) -> list[PatternRoute]:
+    previous = {
+        (
+            route.source_slot_id,
+            route.target.slot_id if isinstance(route.target, SlotRouteTarget) else None,
+        ): route.id
+        for route in existing
+    }
     return [
         PatternRoute(
-            id=id_factory(),
+            id=previous.get((source_id, target_id)) or id_factory(),
             source_slot_id=source_id,
             target=(
                 JourneyEndRouteTarget(type="journey_end")
@@ -133,12 +150,27 @@ def instantiate_pattern(
 def remove_slot(
     pattern: PatternConfig, slot_id: UUID, id_factory: Callable[[], UUID]
 ) -> PatternConfig:
-    slots = [slot for slot in pattern.slots if slot.id != slot_id]
+    slots = [slot.model_copy(deep=True) for slot in pattern.slots if slot.id != slot_id]
+    if pattern.kind in (PatternKind.LINEAR_SEQUENCE, PatternKind.DIAMOND_LOOP):
+        slots.sort(key=lambda slot: slot.order if slot.order is not None else -1)
+    if (
+        pattern.kind is PatternKind.DIAMOND_LOOP
+        and slots
+        and not any(slot.topology_role == "entry" for slot in slots)
+    ):
+        removed = next(slot for slot in pattern.slots if slot.id == slot_id)
+        successor = next(
+            (slot for slot in slots if (slot.order or 0) > (removed.order or 0)), slots[0]
+        )
+        successor.topology_role = "entry"
     for index, slot in enumerate(slots):
         if slot.order is not None:
             slot.order = index
     return pattern.model_copy(
-        update={"slots": slots, "routes": _derive_routes(pattern.kind, slots, id_factory)}
+        update={
+            "slots": slots,
+            "routes": _derive_routes(pattern.kind, slots, id_factory, pattern.routes),
+        }
     )
 
 

@@ -9,6 +9,7 @@ import {
 } from '@/fixtures'
 import { InMemoryEditorRepository } from '@/repositories'
 import { cryptoWorkflowIdFactory } from '@/domain/workflow'
+import { createWorkflowExport } from '@/domain/workflow-import/workflowImport'
 import { useWorkflowEditorStore } from './workflowEditor'
 
 const UNKNOWN_AGENT_ID = uuidSchema.parse('0195f076-b6e6-7ef0-98db-d721990f8999')
@@ -32,6 +33,79 @@ describe('workflowEditor store', () => {
     expect(store.document).toBeNull()
     expect(store.persistence.loadStatus).toBe('not-found')
     expect(store.persistence.error?.code).toBe('NOT_FOUND')
+  })
+
+  it('keeps boundaries selectable without opening or retaining a node inspector', async () => {
+    const agentDocument = createAgentWorkflowEditorDocumentFixture('research')
+    const repository = new InMemoryEditorRepository({ journeys: [createJourneyEditorDocumentFixture()], agentWorkflows: [agentDocument] })
+    const store = useWorkflowEditorStore()
+    await store.load(agentDocument.agent.journeyId, agentDocument.agent.id, repository)
+    const task = agentDocument.workflow.nodes.find((node) => node.type === 'task')
+    if (!task) throw new Error('Expected a configurable Task')
+    for (const boundary of agentDocument.workflow.nodes.filter((node) => node.type === 'start' || node.type === 'end')) {
+      store.setResourceBrowserCollapsed(true)
+      store.setPanel(null)
+      store.selectNode(boundary.id)
+      store.setPanel({ type: 'node-inspector', nodeId: boundary.id })
+      expect(store.session.selectedNodeId).toBe(boundary.id)
+      expect(store.session.panel).toBeNull()
+      expect(store.session.resourceBrowser.collapsed).toBe(true)
+      store.setPanel({ type: 'node-inspector', nodeId: task.id })
+      expect(store.session.panel?.type).toBe('node-inspector')
+      store.setPanel({ type: 'node-inspector', nodeId: boundary.id })
+      expect(store.session.panel).toBeNull()
+      expect(store.session.resourceBrowser.collapsed).toBe(true)
+    }
+    expect(store.persistence.mutationSeq).toBe(0)
+    expect(store.document?.workflow).toEqual(agentDocument.workflow)
+    store.dispose()
+  })
+
+  it('creates canvas nodes without automatically opening a sidebar', async () => {
+    const agentDocument = createAgentWorkflowEditorDocumentFixture('minimal')
+    const repository = new InMemoryEditorRepository({
+      journeys: [createJourneyEditorDocumentFixture()],
+      agentWorkflows: [agentDocument],
+    })
+    const store = useWorkflowEditorStore()
+    await store.load(agentDocument.agent.journeyId, agentDocument.agent.id, repository)
+    const taskId = uuidSchema.parse('0195f076-b6e6-7ef0-98db-d721990f8994')
+    store.setResourceBrowserCollapsed(false)
+    store.setPanel({ type: 'tools' })
+
+    store.createWorkflowNode({ id: taskId, type: 'task', name: 'New Task', config: { localVariables: [], steps: [] } }, { x: 100, y: 200 })
+
+    expect(store.session.selectedNodeId).toBe(taskId)
+    expect(store.session.panel).toBeNull()
+    expect(store.session.resourceBrowser.collapsed).toBe(true)
+
+    const branchId = uuidSchema.parse('0195f076-b6e6-7ef0-98db-d721990f8993')
+    store.setResourceBrowserCollapsed(false)
+    store.createWorkflowNode({ id: branchId, type: 'branch', name: 'New Branch', config: { cases: [], defaultCase: { id: uuidSchema.parse('0195f076-b6e6-7ef0-98db-d721990f8992'), label: 'Default' } } }, { x: 200, y: 200 })
+    expect(store.session.selectedNodeId).toBe(branchId)
+    expect(store.session.panel).toBeNull()
+    expect(store.session.resourceBrowser.collapsed).toBe(true)
+  })
+
+  it('closes an inspector without reopening the resource browser', async () => {
+    const agentDocument = createAgentWorkflowEditorDocumentFixture('research')
+    const repository = new InMemoryEditorRepository({
+      journeys: [createJourneyEditorDocumentFixture()],
+      agentWorkflows: [agentDocument],
+    })
+    const store = useWorkflowEditorStore()
+    await store.load(agentDocument.agent.journeyId, agentDocument.agent.id, repository)
+    const node = agentDocument.workflow.nodes.find((candidate) => candidate.type === 'task')
+    if (!node) throw new Error('Expected a configurable Task')
+    store.selectNode(node.id)
+    store.setPanel({ type: 'node-inspector', nodeId: node.id })
+
+    store.closeInspector()
+
+    expect(store.session.selectedNodeId).toBeNull()
+    expect(store.session.selectedEdgeId).toBeNull()
+    expect(store.session.panel).toBeNull()
+    expect(store.session.resourceBrowser.collapsed).toBe(true)
   })
 
   it('loads an owned workflow and excludes all session state from save input', async () => {
@@ -411,6 +485,135 @@ describe('workflowEditor store', () => {
     }
   })
 
+  it('atomically replaces an imported Workflow, resets dependent session state and autosaves once', async () => {
+    vi.useFakeTimers()
+    try {
+      const target = createAgentWorkflowEditorDocumentFixture('minimal')
+      const imported = createAgentWorkflowEditorDocumentFixture('loop')
+      const base = new InMemoryEditorRepository({ journeys: [createJourneyEditorDocumentFixture()], agentWorkflows: [target] })
+      const repository = {
+        listSystemToolDefinitions: base.listSystemToolDefinitions.bind(base),
+        listKnowledgeSpaces: base.listKnowledgeSpaces.bind(base),
+        loadJourney: base.loadJourney.bind(base),
+        loadAgentWorkflow: base.loadAgentWorkflow.bind(base),
+        saveJourney: base.saveJourney.bind(base),
+        saveAgentWorkflow: vi.fn(base.saveAgentWorkflow.bind(base)),
+      } satisfies import('@/repositories').EditorRepository
+      const store = useWorkflowEditorStore()
+      await store.load(target.agent.journeyId, target.agent.id, repository)
+      store.selectNode(target.workflow.nodes[0]!.id)
+      store.setPanel({ type: 'node-inspector', nodeId: target.workflow.nodes[0]!.id })
+      const beforeMutation = store.persistence.mutationSeq
+      const candidate = createWorkflowExport(imported, '2026-10-18T06:00:00.000Z').document
+
+      expect(store.replaceWorkflowFromImport(candidate)).toEqual({ ok: true, value: null })
+      expect(store.document?.agent).toEqual(target.agent)
+      expect(store.document?.workflow).toEqual(imported.workflow)
+      expect(store.document?.layout).toEqual(imported.layout)
+      expect(store.document?.variables).toEqual(imported.variables)
+      expect(store.document?.reusableTools).toEqual(imported.reusableTools)
+      expect(store.persistence.mutationSeq).toBe(beforeMutation + 1)
+      expect(store.session).toMatchObject({
+        selectedNodeId: null,
+        selectedEdgeId: null,
+        panel: { type: 'tools' },
+        interaction: { type: 'idle' },
+        context: { kind: 'root' },
+        loopPresentation: { type: 'collapsed' },
+        creationDraft: { type: 'closed' },
+      })
+
+      await vi.runOnlyPendingTimersAsync()
+      expect(repository.saveAgentWorkflow).toHaveBeenCalledTimes(1)
+      expect(store.persistence.saveStatus).toBe('saved')
+      expect(store.document?.agent.revision).toBe(2)
+      store.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('rejects an invalid import without mutating the document', async () => {
+    const target = createAgentWorkflowEditorDocumentFixture('minimal')
+    const repository = new InMemoryEditorRepository({ journeys: [createJourneyEditorDocumentFixture()], agentWorkflows: [target] })
+    const store = useWorkflowEditorStore()
+    await store.load(target.agent.journeyId, target.agent.id, repository)
+    const candidate = createWorkflowExport(createAgentWorkflowEditorDocumentFixture('research'), '2026-10-18T06:00:00.000Z').document
+    candidate.layout.nodePlacements[0] = { ...candidate.layout.nodePlacements[0]!, nodeId: UNKNOWN_AGENT_ID }
+    const before = structuredClone(store.document)
+    const beforeMutation = store.persistence.mutationSeq
+
+    expect(store.replaceWorkflowFromImport(candidate)).toEqual({ ok: false, error: { code: 'IMPORT_DOCUMENT_INVALID' } })
+    expect(store.document).toEqual(before)
+    expect(store.persistence.mutationSeq).toBe(beforeMutation)
+  })
+
+  it('blocks import during an in-flight save or revision conflict', async () => {
+    const target = createAgentWorkflowEditorDocumentFixture('minimal')
+    const candidate = createWorkflowExport(createAgentWorkflowEditorDocumentFixture('loop'), '2026-10-18T06:00:00.000Z').document
+    const base = new InMemoryEditorRepository({ journeys: [createJourneyEditorDocumentFixture()], agentWorkflows: [target] })
+    const pendingSave = deferred<Awaited<ReturnType<typeof base.saveAgentWorkflow>>>()
+    const repository = {
+      listSystemToolDefinitions: base.listSystemToolDefinitions.bind(base),
+      listKnowledgeSpaces: base.listKnowledgeSpaces.bind(base),
+      loadJourney: base.loadJourney.bind(base),
+      loadAgentWorkflow: base.loadAgentWorkflow.bind(base),
+      saveJourney: base.saveJourney.bind(base),
+      saveAgentWorkflow: vi.fn(() => pendingSave.promise),
+    } satisfies import('@/repositories').EditorRepository
+    const store = useWorkflowEditorStore()
+    await store.load(target.agent.journeyId, target.agent.id, repository)
+    store.createWorkflowNode({ id: cryptoWorkflowIdFactory.nodeId(), type: 'task', name: 'Pending', config: { localVariables: [], steps: [] } }, { x: 10, y: 10 })
+    const saving = store.save(repository)
+    const before = structuredClone(store.document)
+
+    expect(store.replaceWorkflowFromImport(candidate)).toEqual({ ok: false, error: { code: 'IMPORT_BLOCKED_BY_SAVE' } })
+    expect(store.document).toEqual(before)
+    pendingSave.resolve({ ok: true, value: { journeyId: target.agent.journeyId, agentId: target.agent.id, revision: 2, updatedAt: '2026-10-18T06:01:00.000Z' } })
+    await saving
+    const beforeConflict = structuredClone(store.document)
+
+    store.persistenceState = {
+      type: 'conflict',
+      serverRevision: 2,
+      mutationSeq: store.persistence.mutationSeq,
+      savedMutationSeq: store.persistence.savedMutationSeq,
+      conflictedSnapshotSeq: store.persistence.mutationSeq,
+      error: { code: 'REVISION_CONFLICT', expectedRevision: 2, currentRevision: 3 },
+    }
+    expect(store.replaceWorkflowFromImport(candidate)).toEqual({ ok: false, error: { code: 'IMPORT_BLOCKED_BY_CONFLICT' } })
+    expect(store.document).toEqual(beforeConflict)
+  })
+
+  it('preserves the imported local document when its immediate save fails', async () => {
+    vi.useFakeTimers()
+    try {
+      const target = createAgentWorkflowEditorDocumentFixture('minimal')
+      const imported = createAgentWorkflowEditorDocumentFixture('loop')
+      const base = new InMemoryEditorRepository({ journeys: [createJourneyEditorDocumentFixture()], agentWorkflows: [target] })
+      const repository = {
+        listSystemToolDefinitions: base.listSystemToolDefinitions.bind(base),
+        listKnowledgeSpaces: base.listKnowledgeSpaces.bind(base),
+        loadJourney: base.loadJourney.bind(base),
+        loadAgentWorkflow: base.loadAgentWorkflow.bind(base),
+        saveJourney: base.saveJourney.bind(base),
+        saveAgentWorkflow: vi.fn(async () => ({ ok: false, error: { code: 'NETWORK_FAILED' } } as const)),
+      } satisfies import('@/repositories').EditorRepository
+      const store = useWorkflowEditorStore()
+      await store.load(target.agent.journeyId, target.agent.id, repository)
+
+      expect(store.replaceWorkflowFromImport(createWorkflowExport(imported, '2026-10-18T06:00:00.000Z').document).ok).toBe(true)
+      await vi.runOnlyPendingTimersAsync()
+
+      expect(store.persistence.saveStatus).toBe('error')
+      expect(store.document?.workflow).toEqual(imported.workflow)
+      expect(store.hasUnsavedChanges).toBe(true)
+      store.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('replaces stale domain feedback with the current Canvas rejection and clears it on retry', () => {
     const store = useWorkflowEditorStore()
     store.rejectCanvasInteraction('INVALID_CONNECTION')
@@ -441,8 +644,10 @@ describe('workflowEditor store', () => {
     expect(store.persistence.mutationSeq).toBe(afterAction + 1)
     const loop = store.document?.workflow.nodes.find((node) => node.type === 'loop')
     expect(loop?.type === 'loop' && loop.config.body.graph.nodes.map((node) => node.type)).toEqual(['loop_start', 'loop_end'])
-    expect(store.session.loopPresentation).toEqual({ type: 'expanded-inline', loopNodeId: loop?.id })
-    expect(store.session.context).toEqual({ kind: 'loop-body', loopNodeId: loop?.id })
+    expect(store.session.loopPresentation).toEqual({ type: 'collapsed' })
+    expect(store.session.context).toEqual({ kind: 'root' })
+    expect(store.session.panel).toBeNull()
+    expect(store.session.resourceBrowser.collapsed).toBe(true)
   })
 
   it('uses Configure as the default authoring mode and blocks creation drafts in Flow view', async () => {

@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import type { AgentReusableTool, UUID } from '@odyssey/schemas'
 import { serializeWorkflowResourceDragPayload, WORKFLOW_RESOURCE_DRAG_MIME, type WorkflowResourceDragPayload } from '@/canvas/workflow'
+import ResourcePanelCloseButton from './ResourcePanelCloseButton.vue'
 
 const props = defineProps<{
   agentName: string
@@ -33,7 +34,7 @@ function startDrag(event: globalThis.DragEvent, toolId: UUID) {
 
 <template>
   <aside class="workflow-resource-browser reusable-tools-panel" aria-label="Reusable Tools">
-    <header><div><p class="workflow-eyebrow">RESOURCES</p><h2>Reusable Tools</h2></div><button type="button" class="resource-browser-collapse" @click="emit('collapse')">Collapse</button></header>
+    <header><div><p class="workflow-eyebrow">RESOURCES</p><h2>Reusable Tools</h2></div><ResourcePanelCloseButton @close="emit('collapse')" /></header>
     <p class="reusable-tools-subtitle">Saved within {{ agentName }} · drag to create an instance</p>
     <form class="resource-browser-search" role="search" @submit.prevent><input v-model="query" placeholder="Search reusable tools…" aria-label="Search reusable tools" /><span aria-hidden="true">⌕</span></form>
     <button type="button" class="reusable-tools-create" :disabled="readOnly" @click="emit('browseSystemTools')">＋ Create from System Tools</button>

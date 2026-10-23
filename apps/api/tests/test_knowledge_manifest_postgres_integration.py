@@ -312,7 +312,13 @@ async def test_manifest_apply_is_atomic_idempotent_and_preserves_user_annotation
         assert expiry_error.value.details["issues"][0]["code"] == "MANIFEST_TOKEN_EXPIRED"
 
         async with async_session_factory() as session:
-            unchanged = await apply_knowledge_graph_manifest(session, workspace_id, space_id, retry)
+            unchanged = await apply_knowledge_graph_manifest(
+                session,
+                workspace_id,
+                space_id,
+                retry,
+                now_factory=lambda: datetime(2026, 10, 18, 1, 3, tzinfo=UTC),
+            )
         assert unchanged.status == "already_up_to_date"
         assert unchanged.knowledge_space_revision == 2
 
@@ -345,6 +351,7 @@ async def test_manifest_apply_is_atomic_idempotent_and_preserves_user_annotation
                     workspace_id,
                     space_id,
                     changed_request,
+                    now_factory=lambda: datetime(2026, 10, 18, 1, 3, tzinfo=UTC),
                 )
         async with async_session_factory() as session:
             space = await session.get(KnowledgeSpace, space_id)

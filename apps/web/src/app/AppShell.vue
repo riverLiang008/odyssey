@@ -6,6 +6,7 @@ import { appShellPresentationKey } from './appShellPresentation'
 
 const isFocusMode = ref(false)
 const isProductHeaderVisible = ref(true)
+const isNavigationCollapsed = ref(false)
 provide(appShellPresentationKey, {
   setFocusMode(enabled) { isFocusMode.value = enabled },
   setProductHeaderVisible(visible) { isProductHeaderVisible.value = visible },
@@ -13,8 +14,8 @@ provide(appShellPresentationKey, {
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'is-focus-mode': isFocusMode }">
-    <GlobalNavigation />
+  <div class="app-shell" :class="{ 'is-focus-mode': isFocusMode, 'is-navigation-collapsed': isNavigationCollapsed }">
+    <GlobalNavigation :collapsed="isNavigationCollapsed" @toggle="isNavigationCollapsed = !isNavigationCollapsed" />
     <div class="app-shell__workspace">
       <ProductHeader v-if="isProductHeaderVisible" />
       <main class="app-shell__content">

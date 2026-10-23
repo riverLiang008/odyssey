@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted } from 'vue'
-import type { AgentWorkflowEditorDocument, RepositoryError, UUID } from '@odyssey/schemas'
+import { computed, onBeforeUnmount, onMounted, toRaw } from 'vue'
+import type { JourneyEditorDocument, AgentWorkflowEditorDocument, RepositoryError, UUID } from '@odyssey/schemas'
 
 import { createWorkflowPreviewViewModel } from '@/canvas/workflow-preview'
 import WorkflowPreviewCanvas from './WorkflowPreviewCanvas.vue'
 
 const props = defineProps<{
+  journey?: JourneyEditorDocument
   agentId: UUID
   agentName: string
   status: 'loading' | 'ready' | 'error'
@@ -13,7 +14,7 @@ const props = defineProps<{
   error: RepositoryError | null
 }>()
 const emit = defineEmits<{ close: []; open: [agentId: UUID]; retry: [] }>()
-const model = computed(() => props.document ? createWorkflowPreviewViewModel(props.document) : null)
+const model = computed(() => props.document ? createWorkflowPreviewViewModel(toRaw(props.document), props.journey) : null)
 
 function keydown(event: globalThis.KeyboardEvent): void {
   if (event.key === 'Escape') emit('close')
@@ -35,7 +36,7 @@ onBeforeUnmount(() => globalThis.document.removeEventListener('keydown', keydown
       <div v-else-if="status === 'error'" class="workflow-preview__status is-error" role="alert">
         <strong>Workflow unavailable</strong><span>{{ error?.code ?? 'UNKNOWN_ERROR' }}</span><button type="button" @click="emit('retry')">Retry</button>
       </div>
-      <WorkflowPreviewCanvas v-else-if="model" :model="model" />
+      <WorkflowPreviewCanvas v-else-if="model" :key="model.agentId" :model="model" />
       <p v-else class="workflow-preview__status">No Workflow topology available.</p>
     </div>
     <footer v-if="model" class="workflow-preview__footer"><span>{{ model.nodes.length }} nodes · {{ model.edges.length }} edges</span><span v-if="model.diagnostics.length">Some items unavailable</span></footer>

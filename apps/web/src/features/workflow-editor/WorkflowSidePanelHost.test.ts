@@ -35,6 +35,13 @@ const loop: LoopNode = {
 describe('WorkflowSidePanelHost Loop configuration', () => {
   it('submits typed Loop details without including the body', async () => {
     const wrapper = mount(WorkflowSidePanelHost, { props: { node: loop, edge: null, variables: [variable], loopExpanded: true } })
+    expect(wrapper.text()).not.toContain('Node type')
+    expect(wrapper.text()).not.toContain('Identity')
+    expect(wrapper.text()).not.toContain(loop.id)
+    expect(wrapper.find('select').exists()).toBe(false)
+    await wrapper.get('[aria-label^="Exit condition Variable:"]').trigger('click')
+    expect(wrapper.get('[role="listbox"]').attributes('aria-label')).toBe('Exit condition Variable')
+    await wrapper.get('[role="listbox"]').trigger('keydown', { key: 'Escape' })
     const inputs = wrapper.findAll('input')
     await inputs[0]!.setValue('Reviewed evidence')
     await inputs[1]!.setValue('5')
@@ -46,7 +53,8 @@ describe('WorkflowSidePanelHost Loop configuration', () => {
       exitCondition: { kind: 'variable_comparison', variableId: variable.id, operator: 'gte', value: 4 },
     })
     expect(wrapper.text()).toContain('2 nodes · 1 edges')
-    expect(wrapper.text()).toContain('Focus Loop Body')
+    expect(wrapper.text()).toContain('editable directly on the workflow canvas')
+    expect(wrapper.text()).not.toContain('Open Loop Body')
     expect(wrapper.text()).not.toContain('Remove Loop')
     expect(wrapper.text()).not.toContain('Delete node')
   })

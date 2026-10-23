@@ -1,0 +1,53 @@
+{
+  "valid": [
+    {},
+    {
+      "binding": {
+        "sourceSlotId": "10000000-0000-4000-8000-000000000001",
+        "target": {
+          "type": "slot",
+          "slotId": "10000000-0000-4000-8000-000000000002"
+        }
+      }
+    },
+    {
+      "binding": {
+        "sourceSlotId": "10000000-0000-4000-8000-000000000001",
+        "target": {
+          "type": "journey_end"
+        }
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "binding": {
+        "sourceSlotId": "not-a-uuid",
+        "target": {
+          "type": "journey_end"
+        }
+      }
+    },
+    {
+      "binding": {
+        "sourceSlotId": "10000000-0000-4000-8000-000000000001",
+        "target": {
+          "type": "agent",
+          "agentId": "10000000-0000-4000-8000-000000000002"
+        }
+      }
+    },
+    {
+      "binding": {
+        "sourceSlotId": "10000000-0000-4000-8000-000000000001",
+        "target": {
+          "type": "journey_end",
+          "slotId": "10000000-0000-4000-8000-000000000002"
+        }
+      }
+    },
+    {
+      "next_agent": "Research"
+    }
+  ]
+}

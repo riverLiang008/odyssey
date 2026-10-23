@@ -40,7 +40,18 @@ export function moveNodePlacement<T extends CanvasLayoutLike>(layout: T, nodeId:
   const index = layout.nodePlacements.findIndex((placement) => placement.nodeId === nodeId)
   if (index < 0) return { ok: false, error: { code: 'PLACEMENT_NOT_FOUND', nodeId } }
   const value = structuredClone(layout)
-  value.nodePlacements[index] = { nodeId, x: point.x, y: point.y }
+  value.nodePlacements[index] = { ...value.nodePlacements[index], nodeId, x: point.x, y: point.y }
+  return { ok: true, value }
+}
+
+export function resizeNodePlacement<T extends CanvasLayoutLike>(layout: T, nodeId: UUID, size: { width: number; height: number }): WorkflowLayoutResultFor<T> {
+  const index = layout.nodePlacements.findIndex((placement) => placement.nodeId === nodeId)
+  if (index < 0) return { ok: false, error: { code: 'PLACEMENT_NOT_FOUND', nodeId } }
+  if (!Number.isFinite(size.width) || !Number.isFinite(size.height) || size.width < 420 || size.height < 300 || size.width > 1600 || size.height > 1200) {
+    return { ok: false, error: { code: 'INVALID_POSITION', nodeId } }
+  }
+  const value = structuredClone(layout)
+  value.nodePlacements[index] = { ...value.nodePlacements[index], width: size.width, height: size.height }
   return { ok: true, value }
 }
 

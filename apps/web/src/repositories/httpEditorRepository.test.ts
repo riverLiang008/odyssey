@@ -58,7 +58,7 @@ describe('HttpEditorRepository', () => {
     expect(await repository.listJourneys()).toEqual({ ok: true, value: [summary] })
     expect(await repository.saveJourney({ journeyId: journey.journey.id, expectedRevision: journey.journey.revision, pattern: journey.pattern })).toEqual({
       ok: true,
-      value: { journeyId: journey.journey.id, revision: saved.journey.revision, updatedAt: saved.journey.updatedAt },
+      value: { document: saved, journeyId: journey.journey.id, revision: saved.journey.revision, updatedAt: saved.journey.updatedAt },
     })
     expect(await repository.deleteJourney({ journeyId: journey.journey.id, expectedRevision: saved.journey.revision })).toEqual({ ok: true, value: { journeyId: journey.journey.id } })
 

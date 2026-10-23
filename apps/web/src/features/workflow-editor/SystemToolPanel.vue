@@ -44,6 +44,16 @@ const form = shallowReactive({
 const validationError = ref('')
 const variables = computed(() => toolVariables(props.task, props.variables))
 const writable = computed(() => variables.value.filter((v) => v.writable))
+const targetOptions = computed(() => [
+  { value: '', label: 'Choose a writable variable', disabled: true },
+  ...writable.value.map((variable) => ({ value: variable.id, label: variable.name })),
+])
+const operationOptions = [
+  { value: 'assign', label: 'Assign' },
+  { value: 'append', label: 'Append' },
+  { value: 'increment', label: 'Increment' },
+  { value: 'toggle', label: 'Toggle' },
+]
 const outputOptions = computed(() => [
   { value: '', label: 'No output binding' },
   ...writable.value.map((variable) => ({ value: variable.id, label: variable.name })),
@@ -109,8 +119,8 @@ function submit() {
         <template v-if="form.body.kind === 'form_data'"><div v-for="(entry, index) in form.body.entries" :key="entry.id"><input v-model="entry.name" aria-label="Form field name" required /><ToolValueInput v-model="entry.value" label="Form field value" :variables="variables" /><button type="button" @click="form.body = { kind: 'form_data', entries: form.body.entries.filter((_, i) => i !== index) }">Remove field</button></div><button type="button" @click="form.body = { kind: 'form_data', entries: [...form.body.entries, { id: newId(), name: '', value: literal() }] }">+ Add field</button></template>
       </template>
       <template v-else-if="kind === 'set_variable'">
-        <label>Target Variable *<select v-model="form.target" required><option disabled value="">Choose a writable variable</option><option v-for="variable in writable" :key="variable.id" :value="variable.id">{{ variable.name }}</option></select></label>
-        <label>Operation *<select v-model="form.operation"><option value="assign">Assign</option><option value="append">Append</option><option value="increment">Increment</option><option value="toggle">Toggle</option></select></label>
+        <label>Target Variable *<ToolSelect v-model="form.target" :options="targetOptions" control-label="Target Variable" /></label>
+        <label>Operation *<ToolSelect v-model="form.operation" :options="operationOptions" control-label="Operation" /></label>
         <ToolValueInput v-if="form.operation !== 'toggle'" v-model="form.value" label="Value" :variables="variables" />
       </template>
       <template v-else>
@@ -139,7 +149,7 @@ function submit() {
 </template>
 
 <style>
-.system-tool-panel { gap: 0; overflow-y: auto; padding: 16px; color: var(--tool-ink); background: var(--tool-surface); border-color: var(--tool-border); font-family: Manrope, Inter, sans-serif; }
+.system-tool-panel { gap: 0; overflow-y: auto; padding: 16px; color: var(--tool-ink); background: var(--tool-surface); border-color: var(--tool-border); font-family: var(--odyssey-font-sans); }
 .system-tool-panel > header { align-items: center; min-height: 24px; flex-shrink: 0; gap: 8px; }
 .system-tool-panel > header h2 { flex: 1; margin: 0; font-size: 15px; line-height: 21px; font-weight: 500; }
 .system-tool-panel > header button { display: grid; width: 20px; height: 24px; padding: 0; place-items: center; border: 0; border-radius: 5px; background: transparent; color: var(--tool-muted); font-size: 18px; }

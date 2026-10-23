@@ -131,7 +131,7 @@ function normalizeApiError(status: number, candidate: unknown): RepositoryError 
   }
   if (code === 'STATE_CONFLICT' && status === 409) {
     const value = stateConflictDetailsSchema.safeParse(details)
-    return value.success ? { code, reason: value.data.reason } : { code: 'RESPONSE_INVALID' }
+    return value.success ? { code, reason: value.data.reason, ...(value.data.routingImpact ? { routingImpact: value.data.routingImpact } : {}) } : { code: 'RESPONSE_INVALID' }
   }
   if (code === 'VALIDATION_FAILED' && status === 422) {
     const value = validationErrorDetailsSchema.safeParse(details)
@@ -434,11 +434,11 @@ export class HttpEditorRepository implements OdysseyEditorRepository {
     const request = saveJourneyInputSchema.safeParse(input)
     if (!request.success) return failure({ code: 'REQUEST_INVALID' })
     if (consumeDevelopmentSaveFailure()) return failure({ code: 'NETWORK_FAILED' })
-    const result = await this.#request(`/journeys/${encodeURIComponent(request.data.journeyId)}`, this.#json('PUT', { expectedRevision: request.data.expectedRevision, pattern: request.data.pattern }), options)
+    const result = await this.#request(`/journeys/${encodeURIComponent(request.data.journeyId)}`, this.#json('PUT', { expectedRevision: request.data.expectedRevision, pattern: request.data.pattern, ...(request.data.routingConfirmation ? { routingConfirmation: request.data.routingConfirmation } : {}) }), options)
     if (!result.ok) return result
     const document = journeyEditorDocumentSchema.safeParse(result.value)
     if (!document.success || document.data.journey.id !== request.data.journeyId) return failure({ code: 'RESPONSE_INVALID' })
-    const parsed = saveJourneySuccessSchema.safeParse({ journeyId: document.data.journey.id, revision: document.data.journey.revision, updatedAt: document.data.journey.updatedAt })
+    const parsed = saveJourneySuccessSchema.safeParse({ document: document.data, journeyId: document.data.journey.id, revision: document.data.journey.revision, updatedAt: document.data.journey.updatedAt })
     return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })
   }
 
@@ -507,7 +507,7 @@ export class HttpEditorRepository implements OdysseyEditorRepository {
   async instantiateAgentTemplate(input: InstantiateAgentTemplateInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<CreateOrInstantiateAgentSuccess>> {
     const request = instantiateAgentTemplateInputSchema.safeParse(input)
     if (!request.success) return failure({ code: 'REQUEST_INVALID' })
-    const result = await this.#request(`/journeys/${encodeURIComponent(request.data.journeyId)}/slots/${encodeURIComponent(request.data.slotId)}/agent-template/${encodeURIComponent(request.data.templateId)}`, this.#json('POST', { expectedRevision: request.data.expectedRevision }), options)
+    const result = await this.#request(`/journeys/${encodeURIComponent(request.data.journeyId)}/slots/${encodeURIComponent(request.data.slotId)}/agent-template/${encodeURIComponent(request.data.templateId)}`, this.#json('POST', { expectedRevision: request.data.expectedRevision, ...(request.data.endAssignments ? { endAssignments: request.data.endAssignments } : {}) }), options)
     if (!result.ok) return result
     const parsed = this.#agentSchemas.createOrInstantiate.safeParse(result.value)
     return parsed.success ? { ok: true, value: parsed.data } : failure({ code: 'RESPONSE_INVALID' })

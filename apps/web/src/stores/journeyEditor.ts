@@ -1,6 +1,11 @@
 import { computed, reactive, ref, shallowRef, toRaw } from 'vue'
 import { defineStore } from 'pinia'
 import type {
+  TemplateEndAssignment,
+  EndBinding,
+  HubSpokeDirection,
+  RoutingConfirmation,
+  RoutingImpact,
   AgentTemplate,
   AgentWorkflowEditorDocument,
   GuardrailSide,
@@ -10,9 +15,11 @@ import type {
   UUID,
 } from '@odyssey/schemas'
 
+import { deriveEndBindings } from '@odyssey/schemas'
 import type { AgentLifecycleRepository, JourneyEditorRepository, GuardrailLifecycleRepository } from '@/repositories'
 import type { JourneyTab } from '@/router/routeContracts'
 import {
+  setHubSpokeDirection as setPatternDirection,
   addSlot as addPatternSlot,
   assignAgent as assignPatternAgent,
   exchangeAgents as exchangePatternAgents,
@@ -69,6 +76,9 @@ export type WorkflowPreviewState =
 
 export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   const document = ref<JourneyEditorDocument | null>(null)
+  const routingImpact = shallowRef<RoutingImpact[]>([])
+  const templateExitMapping = shallowRef<{ templateId: UUID; slotId: UUID; sources: { id: UUID; name: string }[]; bindings: EndBinding[] } | null>(null)
+  let templateMappingRepository: AgentLifecycleRepository | null = null
   const session = reactive({
     activeTab: 'execution' as JourneyTab,
     selectedSlotId: null as UUID | null,
@@ -119,6 +129,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   let guardrailController: AbortController | null = null
   let previewRequest = 0
   let previewController: AbortController | null = null
+  let pendingRoutingRemoval: ((confirmation: RoutingConfirmation) => Promise<boolean>) | null = null
   let activeRepository: JourneyEditorRepository | null = null
   let saveController: AbortController | null = null
   let saveRequestSeq = 0
@@ -145,6 +156,8 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   }
 
   function acceptServerAggregate(next: JourneyEditorDocument, recordMutation = true) {
+    const preview = previewDocument.value
+    if (preview && next.agents.find((agent) => agent.id === preview.agent.id)?.revision !== preview.agent.revision) closeWorkflowPreview()
     document.value = structuredClone(next)
     const mutationSeq = recordMutation ? (persistenceState.value?.mutationSeq ?? 0) + 1 : 0
     persistenceState.value = {
@@ -156,6 +169,10 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   }
 
   function resetSession(tab: JourneyTab = 'execution') {
+    routingImpact.value = []
+    pendingRoutingRemoval = null
+    templateExitMapping.value = null
+    templateMappingRepository = null
     session.activeTab = tab
     session.selectedSlotId = null
     session.previewAgentId = null
@@ -453,7 +470,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
 
   function applyPatternCommand(command: (pattern: JourneyEditorDocument['pattern']) => PatternCommandResult): PatternCommandResult | null {
     const current = document.value
-    if (!current || lifecycle.operationStatus === 'loading' || guardrailOperation.value.type === 'adding' || guardrailOperation.value.type === 'removing') return null
+    if (!current || templateExitMapping.value || routingImpact.value.length || lifecycle.operationStatus === 'loading' || guardrailOperation.value.type === 'adding' || guardrailOperation.value.type === 'removing') return null
     const result = command(structuredClone(toRaw(current.pattern)))
     if (!result.ok) {
       session.lastPatternError = result.error
@@ -465,6 +482,9 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     reconcileSession()
     return result
   }
+
+  const setHubSpokeDirection = (slotId: UUID, direction: HubSpokeDirection, ids: Pick<PatternIdFactory, 'routeId'>) =>
+    applyPatternCommand((pattern) => setPatternDirection(pattern, slotId, direction, ids))
 
   const assignAgent = (slotId: UUID, agentId: UUID) =>
     applyPatternCommand((pattern) => assignPatternAgent(pattern, slotId, agentId))
@@ -559,10 +579,19 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     return result.value.agent.agent.id
   }
 
-  async function instantiateTemplate(templateId: UUID, slotId: UUID, repository: AgentLifecycleRepository) {
+  async function instantiateTemplate(templateId: UUID, slotId: UUID, repository: AgentLifecycleRepository, endAssignments?: TemplateEndAssignment[]) {
     if (!(await flushLocalChanges())) return false
     const current = document.value
     if (!current || lifecycle.operationStatus === 'loading') return false
+    const bindings = deriveEndBindings(toRaw(current.pattern), slotId)
+    if (!endAssignments && bindings.length > 1) {
+      const template = agentTemplates.value.find((item) => item.id === templateId)
+      if (!template) return false
+      templateExitMapping.value = { templateId, slotId, bindings, sources: template.snapshot.workflow.nodes
+        .filter((node) => node.type === 'end').map((node) => ({ id: node.id, name: `${node.name} · ${node.id.slice(-6)}` })) }
+      templateMappingRepository = repository
+      return false
+    }
     const controller = new AbortController()
     lifecycleController = controller
     const request = ++lifecycleRequest
@@ -571,7 +600,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     lifecycle.error = null
     cancelInteraction()
     const result = await repository.instantiateAgentTemplate({
-      journeyId, slotId, templateId, expectedRevision: current.journey.revision,
+      journeyId, slotId, templateId, ...(endAssignments ? { endAssignments } : {}), expectedRevision: current.journey.revision,
     }, { signal: controller.signal })
     if (request !== lifecycleRequest || controller.signal.aborted || document.value?.journey.id !== journeyId) return false
     if (!result.ok) {
@@ -614,6 +643,23 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     return true
   }
 
+  function cancelTemplateExitMapping() { templateExitMapping.value = null; templateMappingRepository = null }
+
+  async function confirmTemplateExitMapping(mapping: { sourceEndId: UUID; targetEndId: UUID }[]) {
+    const pending = templateExitMapping.value
+    const repository = templateMappingRepository
+    if (!pending || !repository) return false
+    const assignments: TemplateEndAssignment[] = []
+    for (const entry of mapping) {
+      const binding = pending.bindings.find((item) => (item.target.type === 'slot' ? item.target.slotId : item.sourceSlotId) === entry.targetEndId)
+      if (!binding) return false
+      assignments.push({ endNodeId: entry.sourceEndId, target: binding.target })
+    }
+    const ok = await instantiateTemplate(pending.templateId, pending.slotId, repository, assignments)
+    if (ok) cancelTemplateExitMapping()
+    return ok
+  }
+
   async function saveAsTemplate(agentId: UUID, name: string, description: string | null, repository: AgentLifecycleRepository) {
     const current = document.value
     if (!current || lifecycle.operationStatus === 'loading') return false
@@ -648,6 +694,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     expectedAgentId: UUID,
     agentAction: { type: 'discard' } | { type: 'save_as_template_and_discard'; template: { name: string; description: string | null } },
     repository: AgentLifecycleRepository,
+    confirmation?: RoutingConfirmation,
   ) {
     if (!(await flushLocalChanges())) return false
     const current = document.value
@@ -664,13 +711,20 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
       expectedRevision: current.journey.revision,
       expectedAgentId,
       agentAction,
+      ...(confirmation ? { routingConfirmation: confirmation } : {}),
     }, { signal: controller.signal })
     if (request !== lifecycleRequest || controller.signal.aborted || document.value?.journey.id !== journeyId) return false
     if (!result.ok) {
+      if (result.error.code === 'STATE_CONFLICT' && result.error.reason === 'END_ROUTING_CONFIRMATION_REQUIRED') {
+        routingImpact.value = result.error.routingImpact ?? []
+        pendingRoutingRemoval = (confirmed) => removeOccupiedSlot(slotId, expectedAgentId, agentAction, repository, confirmed)
+      }
       lifecycle.operationStatus = 'error'
       lifecycle.error = result.error
       return false
     }
+    routingImpact.value = []
+    pendingRoutingRemoval = null
     acceptServerAggregate(result.value.journey)
     if (result.value.template) {
       agentTemplates.value = [
@@ -720,7 +774,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     } : null
   }
 
-  async function save(repository?: JourneyEditorRepository): Promise<boolean> {
+  async function save(repository?: JourneyEditorRepository, confirmation?: RoutingConfirmation): Promise<boolean> {
     if (repository) activeRepository = repository
     return autosaveCoordinator.run(async () => {
       const current = document.value
@@ -734,6 +788,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
         journeyId: current.journey.id,
         expectedRevision: state.serverRevision,
         pattern: structuredClone(toRaw(current.pattern)),
+        ...(confirmation ? { routingConfirmation: confirmation } : {}),
       }
       const controller = new AbortController()
       saveController = controller
@@ -742,8 +797,16 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
       const latestState = persistenceState.value
       if (controller.signal.aborted || !latestState || !document.value) return false
       if (!result.ok) {
+        if (result.error.code === 'STATE_CONFLICT' && result.error.reason === 'END_ROUTING_CONFIRMATION_REQUIRED') {
+          routingImpact.value = result.error.routingImpact ?? []
+        }
         persistenceState.value = applyPersistenceFailure(latestState, request, result.error)
         return false
+      }
+      routingImpact.value = []
+      if (result.value.document) {
+        document.value.agents = structuredClone(result.value.document.agents)
+        closeWorkflowPreview()
       }
       document.value.journey.revision = result.value.revision
       document.value.journey.updatedAt = result.value.updatedAt
@@ -760,6 +823,18 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     if (state.type === 'conflict') return false
     if (state.type === 'saving') return autosaveCoordinator.inFlight ?? false
     return save()
+  }
+
+  async function confirmRoutingChanges(): Promise<boolean> {
+    if (!routingImpact.value.length) return false
+    const confirmation = routingImpact.value.map(({ agentId, revision, removedEndIds, removedEdgeIds }) => ({ agentId, revision, removedEndIds, removedEdgeIds }))
+    return pendingRoutingRemoval ? pendingRoutingRemoval(confirmation) : save(undefined, confirmation)
+  }
+
+  async function cancelRoutingChanges(): Promise<void> {
+    const current = document.value
+    if (!current || !activeRepository) return
+    await load(current.journey.id, session.activeTab, activeRepository)
   }
 
   async function retrySave(): Promise<boolean> { return save() }
@@ -814,6 +889,8 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     session,
     persistence,
     persistenceState,
+    templateExitMapping, confirmTemplateExitMapping, cancelTemplateExitMapping,
+    routingImpact, confirmRoutingChanges, cancelRoutingChanges, setHubSpokeDirection,
     lifecycle,
     guardrailOperation,
     isReady,

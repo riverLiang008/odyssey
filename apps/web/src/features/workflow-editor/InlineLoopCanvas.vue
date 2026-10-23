@@ -118,16 +118,16 @@ defineExpose({ createFromClientPoint })
         @change-tool="(nodeId, stepId, operation) => $emit('changeTool', nodeId, stepId, operation)"
         @reorder-tool="(nodeId, stepId, targetIndex) => $emit('reorderTool', nodeId, stepId, targetIndex)"
         @tool-step-context-menu="(nodeId, stepId, point) => $emit('toolStepContextMenu', nodeId, stepId, { kind: 'loop-body', loopNodeId: loop.id }, point)"
-        @intent="$emit('intent', $event)"
-        @connect="$emit('connect', $event)"
-        @create="(nodeType, point) => $emit('create', nodeType, point)"
+        @intent="(_context, intent) => $emit('intent', intent)"
+        @connect="(_context, connection) => $emit('connect', connection)"
+        @create="(_context, nodeType, point) => $emit('create', nodeType, point)"
         @clear-error="$emit('clearError')"
         @reject="$emit('reject', $event)"
         @resource-drop="$emit('resourceDrop', $event)"
         @update-agent-action="(nodeId, details) => $emit('updateAgentAction', nodeId, details)"
         @update-node-name="(nodeId, name) => $emit('updateNodeName', nodeId, name)"
-        @node-context-menu="(nodeId, point) => $emit('nodeContextMenu', nodeId, { kind: 'loop-body', loopNodeId: loop.id }, point)"
-        @edge-context-menu="(edgeId, point) => $emit('edgeContextMenu', edgeId, { kind: 'loop-body', loopNodeId: loop.id }, point)"
+        @node-context-menu="(_context, nodeId, point) => $emit('nodeContextMenu', nodeId, { kind: 'loop-body', loopNodeId: loop.id }, point)"
+        @edge-context-menu="(_context, edgeId, point) => $emit('edgeContextMenu', edgeId, { kind: 'loop-body', loopNodeId: loop.id }, point)"
       />
     </section>
 

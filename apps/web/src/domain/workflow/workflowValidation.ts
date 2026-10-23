@@ -32,7 +32,7 @@ function cardinalityIssues(graph: WorkflowGraphLike, context: WorkflowGraphConte
   const count = (type: string): number => graph.nodes.filter((node) => node.type === type).length
   if (context.kind === 'agent-workflow') {
     if (count('start') !== 1) issues.push({ code: 'START_CARDINALITY' })
-    if (count('end') !== 1) issues.push({ code: 'END_CARDINALITY' })
+    if (count('end') < 1) issues.push({ code: 'END_CARDINALITY' })
     graph.nodes.forEach((node) => {
       if (node.type === 'loop_start' || node.type === 'loop_end') issues.push({ code: 'INVALID_NODE_KIND', nodeId: node.id })
     })
@@ -116,7 +116,9 @@ function readinessIssues(graph: WorkflowGraphLike, context: WorkflowGraphContext
   const end = graph.nodes.find((node) => node.type === (context.kind === 'agent-workflow' ? 'end' : 'loop_end'))
   if (!start || !end) return issues
   const reachable = reachableFrom(start.id, index.outgoingByNodeId)
-  const coReachable = canReachEnd(end.id, index.incomingByNodeId)
+  const coReachable = new Set(graph.nodes
+    .filter((node) => node.type === (context.kind === 'agent-workflow' ? 'end' : 'loop_end'))
+    .flatMap((node) => [...canReachEnd(node.id, index.incomingByNodeId)]))
   for (const node of graph.nodes) {
     if (!reachable.has(node.id)) issues.push({ code: 'UNREACHABLE_FROM_START', nodeId: node.id })
     if (!coReachable.has(node.id)) issues.push({ code: 'CANNOT_REACH_END', nodeId: node.id })

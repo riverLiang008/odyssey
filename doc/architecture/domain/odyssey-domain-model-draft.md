@@ -275,20 +275,11 @@ type PatternType =
 
 ### 6.2 Relationship to Agent End nodes
 
-Each Agent workflow contains a default `End` boundary node.
+The accepted [Pattern → Agent Workflow End decision](../execution/pattern-agent-end-routing-decision.md) supersedes the former single-End and Agent-ID-target examples here.
 
-Its route is derived from the Pattern and is read-only inside the Agent Canvas.
+Synchronization is only Pattern → Workflow. Each outgoing route generates an End bound to the target Slot (or Journey completion); no outgoing route generates one completion End. Root workflows may have multiple Ends. Users only connect internal paths to these boundaries and cannot add/delete Ends, edit targets, or reverse-modify Pattern. Empty target Slots retain named boundaries. Route deletion removes the corresponding End with explicit handling of affected incoming edges.
 
-```ts
-interface AgentEndRoute {
-  sourceAgentId: AgentWorkflowId
-  target:
-    | { type: 'agent'; agentId: AgentWorkflowId }
-    | { type: 'journey_end' }
-  source: 'pattern'
-  editable: false
-}
-```
+The exact serialized boundary identity/reference contract is pending coordinated review; this section does not introduce a replacement frozen JSON shape.
 
 ---
 
@@ -301,7 +292,7 @@ An `AgentWorkflow` is a specialized Workflow whose purpose is to perform goal-di
 An Agent workflow contains:
 
 - one default Start boundary node;
-- one default End boundary node;
+- Pattern-derived End boundary nodes (one or more; see section 6.2);
 - zero or more workflow nodes;
 - Agent-level definition and resources;
 - variables;
@@ -348,9 +339,11 @@ Start:
 End:
 
 - indicates completion of the Agent workflow;
-- cannot be deleted;
-- its outgoing Agent route is derived from the OdyJourney Pattern;
-- the Pattern-controlled route is visible but read-only inside the Agent Canvas.
+- cannot be manually added or deleted, and its target cannot be edited in Workflow;
+- its lifecycle and target are synchronized only from Pattern;
+- internal paths select the generated End explicitly;
+- its target Slot or Journey completion is visible on Canvas;
+- Pattern may remove it, with explicit handling of affected incoming edges.
 
 ---
 

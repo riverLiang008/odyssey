@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { revisionSchema, utcTimestampSchema, uuidSchema, type Revision, type UUID } from '../common'
 import { agentTemplateSchema, agentWorkflowEditorDocumentSchema, createAgentTemplateSchema, createAgentWorkflowEditorDocumentSchema, guardrailSideSchema, journeyEditorDocumentSchema, journeyStatusSchema, type AgentTemplate, type AgentWorkflowEditorDocument, type JourneyEditorDocument } from '../editor'
-import { patternConfigSchema, patternTemplateKeySchema } from '../pattern'
+import { patternConfigSchema, patternTemplateKeySchema, patternRouteTargetSchema } from '../pattern'
 import {
   agentReusableToolSchema,
   agentVariableSchema,
@@ -40,14 +40,29 @@ export const saveAgentAsTemplateInputSchema = z.strictObject({
   description: z.string().nullable(),
 })
 
+export const templateEndAssignmentSchema = z.strictObject({ endNodeId: uuidSchema, target: patternRouteTargetSchema })
+export type TemplateEndAssignment = z.infer<typeof templateEndAssignmentSchema>
 export const instantiateAgentTemplateInputSchema = z.strictObject({
+  endAssignments: z.array(templateEndAssignmentSchema).optional(),
   journeyId: uuidSchema,
   slotId: uuidSchema,
   templateId: uuidSchema,
   expectedRevision: revisionSchema,
 })
 
+export const routingImpactSchema = z.strictObject({
+  agentId: uuidSchema,
+  revision: revisionSchema,
+  removedEndIds: z.array(uuidSchema),
+  removedEdgeIds: z.array(uuidSchema),
+  legacy: z.boolean(),
+})
+export const routingConfirmationSchema = z.array(z.strictObject({ agentId: uuidSchema, revision: revisionSchema, removedEndIds: z.array(uuidSchema), removedEdgeIds: z.array(uuidSchema) }))
+export type RoutingImpact = z.infer<typeof routingImpactSchema>
+export type RoutingConfirmation = z.infer<typeof routingConfirmationSchema>
+
 export const removeOccupiedSlotInputSchema = z.strictObject({
+  routingConfirmation: routingConfirmationSchema.optional(),
   journeyId: uuidSchema,
   slotId: uuidSchema,
   expectedRevision: revisionSchema,
@@ -136,6 +151,7 @@ export const saveJourneyInputSchema = z.strictObject({
   journeyId: uuidSchema,
   expectedRevision: revisionSchema,
   pattern: patternConfigSchema,
+  routingConfirmation: routingConfirmationSchema.optional(),
 })
 
 export const journeySummarySchema = z.strictObject({
@@ -175,6 +191,7 @@ const saveSuccessFields = {
 
 export const saveJourneySuccessSchema = z.strictObject({
   journeyId: uuidSchema,
+  document: journeyEditorDocumentSchema.optional(),
   ...saveSuccessFields,
 })
 export const saveAgentWorkflowSuccessSchema = z.strictObject({
@@ -206,6 +223,9 @@ export const validationErrorDetailsSchema = z.strictObject({
 })
 export const revisionConflictDetailsSchema = z.strictObject({ expectedRevision: revisionSchema, currentRevision: revisionSchema })
 export const stateConflictReasonSchema = z.enum([
+  'END_ROUTING_CONFIRMATION_REQUIRED',
+  'END_BOUNDARY_IMMUTABLE',
+  'TEMPLATE_END_MAPPING_REQUIRED',
   'PATTERN_IMMUTABLE',
   'OCCUPIED_SLOT_REMOVAL_REQUIRES_COMMAND',
   'SLOT_OCCUPIED',
@@ -223,7 +243,7 @@ export const stateConflictReasonSchema = z.enum([
   'KNOWLEDGE_RESOURCE_ALREADY_IN_FOLDER',
   'KNOWLEDGE_RESOURCE_NOT_EDITABLE_MARKDOWN',
 ])
-export const stateConflictDetailsSchema = z.object({ reason: stateConflictReasonSchema }).passthrough()
+export const stateConflictDetailsSchema = z.object({ reason: stateConflictReasonSchema, routingImpact: z.array(routingImpactSchema).optional() }).passthrough()
 
 const simpleRepositoryErrorSchema = z.discriminatedUnion('code', [
   z.strictObject({ code: z.literal('NOT_FOUND') }),
@@ -249,6 +269,7 @@ export const repositoryErrorSchema = z.union([
   z.strictObject({
     code: z.literal('STATE_CONFLICT'),
     reason: stateConflictReasonSchema,
+    routingImpact: z.array(routingImpactSchema).optional(),
   }),
 ])
 

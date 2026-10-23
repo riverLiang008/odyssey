@@ -1,52 +1,50 @@
 import { describe, expect, it } from 'vitest'
-
 import { createAgentWorkflowEditorDocumentFixture } from '@/fixtures'
+import { projectWorkflowCanvas } from '@/canvas/workflow/workflowCanvasAdapter'
 import { createWorkflowPreviewViewModel } from './workflowPreviewAdapter'
 
 describe('workflowPreviewAdapter', () => {
-  it('fits a minimum Workflow into bounds and anchors its edge to node borders', () => {
-    const document = createAgentWorkflowEditorDocumentFixture('minimal')
+  it.each(['minimal', 'research', 'loop'] as const)('reuses Configure geometry and routing for %s without changing input', (kind) => {
+    const document = createAgentWorkflowEditorDocumentFixture(kind)
     const before = structuredClone(document)
-    const model = createWorkflowPreviewViewModel(document, { width: 320, height: 160, padding: 20 })
-
-    expect(model.nodes).toHaveLength(2)
-    expect(model.edges).toHaveLength(1)
-    expect(model.nodes.every((node) => node.position.x >= 20 && node.position.x <= 300)).toBe(true)
-    expect(model.edges[0]?.source.x).toBeGreaterThan(model.nodes[0]!.position.x)
-    expect(model.edges[0]?.target.x).toBeLessThan(model.nodes[1]!.position.x)
+    const canvas = projectWorkflowCanvas(document.workflow, document.layout, 'configure')
+    const preview = createWorkflowPreviewViewModel(document)
+    expect(preview.nodes.map(({ id, position, parentNode, style, data }) => ({ id, position, parentNode, style, data })))
+      .toEqual(canvas.nodes.map(({ id, position, parentNode, style, data }) => ({ id, position, parentNode, style, data })))
+    expect(preview.edges.map(({ id, source, target, sourceHandle, type }) => ({ id, source, target, sourceHandle, type })))
+      .toEqual(canvas.edges.map(({ id, source, target, sourceHandle, type }) => ({ id, source, target, sourceHandle, type })))
     expect(document).toEqual(before)
   })
 
-  it('preserves topology identity while scaling uniformly for another bounds', () => {
-    const document = createAgentWorkflowEditorDocumentFixture('research')
-    const small = createWorkflowPreviewViewModel(document, { width: 300, height: 150, padding: 20 })
-    const wide = createWorkflowPreviewViewModel(document, { width: 600, height: 300, padding: 20 })
-
-    expect(wide.nodes.map((node) => node.id)).toEqual(small.nodes.map((node) => node.id))
-    expect(wide.edges.map((edge) => [edge.sourceNodeId, edge.targetNodeId]))
-      .toEqual(small.edges.map((edge) => [edge.sourceNodeId, edge.targetNodeId]))
-    expect(wide.nodes.at(-1)!.position.x - wide.nodes[0]!.position.x)
-      .toBeGreaterThan(small.nodes.at(-1)!.position.x - small.nodes[0]!.position.x)
+  it('disables every node and edge mutation capability', () => {
+    const model = createWorkflowPreviewViewModel(createAgentWorkflowEditorDocumentFixture('research'))
+    expect(model.nodes.length).toBeGreaterThan(0)
+    expect(model.edges.length).toBeGreaterThan(0)
+    for (const node of model.nodes) {
+      expect([node.draggable, node.selectable, node.connectable, node.deletable, node.focusable]).toEqual([false, false, false, false, false])
+    }
+    for (const edge of model.edges) {
+      expect([edge.selectable, edge.deletable, edge.updatable, edge.focusable]).toEqual([false, false, false, false])
+    }
   })
 
-  it('centers zero-extent layouts without division by zero', () => {
+  it('uses Canvas fallback placement and reports it instead of dropping a node', () => {
     const document = createAgentWorkflowEditorDocumentFixture('minimal')
-    document.layout.nodePlacements = document.layout.nodePlacements.map((placement) => ({ ...placement, x: 0, y: 0 }))
+    document.layout.nodePlacements = []
     const model = createWorkflowPreviewViewModel(document)
-
-    expect(model.nodes.every((node) => Number.isFinite(node.position.x) && Number.isFinite(node.position.y))).toBe(true)
+    expect(model.nodes).toHaveLength(2)
+    expect(model.edges).toHaveLength(1)
+    expect(model.diagnostics).toHaveLength(2)
+    expect(model.nodes.every(({ position }) => Number.isFinite(position.x) && Number.isFinite(position.y))).toBe(true)
   })
 
-  it('reports missing placements and skips edges whose visible endpoint is absent', () => {
+  it('preserves negative coordinates and safely projects an empty workflow', () => {
     const document = createAgentWorkflowEditorDocumentFixture('minimal')
-    const missingNodeId = document.workflow.nodes[1]!.id
-    document.layout.nodePlacements = document.layout.nodePlacements.filter((placement) => placement.nodeId !== missingNodeId)
-    const model = createWorkflowPreviewViewModel(document)
-
-    expect(model.nodes).toHaveLength(1)
-    expect(model.edges).toHaveLength(0)
-    expect(model.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      'NODE_PLACEMENT_MISSING', 'EDGE_ENDPOINT_MISSING',
-    ])
+    document.layout.nodePlacements = document.layout.nodePlacements.map((p) => ({ ...p, x: p.x - 1000, y: p.y - 1000 }))
+    expect(createWorkflowPreviewViewModel(document).nodes[0]?.position.x).toBeLessThan(0)
+    document.workflow.nodes = []
+    document.workflow.edges = []
+    document.layout.nodePlacements = []
+    expect(createWorkflowPreviewViewModel(document).nodes).toEqual([])
   })
 })

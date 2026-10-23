@@ -58,6 +58,7 @@ async function mountEditor() {
 describe('JourneyEditorView integration', () => {
   it('selects an empty Slot without creating an Agent or navigating', async () => {
     const { pinia, repository, router, wrapper } = await mountEditor()
+    expect(wrapper.text()).not.toContain('Synchronize Workflow exits')
     const createJourneyAgent = vi.spyOn(repository, 'createJourneyAgent')
     const emptySlot = wrapper.get('.agent-slot.is-empty .agent-slot__select')
     await emptySlot.trigger('click')

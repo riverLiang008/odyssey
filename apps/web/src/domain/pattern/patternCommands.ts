@@ -1,4 +1,4 @@
-import type { PatternConfig, PatternSlot, UUID } from '@odyssey/schemas'
+import type { HubSpokeDirection, PatternConfig, PatternSlot, UUID } from '@odyssey/schemas'
 
 import { PATTERN_DEFINITIONS, type PatternOperation } from './patternDefinitions'
 import type { PatternCommandResult, PatternDomainError } from './patternErrors'
@@ -177,4 +177,27 @@ export function reorderSlot(
   ordered.splice(targetOrder, 0, moved)
   ordered.forEach((slot, order) => { slot.order = order })
   return reconcileCandidate(candidate, idFactory)
+}
+
+export function setHubSpokeDirection(
+  pattern: PatternConfig, spokeSlotId: UUID, direction: HubSpokeDirection,
+  ids: Pick<PatternIdFactory, 'routeId'>,
+): PatternCommandResult {
+  const invalid = validated(pattern) ?? unsupported(pattern, 'set_direction')
+  if (invalid) return invalid
+  const spoke = pattern.slots.find((slot) => slot.id === spokeSlotId)
+  if (!spoke) return failure({ code: 'SLOT_NOT_FOUND', slotId: spokeSlotId })
+  if (spoke.topologyRole !== 'spoke') return failure({ code: 'IMMUTABLE_TOPOLOGY_ROLE', slotId: spokeSlotId })
+  const candidate = structuredClone(pattern)
+  candidate.schemaVersion = '1.1.0'
+  candidate.slots = candidate.slots.map((slot) => slot.id === spokeSlotId
+    ? { ...slot, configuration: { ...slot.configuration, direction } } : slot)
+  return reconcileCandidate(candidate, ids)
+}
+
+export function nextDefaultSlotLabel(slots: readonly Pick<PatternSlot, 'label'>[]): string {
+  const labels = new Set(slots.map((slot) => slot.label))
+  let sequence = 1
+  while (labels.has(`Agent-${sequence}`)) sequence += 1
+  return `Agent-${sequence}`
 }

@@ -47,6 +47,72 @@ from odyssey_api.journeys.workflow_domain import WorkflowKnowledgeReference
 AGENT_REUSABLE_TOOL_ADAPTER = TypeAdapter(AgentReusableToolDto)
 
 
+@dataclass(frozen=True)
+class RoutingWorkflowRecord:
+    agent_id: UUID
+    revision: int
+    workflow: WorkflowGraph
+    layout: CanvasLayout
+
+
+async def list_routing_workflows(
+    session: AsyncSession,
+    journey_id: UUID,
+    workspace_id: UUID,
+) -> list[RoutingWorkflowRecord]:
+    rows = (
+        (
+            await session.execute(
+                select(AgentWorkflow)
+                .join(OdyJourney, OdyJourney.id == AgentWorkflow.ody_journey_id)
+                .where(OdyJourney.id == journey_id, OdyJourney.workspace_id == workspace_id)
+                .order_by(AgentWorkflow.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        RoutingWorkflowRecord(
+            row.id,
+            row.revision,
+            WorkflowGraph.model_validate(row.workflow_graph),
+            CanvasLayout.model_validate(row.canvas_layout),
+        )
+        for row in rows
+    ]
+
+
+async def cas_update_routing_workflow(
+    session: AsyncSession,
+    *,
+    journey_id: UUID,
+    workspace_id: UUID,
+    record: RoutingWorkflowRecord,
+    workflow: WorkflowGraph,
+    layout: CanvasLayout,
+) -> bool:
+    result = await session.execute(
+        update(AgentWorkflow)
+        .where(
+            AgentWorkflow.id == record.agent_id,
+            AgentWorkflow.ody_journey_id == journey_id,
+            AgentWorkflow.revision == record.revision,
+            select(OdyJourney.id)
+            .where(OdyJourney.id == journey_id, OdyJourney.workspace_id == workspace_id)
+            .exists(),
+        )
+        .values(
+            workflow_graph=workflow.model_dump(mode="json", by_alias=True),
+            canvas_layout=layout.model_dump(mode="json", by_alias=True),
+            revision=AgentWorkflow.revision + 1,
+            updated_at=func.now(),
+        )
+        .returning(AgentWorkflow.id)
+    )
+    return result.scalar_one_or_none() is not None
+
+
 @dataclass(frozen=True, slots=True)
 class RevisionResult:
     revision: int

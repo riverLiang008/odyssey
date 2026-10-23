@@ -521,6 +521,8 @@ Workflow Preview 和只读 graph 必须由 read-only adapter/config 生成，而
 
 ## 11. Pattern 规范
 
+2026-10-21 已接受的 [Pattern → Agent Workflow End 单向同步设计](./architecture/execution/pattern-agent-end-routing-decision.md) 补充本节：Linear/Circular Loop 不开放箭头编辑，Hub 仅开放既有 Hub–Spoke 关系的方向配置。Root End 数量与目标由 Pattern 单向同步，不能在 Workflow 手动增删或改目标；内部路径由用户编排。该规则不改变 Loop body 边界。实施时须协调合同、迁移及跨 aggregate 原子性，不能用组件 watcher 双向维护两份拓扑。
+
 Built-in Pattern 使用 strategy 派生 topology、route 和 layout：
 
 ```ts
