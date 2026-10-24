@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useId, watch } from 'vue'
+import { expandMeasuredLoopFrames } from '@/canvas/workflow/measuredLoopProjection'
+import type { LoopChildSize } from '@/canvas/workflow/loopBounds'
+import { uuidSchema } from '@odyssey/schemas'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -9,6 +12,8 @@ import WorkflowNodeRenderer from '@/features/workflow-editor/WorkflowNodeRendere
 const props = defineProps<{ model: WorkflowPreviewViewModel }>()
 const canvasId = `workflow-preview-${useId()}`
 const root = ref<globalThis.HTMLElement | null>(null)
+const measuredSizes = shallowRef<readonly LoopChildSize[]>([])
+const nodes = computed(() => expandMeasuredLoopFrames(props.model.nodes, measuredSizes.value))
 const { fitView, onNodesInitialized } = useVueFlow(canvasId)
 let observer: globalThis.ResizeObserver | undefined
 let frame: number | undefined
@@ -18,8 +23,15 @@ let disposed = false
 // One viewport transform scales cards, ports and smoothstep edges together.
 function scheduleFit() {
   if (disposed || frame !== undefined) return
-  frame = globalThis.requestAnimationFrame(() => {
+  frame = globalThis.requestAnimationFrame(async () => {
     frame = undefined
+    const sizes = [...(root.value?.querySelectorAll<globalThis.HTMLElement>('[data-measured-node-id]') ?? [])].flatMap(card => {
+      const id = uuidSchema.safeParse(card.dataset.measuredNodeId)
+      return id.success && card.offsetWidth && card.offsetHeight ? [{ nodeId: id.data, width: card.offsetWidth, height: card.offsetHeight }] : []
+    })
+    if (JSON.stringify(sizes) !== JSON.stringify(measuredSizes.value)) measuredSizes.value = sizes
+    await nextTick()
+    if (disposed) return
     void fitView({ padding: '16px', minZoom: 0.001, maxZoom: 1, duration: 0 })
   })
 }
@@ -54,7 +66,7 @@ onBeforeUnmount(() => {
   <div ref="root" class="workflow-preview-canvas" role="img" :aria-label="`${model.agentName} Workflow: ${model.nodes.length} nodes and ${model.edges.length} edges`">
     <div class="workflow-preview-canvas__surface" inert aria-hidden="true">
       <VueFlow
-        :id="canvasId" :nodes="model.nodes" :edges="model.edges"
+        :id="canvasId" :nodes="nodes" :edges="model.edges"
         :nodes-draggable="false" :nodes-connectable="false" :elements-selectable="false"
         :edges-updatable="false" :nodes-focusable="false" :edges-focusable="false"
         :connect-on-click="false" :auto-connect="false" :select-nodes-on-drag="false"
@@ -66,7 +78,7 @@ onBeforeUnmount(() => {
         :min-zoom="0.001" :max-zoom="1"
       >
         <template #node-workflow="nodeProps">
-          <WorkflowNodeRenderer class="workflow-preview-node" v-bind="nodeProps" :configure-expanded="true" :read-only="true" :variables="nodeProps.data.node.type === 'branch' ? model.branchVariables : undefined" />
+          <WorkflowNodeRenderer class="workflow-preview-node" v-bind="nodeProps" :configure-expanded="(nodeProps.data.context?.kind ?? 'root') === 'root' || nodeProps.data.node.type === 'branch'" :read-only="true" :variables="nodeProps.data.node.type === 'branch' ? model.branchVariables : undefined" />
         </template>
       </VueFlow>
     </div>

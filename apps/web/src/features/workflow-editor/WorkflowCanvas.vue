@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { workflowRouting } from '@odyssey/design-tokens'
-import { computed, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { mapModeViewport, modeViewportAnchor } from '@/canvas/workflow/modeViewport'
+import { expandMeasuredLoopFrames } from '@/canvas/workflow/measuredLoopProjection'
+import type { LoopChildSize } from '@/canvas/workflow/loopBounds'
 import {
   VueFlow,
   useVueFlow,
@@ -52,6 +55,7 @@ const emit = defineEmits<{
   connect: [context: CanvasTargetContext, connection: Connection]
   create: [context: CanvasTargetContext, nodeType: WorkflowPaletteNodeType, point: { x: number; y: number }]
   resize: [nodeId: UUID, size: { width: number; height: number }]
+  loopBounds: [loopNodeId: UUID, sizes: readonly LoopChildSize[]]
   clearError: []
   reject: [error: WorkflowCanvasUiErrorCode]
   editTool: [nodeId: UUID, stepId: UUID]
@@ -66,8 +70,58 @@ const emit = defineEmits<{
   edgeContextMenu: [context: CanvasTargetContext, edgeId: UUID, point: { x: number; y: number }]
 }>()
 const root = ref<globalThis.HTMLElement | null>(null)
-const projection = computed(() => projectWorkflowCanvas(props.graph, props.layout, props.mode, props.routingJourney))
-const { onInit, project: projectPoint, setCenter, setViewport: setCanvasViewport } = useVueFlow()
+const measuredSizes = shallowRef<readonly LoopChildSize[]>([])
+const projection = computed(() => {
+  const result = projectWorkflowCanvas(props.graph, props.layout, props.mode, props.routingJourney)
+  return { ...result, nodes: expandMeasuredLoopFrames(result.nodes, measuredSizes.value) }
+})
+const { onInit, onNodesInitialized, fitView, project: projectPoint, setCenter, setViewport: setCanvasViewport, viewport } = useVueFlow(props.canvasId)
+let modeProjection = projection.value
+let modeChangeSeq = 0
+let modeAnchorId: string | null = null
+watch(() => props.selectedNodeId, () => { modeAnchorId = null })
+watch(() => props.mode, async () => {
+  const seq = ++modeChangeSeq
+  const size = { width: root.value?.clientWidth ?? 0, height: root.value?.clientHeight ?? 0 }
+  modeAnchorId = modeViewportAnchor(modeProjection, viewport.value, size, modeAnchorId ?? props.selectedNodeId)
+  const mapped = mapModeViewport(modeProjection, projection.value, viewport.value, size, modeAnchorId)
+  modeProjection = projection.value
+  isApplyingInitialCenter = true
+  await nextTick()
+  if (seq !== modeChangeSeq) return
+  try { await setCanvasViewport(mapped) } finally { if (seq === modeChangeSeq) isApplyingInitialCenter = false }
+})
+watch(projection, value => { modeProjection = value }, { flush: 'post' })
+let boundsObserver: globalThis.ResizeObserver | undefined
+let boundsFrame: number | undefined
+let disposed = false
+function scheduleBounds() {
+  if (disposed || boundsFrame !== undefined) return
+  boundsFrame = globalThis.requestAnimationFrame(() => {
+    boundsFrame = undefined
+    if (!('schemaVersion' in props.graph)) return
+    const allSizes: LoopChildSize[] = []
+    for (const loop of props.graph.nodes) {
+      if (loop.type !== 'loop') continue
+      const sizes = loop.config.body.graph.nodes.flatMap(node => {
+        const card = root.value?.querySelector<globalThis.HTMLElement>(`[data-measured-node-id="${node.id}"]`)
+        return card && card.offsetWidth && card.offsetHeight ? [{ nodeId: node.id, width: card.offsetWidth, height: card.offsetHeight }] : []
+      })
+      allSizes.push(...sizes)
+      if (sizes.length && props.mode === 'configure') emit('loopBounds', loop.id, sizes)
+    }
+    if (JSON.stringify(allSizes) !== JSON.stringify(measuredSizes.value)) measuredSizes.value = allSizes
+  })
+}
+function observeBounds() {
+  if (disposed) return
+  boundsObserver?.disconnect()
+  root.value?.querySelectorAll('[data-measured-node-id]').forEach(card => boundsObserver?.observe(card))
+  scheduleBounds()
+}
+onMounted(() => { if (globalThis.ResizeObserver) boundsObserver = new globalThis.ResizeObserver(scheduleBounds); observeBounds() })
+watch(projection, async () => { await nextTick(); observeBounds() }, { flush: 'post' })
+onBeforeUnmount(() => { disposed = true; modeChangeSeq++; boundsObserver?.disconnect(); if (boundsFrame !== undefined) globalThis.cancelAnimationFrame(boundsFrame) })
 let connectionCommitted = false
 let isApplyingInitialCenter = false
 const resourceDropFeedback = ref<{ nodeId: UUID | null; targetKind: WorkflowResourceDropTarget['kind'] | null; status: 'idle' | 'valid' | 'invalid' | 'duplicate' | 'unavailable' }>({ nodeId: null, targetKind: null, status: 'idle' })
@@ -76,12 +130,12 @@ const initialViewport = computed(() => props.normalizeInitialViewport
   : projection.value.viewport)
 
 const shouldCenterMinimumWorkflow = computed(() => {
-  if (props.graph.nodes.length !== 2 || props.graph.edges.length !== 1) return false
+  if (props.graph.nodes.length !== 2 || props.graph.edges.length > 1) return false
   if (props.layout.viewport.x !== 0 || props.layout.viewport.y !== 0 || props.layout.viewport.zoom !== 1) return false
   const start = props.graph.nodes.find((node) => node.type === 'start' || node.type === 'loop_start')
   const end = props.graph.nodes.find((node) => node.type === 'end' || node.type === 'loop_end')
   const edge = props.graph.edges[0]
-  return Boolean(start && end && edge?.sourceNodeId === start.id && edge.targetNodeId === end.id)
+  return Boolean(start && end && (!edge || (edge.sourceNodeId === start.id && edge.targetNodeId === end.id)))
 })
 
 onInit(async () => {
@@ -112,21 +166,17 @@ onInit(async () => {
     isApplyingInitialCenter = false
     return
   }
-  if (!shouldCenterMinimumWorkflow.value) return
-  const placements = new Map(props.layout.nodePlacements.map((placement) => [placement.nodeId, placement]))
-  const start = props.graph.nodes.find((node) => node.type === 'start' || node.type === 'loop_start')
-  const end = props.graph.nodes.find((node) => node.type === 'end' || node.type === 'loop_end')
-  const startPlacement = start ? placements.get(start.id) : undefined
-  const endPlacement = end ? placements.get(end.id) : undefined
-  if (!startPlacement || !endPlacement) return
+})
 
+// Wait for measured node bounds so the boundary pills are centered at their actual size.
+onNodesInitialized(async () => {
+  if (props.normalizeInitialViewport || !shouldCenterMinimumWorkflow.value) return
   isApplyingInitialCenter = true
-  await setCenter(
-    (startPlacement.x + endPlacement.x + 64) / 2,
-    (startPlacement.y + endPlacement.y + 64) / 2,
-    { zoom: 1 },
-  )
-  isApplyingInitialCenter = false
+  try {
+    await fitView({ minZoom: 1, maxZoom: 1, duration: 0 })
+  } finally {
+    isApplyingInitialCenter = false
+  }
 })
 
 function nodeClick(event: NodeMouseEvent) {
@@ -159,7 +209,12 @@ function dragStop(event: NodeDragEvent) {
 }
 function moveEnd({ flowTransform: viewport }: { event: unknown; flowTransform: ViewportTransform }) {
   if (isApplyingInitialCenter) return
-  emit('intent', { kind: 'root' }, { type: 'update-viewport', x: viewport.x, y: viewport.y, zoom: viewport.zoom })
+  modeAnchorId = null
+  const saved = props.mode === 'configure' ? viewport : mapModeViewport(
+    projection.value, projectWorkflowCanvas(props.graph, props.layout, 'configure', props.routingJourney), viewport,
+    { width: root.value?.clientWidth ?? 0, height: root.value?.clientHeight ?? 0 }, props.selectedNodeId,
+  )
+  emit('intent', { kind: 'root' }, { type: 'update-viewport', x: saved.x, y: saved.y, zoom: saved.zoom })
 }
 function paneClick() {
   emit('intent', { kind: 'root' }, { type: 'select-node', nodeId: null })
@@ -251,7 +306,7 @@ function dragOver(event: globalThis.DragEvent) {
 }
 function handleResourceDrop(payload: WorkflowResourceDragPayload, target: WorkflowResourceDropTarget) {
   if (target.kind === 'canvas-pane') { emit('reject', 'INVALID_RESOURCE_TARGET'); return }
-  const node = props.graph.nodes.find((candidate) => candidate.id === target.nodeId)
+  const node = projection.value.nodes.find(candidate => candidate.id === target.nodeId)?.data?.node
   const evaluation = evaluateWorkflowResourceDrop(payload, target, {
     node: node?.type === 'agent_action' || node?.type === 'task' ? node : null,
     systemTools: props.systemTools, mode: props.mode, availableReusableToolIds: new Set(props.availableReusableToolIds ?? []), availableKnowledgeSpaceIds: new Set((props.knowledgeSpaces ?? []).map((space) => space.id)),
@@ -266,7 +321,7 @@ function handleResourceDrop(payload: WorkflowResourceDragPayload, target: Workfl
 }
 function evaluateResourceTarget(payload: WorkflowResourceDragPayload, target: WorkflowResourceDropTarget) {
   if (target.kind === 'canvas-pane') return evaluateWorkflowResourceDrop(payload, target, { node: null, systemTools: props.systemTools, mode: props.mode, availableReusableToolIds: new Set(props.availableReusableToolIds ?? []), availableKnowledgeSpaceIds: new Set((props.knowledgeSpaces ?? []).map((space) => space.id)) })
-  const node = props.graph.nodes.find((candidate) => candidate.id === target.nodeId)
+  const node = projection.value.nodes.find(candidate => candidate.id === target.nodeId)?.data?.node
   return evaluateWorkflowResourceDrop(payload, target, {
     node: node?.type === 'agent_action' || node?.type === 'task' ? node : null,
     systemTools: props.systemTools, mode: props.mode, availableReusableToolIds: new Set(props.availableReusableToolIds ?? []), availableKnowledgeSpaceIds: new Set((props.knowledgeSpaces ?? []).map((space) => space.id)),

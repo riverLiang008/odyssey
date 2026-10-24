@@ -4,8 +4,26 @@ import { describe, expect, it } from 'vitest'
 import { createAgentWorkflowEditorDocumentFixture } from '@/fixtures'
 import WorkflowPreview from './WorkflowPreview.vue'
 import { VueFlow } from '@vue-flow/core'
+import WorkflowNodeRenderer from '@/features/workflow-editor/WorkflowNodeRenderer.vue'
 
 describe('WorkflowPreview', () => {
+  it('keeps Loop child cards compact like the editor so their configured bounds stay inside the container', async () => {
+    const document = createAgentWorkflowEditorDocumentFixture('loop')
+    const before = structuredClone(document)
+    const wrapper = mount(WorkflowPreview, {
+      props: { agentId: document.agent.id, agentName: document.agent.name, status: 'ready', document, error: null },
+      attachTo: globalThis.document.body,
+    })
+    await flushPromises()
+    const childCards = wrapper.findAllComponents(WorkflowNodeRenderer).filter((card) => card.props('data').context?.kind === 'loop-body')
+    expect(childCards.length).toBeGreaterThan(2)
+    for (const card of childCards) {
+      expect(card.find('.node-config-preview').exists()).toBe(false)
+      expect(card.classes()).not.toContain('is-configure-expanded')
+    }
+    expect(document).toEqual(before)
+    wrapper.unmount()
+  })
   it('renders a compact topology without exposing mutation controls', async () => {
     const document = createAgentWorkflowEditorDocumentFixture('minimal')
     const wrapper = mount(WorkflowPreview, {

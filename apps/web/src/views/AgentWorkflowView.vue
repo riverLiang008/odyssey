@@ -570,24 +570,26 @@ function updateNodeName(nodeId: UUID, name: string) {
 }
 function handleResourceDrop(action: WorkflowResourceDropAction) {
   if (session.value.mode !== 'configure') return
+  const loop = document.value?.workflow.nodes.find(n => n.type === 'loop' && n.config.body.graph.nodes.some(child => child.id === action.nodeId))
+  const context: WorkflowCanvasContext = loop ? { kind: 'loop-body', loopNodeId: loop.id } : { kind: 'root' }
   switch (action.type) {
     case 'configure-system-tool':
-      store.openSystemTool(session.value.context, action.nodeId, action.toolDefinitionId)
+      store.openSystemTool(context, action.nodeId, action.toolDefinitionId)
       return
     case 'bind-reusable-tool':
-      store.bindWorkflowAgentActionReusableTool(session.value.context, action.nodeId, action.reusableToolId)
+      store.bindWorkflowAgentActionReusableTool(context, action.nodeId, action.reusableToolId)
       return
     case 'unbind-reusable-tool':
-      store.unbindWorkflowAgentActionReusableTool(session.value.context, action.nodeId, action.reusableToolId)
+      store.unbindWorkflowAgentActionReusableTool(context, action.nodeId, action.reusableToolId)
       return
     case 'append-task-tool-step':
-      store.appendWorkflowTaskToolStep(session.value.context, action.nodeId, action.reusableToolId)
+      store.appendWorkflowTaskToolStep(context, action.nodeId, action.reusableToolId)
       return
     case 'bind-knowledge-space':
-      store.bindWorkflowAgentActionKnowledgeSpace(session.value.context, action.nodeId, action.knowledgeSpaceId)
+      store.bindWorkflowAgentActionKnowledgeSpace(context, action.nodeId, action.knowledgeSpaceId)
       return
     case 'unbind-knowledge-space':
-      store.unbindWorkflowAgentActionKnowledgeSpace(session.value.context, action.nodeId, action.knowledgeSpaceId)
+      store.unbindWorkflowAgentActionKnowledgeSpace(context, action.nodeId, action.knowledgeSpaceId)
       return
   }
 }
@@ -680,7 +682,7 @@ async function setFocusMode(enabled: boolean) {
           <button type="button" class="focus-button" :aria-label="session.focusMode ? 'Exit focus mode' : 'Enter focus mode'" :title="session.focusMode ? 'Exit focus mode' : 'Enter focus mode'" @click="setFocusMode(!session.focusMode)"><img :src="enterFocusModeIcon" alt="" /></button>
         </div>
         <WorkflowExitNotice :status="exitStatus" :agent-id="document.agent.id" />
-        <WorkflowCanvas v-if="document" key="workflow-root" ref="workflowCanvas" :routing-journey="routingJourney" canvas-id="workflow-root" :graph="document.workflow" :layout="document.layout" :mode="session.mode" :selected-node-id="session.selectedNodeId" :variables="document.variables" :system-tools="systemTools" :available-reusable-tool-ids="document.reusableTools.map((tool) => tool.id)" :reusable-tools="document.reusableTools" :knowledge-spaces="knowledgeSpaces" :active-resource-drag="activeResourceDrag" @edit-tool="editTool" @edit-reusable-tool="(nodeId, toolId) => store.editAgentReusableTool(session.context, nodeId, toolId)" @change-tool="changeTool" @reorder-tool="reorderTool" @tool-step-context-menu="(nodeId, stepId, point) => openTaskToolStepContextMenu(nodeId, stepId, session.context, point)" @intent="handleCanvasIntent" @connect="handleCanvasConnect" @create="createNodeInContext" @resize="store.resizeWorkflowNode" @clear-error="store.clearWorkflowErrors" @reject="store.rejectCanvasInteraction" @resource-drop="handleResourceDrop" @update-agent-action="updateAgentActionDetails" @update-node-name="updateNodeName" @node-context-menu="(context, nodeId, point) => openNodeContextMenu(nodeId, context, point)" @edge-context-menu="(context, edgeId, point) => openEdgeContextMenu(edgeId, context, point)" />
+        <WorkflowCanvas v-if="document" key="workflow-root" ref="workflowCanvas" :routing-journey="routingJourney" canvas-id="workflow-root" :graph="document.workflow" :layout="document.layout" :mode="session.mode" :selected-node-id="session.selectedNodeId" :variables="document.variables" :system-tools="systemTools" :available-reusable-tool-ids="document.reusableTools.map((tool) => tool.id)" :reusable-tools="document.reusableTools" :knowledge-spaces="knowledgeSpaces" :active-resource-drag="activeResourceDrag" @edit-tool="editTool" @edit-reusable-tool="(nodeId, toolId) => store.editAgentReusableTool(session.context, nodeId, toolId)" @change-tool="changeTool" @reorder-tool="reorderTool" @tool-step-context-menu="(nodeId, stepId, point) => openTaskToolStepContextMenu(nodeId, stepId, session.context, point)" @intent="handleCanvasIntent" @connect="handleCanvasConnect" @create="createNodeInContext" @resize="store.resizeWorkflowNode" @loop-bounds="store.reconcileLoopBounds" @clear-error="store.clearWorkflowErrors" @reject="store.rejectCanvasInteraction" @resource-drop="handleResourceDrop" @update-agent-action="updateAgentActionDetails" @update-node-name="updateNodeName" @node-context-menu="(context, nodeId, point) => openNodeContextMenu(nodeId, context, point)" @edge-context-menu="(context, edgeId, point) => openEdgeContextMenu(edgeId, context, point)" />
       </main>
       <div v-if="rightPanelVisible" class="workflow-right-panel-host">
         <WorkflowSidePanelHost v-if="!systemToolDraft && (branchCreation || session.panel?.type === 'node-inspector' || session.panel?.type === 'loop-inspector')" :node="selectedNode" :branch-draft-cache="branchDraftCache" :branch-edges="activeGraph?.edges ?? []" :branch-target-names="branchTargetNames" :branch-error="branchError" :branch-blocked="persistence.saveStatus === 'conflict'" :branch-creating="Boolean(branchCreation)" :edge="selectedEdge" :tools="document.reusableTools" :variables="document.variables" :knowledge-spaces="knowledgeSpaces" :knowledge-status="knowledgeInventory.status" :loop-expanded="false" :read-only="session.mode === 'flow'" @branch-dirty-change="updateBranchDraftDirty" @apply-branch="applyBranch" @close="closeInspector" @update-loop="updateLoop" @bind-tool="updateAgentActionTools($event, true)" @unbind-tool="updateAgentActionTools($event, false)" @bind-knowledge-space="updateAgentActionKnowledgeSpaces($event, true)" @unbind-knowledge-space="updateAgentActionKnowledgeSpaces($event, false)" @reject-resource="store.rejectCanvasInteraction" />

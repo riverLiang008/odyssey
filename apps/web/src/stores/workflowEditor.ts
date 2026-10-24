@@ -1,3 +1,4 @@
+import { containLoopChildren, type LoopChildSize } from '@/canvas/workflow/loopBounds'
 import { applyBranchEdit } from '@/domain/workflow/branchCommands'
 import type { BranchEditIntent } from '@/domain/workflow/branchDrafts'
 import { computed, reactive, shallowRef, toRaw } from 'vue'
@@ -272,6 +273,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
 
   async function load(journeyId: UUID, agentId: UUID, repository: WorkflowEditorRepository) {
+    loopMeasurements.clear()
     clearAutosaveTimer()
     saveRequestSeq += 1
     saveController?.abort()
@@ -1092,9 +1094,27 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     return result
   }
 
+  const loopMeasurements = new Map<UUID, readonly LoopChildSize[]>()
+  function reconcileLoopBounds(loopId: UUID, sizes: readonly LoopChildSize[]) {
+    const current = document.value
+    if (!current || session.mode !== 'configure' || persistenceState.value?.type === 'conflict') return
+    loopMeasurements.set(loopId, sizes)
+    const result = containLoopChildren(current.workflow, current.layout, loopId, sizes)
+    if (result) applyApplicationResult({ ok: true, value: result })
+  }
+
   function resizeWorkflowNode(nodeId: UUID, size: { width: number; height: number }) {
     const current = document.value
     if (!current) return null
+    if (!Number.isFinite(size.width) || !Number.isFinite(size.height) || size.width < 420 || size.height < 300 || size.width > 1600 || size.height > 1200) {
+      return resizeNodePlacement(current.layout, nodeId, size)
+    }
+    const measurements = loopMeasurements.get(nodeId)
+    if (measurements?.length) {
+      const contained = containLoopChildren(current.workflow, current.layout, nodeId, measurements, size)
+      if (contained) return applyApplicationResult({ ok: true, value: contained })
+      return null
+    }
     const result = resizeNodePlacement(current.layout, nodeId, size)
     if (result.ok) {
       document.value = { ...current, layout: result.value }
@@ -1213,7 +1233,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     setResourceBrowserCollapsed, setResourceBrowserCategory, setResourceBrowserQuery, setResourceBrowserPage, loadKnowledgeSpaces,
     addWorkflowNode, removeWorkflowNode, connectWorkflowNodes, removeWorkflowEdge,
     applyWorkflowBranchEdit, updateWorkflowNodeConfig, updateWorkflowAgentActionDetails, renameWorkflowNode, updateWorkflowLoopSettings, updateWorkflowLoopDetails, createWorkflowNode,
-    removeWorkflowNodeWithLayout, moveWorkflowNode, resizeWorkflowNode, setViewport, replaceWorkflowFromImport, applyCompiledWorkflow, save, retrySave, reloadAfterConflict, overwriteAfterConflict, toSaveInput, dispose,
+    removeWorkflowNodeWithLayout, moveWorkflowNode, resizeWorkflowNode, reconcileLoopBounds, setViewport, replaceWorkflowFromImport, applyCompiledWorkflow, save, retrySave, reloadAfterConflict, overwriteAfterConflict, toSaveInput, dispose,
     switchCanvasContext, expandLoopInline, collapseInlineLoop,
     createWorkflowLoopBodyNode, removeWorkflowLoopBodyNode, moveWorkflowLoopBodyNode,
     connectWorkflowLoopBodyNodes, removeWorkflowLoopBodyEdge, setWorkflowLoopBodyViewport,

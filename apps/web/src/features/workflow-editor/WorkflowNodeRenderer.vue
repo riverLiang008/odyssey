@@ -51,10 +51,11 @@ function startLoopResize(event: globalThis.PointerEvent) {
   event.stopPropagation()
   const card = event.currentTarget instanceof globalThis.HTMLElement ? event.currentTarget.closest<globalThis.HTMLElement>('.workflow-node-card') : null
   if (!card) return
+  const scale = card.getBoundingClientRect().width / card.offsetWidth || 1
   const start = { x: event.clientX, y: event.clientY, width: card.offsetWidth, height: card.offsetHeight }
   const move = (moveEvent: globalThis.PointerEvent) => emit('resizeNode', node.value.id, {
-    width: Math.min(1600, Math.max(420, start.width + moveEvent.clientX - start.x)),
-    height: Math.min(1200, Math.max(300, start.height + moveEvent.clientY - start.y)),
+    width: Math.min(1600, Math.max(420, start.width + (moveEvent.clientX - start.x) / scale)),
+    height: Math.min(1200, Math.max(300, start.height + (moveEvent.clientY - start.y) / scale)),
   })
   const stop = () => { globalThis.window.removeEventListener('pointermove', move); globalThis.window.removeEventListener('pointerup', stop); resizeCleanup = null }
   resizeCleanup?.()
@@ -257,7 +258,7 @@ function stepReorderClass(stepId: UUID): string {
 </script>
 
 <template>
-  <article class="workflow-node-card" :style="data.boundaryLabel ? { '--workflow-exit-width': workflowRouting.exitWidth, '--workflow-exit-min-height': workflowRouting.exitMinHeight, '--workflow-exit-padding': workflowRouting.exitPadding, '--workflow-exit-radius': radii.sm } : node.type === 'branch' ? { '--branch-border': workflowBranch.border, '--branch-radius': workflowBranch.radius, '--branch-width': configureExpanded ? workflowBranch.configureWidth : workflowBranch.flowWidth, '--branch-padding': workflowBranch.padding } : undefined" :data-loop-body-id="data.compoundLoop ? node.id : undefined" :class="[`is-${node.type}`, { 'is-protected': protectedNode, 'is-managed-exit': Boolean(data.boundaryLabel), 'is-selected': selected, 'is-configure-expanded': configureExpanded && !protectedNode && !data.compoundLoop, 'is-compound-loop': data.compoundLoop }]">
+  <article :data-measured-node-id="node.id" class="workflow-node-card" :style="data.boundaryLabel ? { '--workflow-exit-width': workflowRouting.exitWidth, '--workflow-exit-min-height': workflowRouting.exitMinHeight, '--workflow-exit-padding': workflowRouting.exitPadding, '--workflow-exit-radius': radii.sm } : node.type === 'branch' ? { '--branch-border': workflowBranch.border, '--branch-radius': workflowBranch.radius, '--branch-width': configureExpanded ? workflowBranch.configureWidth : workflowBranch.flowWidth, '--branch-padding': workflowBranch.padding } : undefined" :data-loop-body-id="data.compoundLoop ? node.id : undefined" :class="[`is-${node.type}`, { 'is-protected': protectedNode, 'is-managed-exit': Boolean(data.boundaryLabel), 'is-selected': selected, 'is-configure-expanded': configureExpanded && !protectedNode && !data.compoundLoop, 'is-compound-loop': data.compoundLoop }]">
     <Handle v-if="node.type !== 'start' && node.type !== 'loop_start'" type="target" :position="Position.Left" class="workflow-handle" />
     <template v-if="data.compoundLoop && node.type === 'loop'">
       <header class="compound-loop-header">
