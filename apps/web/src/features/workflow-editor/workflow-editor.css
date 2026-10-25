@@ -250,7 +250,7 @@
 .editor-page.workflow-editor-page.is-focus-mode .workflow-context-path>button,
 .editor-page.workflow-editor-page.is-focus-mode .workflow-context-path>span:not(.workflow-focus-context) { display:none; }
 .editor-page.workflow-editor-page.is-focus-mode .workflow-focus-context { display:inline; }
-.editor-page.workflow-editor-page.is-focus-mode .workflow-toolbar-actions { display:none; }
+.editor-page.workflow-editor-page.is-focus-mode .workflow-toolbar-actions { position:fixed; right:24px; bottom:24px; display:flex; padding:8px 12px; border:1px solid var(--odyssey-border); border-radius:8px; background:var(--odyssey-surface,#fff); pointer-events:auto; }
 .editor-page.workflow-editor-page.is-focus-mode .workflow-resource-nav { position:absolute; top:20px; left:50%; height:42px; box-sizing:border-box; padding:4px; align-items:center; border:1px solid #d8deea; border-radius:10px; background:#fff; box-shadow:0 2px 8px rgba(23,32,51,.08); transform:translateX(-50%); pointer-events:auto; }
 .editor-page.workflow-editor-page.is-focus-mode .workflow-resource-nav button { width:auto; height:32px; box-sizing:border-box; display:flex; align-items:center; justify-content:center; gap:7px; padding:0 10px; border-radius:7px; color:#4d72f2; }
 .editor-page.workflow-editor-page.is-focus-mode .workflow-resource-nav button:hover,

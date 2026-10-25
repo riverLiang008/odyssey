@@ -8,6 +8,7 @@ const workflowViewSource = readFileSync(resolve(process.cwd(), 'src/views/AgentW
 describe('Workflow editor responsive persistence status', () => {
   it('never hides the only visible save status at narrow viewports', () => {
     expect(workflowEditorCss).not.toMatch(/\.save-state\s*\{[^}]*display\s*:\s*none/)
+    expect(workflowEditorCss).not.toMatch(/\.is-focus-mode \.workflow-toolbar-actions\s*\{[^}]*display\s*:\s*none/)
     expect(workflowEditorCss).toMatch(/\.workflow-toolbar-actions \.save-state\s*\{\s*min-width:\s*72px/)
     expect(workflowEditorCss).toContain('.workflow-context-path>a')
   })

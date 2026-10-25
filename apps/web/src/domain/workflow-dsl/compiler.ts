@@ -1,5 +1,5 @@
 import {
-  uuidSchema, agentWorkflowExportDocumentSchema, createAgentWorkflowEditorDocumentSchema,
+  uuidSchema, systemValueKeySchema, systemValueType, knowledgeReferenceKey, type KnowledgeSpaceReference, agentWorkflowExportDocumentSchema, createAgentWorkflowEditorDocumentSchema,
   agentVariableSchema, taskLocalVariableSchema, toolStepSchema, agentReusableToolSchema,
   type AgentWorkflowEditorDocument, type AgentWorkflowExportDocument, type AgentVariable,
   type TaskLocalVariable, type AgentReusableTool, type WorkflowNode, type LoopBodyNode,
@@ -79,7 +79,8 @@ export function compileDsl(source: string, context: DslContext): DslCompileResul
     return { status: 'invalid', diagnostics }
   }
   if (parsed.syntax.length !== 1) report('ODSL102', parsed.syntax[1]?.span ?? root.span)
-  if (text(root, 3) !== '0.1') report('ODSL601', root.head[3] ?? root.span)
+  const modern = text(root, 3) === '0.2'
+  if (!['0.1', '0.2'].includes(text(root, 3))) report('ODSL601', root.head[3] ?? root.span)
   const sections = fields(root, ['variables', 'nodes', 'edges', 'tools', 'identity'])
   const variables: AgentVariable[] = []
   const variableByRef = new Map<string, AgentVariable | TaskLocalVariable>()
@@ -91,6 +92,11 @@ export function compileDsl(source: string, context: DslContext): DslCompileResul
     uniqueName(name, span)
     if (matches.length !== 1) report(matches.length ? 'ODSL502' : 'ODSL501', span)
     return matches[0]?.id ?? unresolvedId
+  }
+  const knowledgeBinding = (token: DslToken): KnowledgeSpaceReference => {
+    if (!modern) report('ODSL601', token)
+    if (token.value !== 'sys.target_knowledge_space') report('ODSL206', token)
+    return { kind: 'system_knowledge_space', key: 'target_knowledge_space' }
   }
   const resolveVariable = (ref: string, span: DslSpan, write = false): UUID => {
     if (ref.startsWith('sys.') && write) { report('ODSL302', span); return unresolvedId }
@@ -108,10 +114,23 @@ export function compileDsl(source: string, context: DslContext): DslCompileResul
       const token = tokens[at++]
       if (!token) { report('ODSL101', tokens.at(-1) ?? fallback); return null }
       const expect = (symbol: string) => { if (tokens[at]?.text === symbol) at++; else report('ODSL101', tokens[at] ?? token) }
+      if (token.kind === 'binding') {
+        if (!modern) report('ODSL601', token)
+        if (currentMode === 'literal') report('ODSL309', token)
+        if (token.value.startsWith('sys.')) {
+          if (write || currentMode === 'reference') { report('ODSL302', token); return unresolvedId }
+          const key = systemValueKeySchema.safeParse(token.value.slice(4))
+          if (!key.success) { report('ODSL206', token); return null }
+          return { kind: 'system', key: key.data }
+        }
+        const variableId = resolveVariable(token.value, token, write)
+        return currentMode === 'reference' ? variableId : { kind: 'variable', variableId }
+      }
       if (token.text === 'literal' && tokens[at]?.text === '(') {
         at++; const value = parseValue('literal', depth + 1); expect(')'); return { kind: 'literal', value }
       }
       if (token.kind === 'word' && tokens[at]?.text === '.') {
+        if (modern) report('ODSL008', token)
         at++; const key = tokens[at++]
         const reference = `${token.value}.${key?.value ?? ''}`
         if (currentMode === 'literal') report('ODSL309', token)
@@ -150,7 +169,7 @@ export function compileDsl(source: string, context: DslContext): DslCompileResul
       else { report('ODSL303', token); literal = null }
       if (currentMode !== 'source') return literal
       if (token.kind !== 'string') return { kind: 'literal', value: literal }
-      const segments: Array<{ kind: 'text'; text: string } | { kind: 'variable'; variableId: UUID }> = []
+      const segments: Array<{ kind: 'text'; text: string } | { kind: 'variable'; variableId: UUID } | { kind: 'system'; key: 'change_event' | 'document_id' | 'document_revision' }> = []
       const expression = /\$\{([^}]*)\}/g
       let end = 0
       for (const match of token.value.matchAll(expression)) {
@@ -158,7 +177,10 @@ export function compileDsl(source: string, context: DslContext): DslCompileResul
         if (start > end) segments.push({ kind: 'text', text: token.value.slice(end, start).replaceAll('\uE000', '$') })
         const reference = match[1] ?? ''
         if (!/^(agent|task|sys)\.[A-Za-z_][A-Za-z0-9_]*$/.test(reference)) report('ODSL006', token)
-        segments.push({ kind: 'variable', variableId: resolveVariable(reference, token) })
+        if (modern && reference.startsWith('sys.')) {
+          const key = systemValueKeySchema.safeParse(reference.slice(4))
+          if (key.success) segments.push({ kind: 'system', key: key.data }); else report('ODSL206', token)
+        } else segments.push({ kind: 'variable', variableId: resolveVariable(reference, token) })
         end = start + match[0].length
       }
       if (token.value.slice(end).includes('${')) report('ODSL006', token)
@@ -213,7 +235,7 @@ export function compileDsl(source: string, context: DslContext): DslCompileResul
       if (Object.hasOwn(result, key)) report('ODSL103', field.span)
       if (field.kind !== 'statement' || field.head[1]?.text !== '=') { report('ODSL102', field.span); continue }
       const tokens = field.head.slice(2)
-      const value = key === 'knowledgeSpaceId' ? resource(String(read(tokens)), 'knowledge', field.span)
+      const value = key === 'knowledgeSpaceId' ? tokens[0]?.kind === 'binding' && tokens.length === 1 ? knowledgeBinding(tokens[0]) : resource(String(read(tokens)), 'knowledge', field.span)
         : read(tokens, valueFields.has(key) ? 'source' : key === 'targetVariableId' ? 'reference' : 'config', key === 'targetVariableId')
       Object.defineProperty(result, key, { value, enumerable: true, configurable: true })
     }
@@ -372,13 +394,14 @@ export function compileDsl(source: string, context: DslContext): DslCompileResul
               if (!toolId) report('ODSL202', token)
               return toolId ?? unresolvedId
             }
+            if (category === 'knowledge' && token.kind === 'binding') return knowledgeBinding(token)
             if (token.kind !== 'string') report('ODSL303', token)
             return resource(token.value, category, token)
           })
-          if (new Set(ids).size !== ids.length) report('ODSL204', field.span)
+          if (new Set(ids.map(knowledgeReferenceKey)).size !== ids.length) report('ODSL204', field.span)
           return ids
         }
-        nodes.push({ ...common, type: 'agent_action', name: text(item, 1), config: { model: stringField(model, ''), goal: (goal ? read(goal.head.slice(1), 'source') : { kind: 'literal', value: '' }) as ValueSource, knowledgeSpaceIds: list(options.get('knowledge'), 'knowledge'), reusableToolIds: list(options.get('toolbox'), 'tool') } })
+        nodes.push({ ...common, type: 'agent_action', name: text(item, 1), config: { model: stringField(model, ''), goal: (goal ? read(goal.head.slice(1), 'source') : { kind: 'literal', value: '' }) as ValueSource, knowledgeSpaceIds: list(options.get('knowledge'), 'knowledge'), reusableToolIds: list(options.get('toolbox'), 'tool').filter((reference): reference is UUID => typeof reference === 'string') } })
       } else if (kind === 'task') {
         const options = fields(item, ['variables', 'steps', 'identity'])
         const locals = parseVariables(options.get('variables'), nodePath, true, options.get('identity')).filter((variable): variable is TaskLocalVariable => !('ownership' in variable))
@@ -419,7 +442,7 @@ export function compileDsl(source: string, context: DslContext): DslCompileResul
               if ((setting.operation === 'increment' && target?.dataType !== 'number') || (setting.operation === 'toggle' && target?.dataType !== 'boolean') || (setting.operation === 'append' && !['string', 'json'].includes(target?.dataType ?? ''))) report('ODSL307', step.span)
               if ('value' in setting && setting.operation === 'assign' && target) {
                 const assigned = setting.value
-                const assignedType = assigned.kind === 'literal' ? assigned.value === null ? null : typeof assigned.value : assigned.kind === 'template' ? 'string' : [...variableByRef.values()].find((variable) => variable.id === assigned.variableId)?.dataType
+                const assignedType = assigned.kind === 'literal' ? assigned.value === null ? null : typeof assigned.value : assigned.kind === 'template' ? 'string' : assigned.kind === 'system' ? systemValueType(assigned.key) : [...variableByRef.values()].find((variable) => variable.id === assigned.variableId)?.dataType
                 if (assignedType && target.dataType !== 'json' && assignedType !== 'json' && assignedType !== target.dataType) report('ODSL301', step.span)
               }
             }
@@ -473,11 +496,12 @@ export function compileDsl(source: string, context: DslContext): DslCompileResul
         const turns = requireField(options, 'max_turns', item)
         const exit = requireField(options, 'exit_when', item)
         const exitTokens = exit?.head.slice(1) ?? []
-        const operator = operators.get(exitTokens[3]?.text ?? '')
+        const operatorIndex = exitTokens.findIndex((token) => operators.has(token.text))
+        const operator = operators.get(exitTokens[operatorIndex]?.text ?? '')
         const graph = parseGraph(item, nodePath, true)
         const { schemaVersion: _bodyVersion, ...bodyLayout } = graph.layout
         void _bodyVersion
-        nodes.push({ ...common, type: 'loop', name: text(item, 1), config: { maxTurns: Number(turns?.head[1]?.value), exitCondition: { kind: 'variable_comparison', variableId: read(exitTokens.slice(0, 3), 'reference') as UUID, operator: (operator ?? 'eq') as 'eq', value: read(exitTokens.slice(4)) as JsonValue }, body: { graph: { nodes: graph.nodes.filter((node): node is LoopBodyNode => node.type !== 'start' && node.type !== 'end' && node.type !== 'loop'), edges: graph.edges }, layout: bodyLayout } } })
+        nodes.push({ ...common, type: 'loop', name: text(item, 1), config: { maxTurns: Number(turns?.head[1]?.value), exitCondition: { kind: 'variable_comparison', variableId: read(exitTokens.slice(0, operatorIndex), 'reference') as UUID, operator: (operator ?? 'eq') as 'eq', value: read(exitTokens.slice(operatorIndex + 1)) as JsonValue }, body: { graph: { nodes: graph.nodes.filter((node): node is LoopBodyNode => node.type !== 'start' && node.type !== 'end' && node.type !== 'loop'), edges: graph.edges }, layout: bodyLayout } } })
         if (!operator || !['eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(operator) || !Number.isInteger(Number(turns?.head[1]?.value)) || Number(turns?.head[1]?.value) <= 0) report('ODSL406', item.span)
       } else report('ODSL405', item.span)
     }
@@ -526,7 +550,17 @@ export function compileDsl(source: string, context: DslContext): DslCompileResul
     let nextX = placements.length ? Math.max(...placements.map((placement) => placement.x + (placement.width ?? 0))) + 360 : 0
     for (const node of nodes) {
       if (existingIds.has(node.id)) continue
-      placements.push({ nodeId: node.id, x: nextX, y: 0, ...(node.type === 'loop' ? { width: 720, height: 480 } : {}) })
+      const bodyIndex = placements.length
+      const bodyFloor = previousLayout?.nodePlacements.length
+        ? Math.max(...previousLayout.nodePlacements.map((placement) => placement.y)) + 160
+        : 100
+      const point = body
+        ? { x: 40 + (bodyIndex % 2) * 320, y: bodyFloor + Math.floor(bodyIndex / 2) * 160 }
+        : { x: nextX, y: 0 }
+      const bodyHeight = node.type === 'loop'
+        ? Math.max(480, ...node.config.body.layout.nodePlacements.map((placement) => placement.y + 140))
+        : 480
+      placements.push({ nodeId: node.id, ...point, ...(node.type === 'loop' ? { width: 720, height: Math.min(1200, bodyHeight) } : {}) })
       nextX += node.type === 'loop' ? 1080 : 360
     }
     const layout: CanvasLayout = { schemaVersion: '1.0.0', nodePlacements: placements, viewport: { ...(previousLayout?.viewport ?? { x: 0, y: 0, zoom: 1 }) } }
@@ -535,7 +569,7 @@ export function compileDsl(source: string, context: DslContext): DslCompileResul
     return { nodes, edges, layout }
   }
   const graph = parseGraph(root, 'root', false)
-  const payload = agentWorkflowExportDocumentSchema.safeParse({ workflow: { schemaVersion: context.baseline.document.workflow.schemaVersion, nodes: graph.nodes, edges: graph.edges }, layout: graph.layout, variables, reusableTools })
+  const payload = agentWorkflowExportDocumentSchema.safeParse({ workflow: { schemaVersion: modern ? '1.2.0' : context.baseline.document.workflow.schemaVersion, nodes: graph.nodes, edges: graph.edges }, layout: graph.layout, variables, reusableTools })
   if (payload.success) {
     if (!context.allowIdentityReplacement) {
       const ownedIds = (value: unknown, output = new Set<string>()): Set<string> => {
@@ -552,7 +586,7 @@ export function compileDsl(source: string, context: DslContext): DslCompileResul
       }
     }
     const allVariables = new Map(variables.map((entry) => [entry.id, entry.dataType]))
-    const sourceType = (value: ValueSource): string | null | undefined => value.kind === 'template' ? 'string' : value.kind === 'variable' ? allVariables.get(value.variableId) : value.value === null ? null : typeof value.value === 'object' ? 'json' : typeof value.value
+    const sourceType = (value: ValueSource): string | null | undefined => value.kind === 'system' ? systemValueType(value.key) : value.kind === 'template' ? 'string' : value.kind === 'variable' ? allVariables.get(value.variableId) : value.value === null ? null : typeof value.value === 'object' ? 'json' : typeof value.value
     const stringSource = (value: ValueSource) => {
       const type = sourceType(value)
       if (type && type !== 'string' && type !== 'json') report('ODSL301', root.span)

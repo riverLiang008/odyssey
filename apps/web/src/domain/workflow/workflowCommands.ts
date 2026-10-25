@@ -1,4 +1,5 @@
 import {
+  nodesHaveRuntimeBinding,
   agentActionNodeSchema,
   branchNodeSchema,
   loopNodeSchema,
@@ -49,7 +50,8 @@ function sourceFailure<T>(graph: WorkflowGraph): WorkflowCommandResult<T> | null
   return report.isStructurallyValid ? null : failure({ code: 'INVALID_SOURCE_GRAPH', issues: report.structuralErrors })
 }
 
-function finalize(candidate: WorkflowGraph): WorkflowCommandResult<WorkflowGraph> {
+function finalize(input: WorkflowGraph): WorkflowCommandResult<WorkflowGraph> {
+  const candidate: WorkflowGraph = nodesHaveRuntimeBinding(input.nodes) ? { ...input, schemaVersion: '1.2.0' } : input
   const validation = validateWorkflowGraph(candidate)
   return validation.isStructurallyValid
     ? { ok: true, value: candidate, validation }

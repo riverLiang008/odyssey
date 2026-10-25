@@ -42,6 +42,7 @@ import AgentReusableToolPanel from '@/features/workflow-editor/AgentReusableTool
 import AgentVariablesPanel from '@/features/workflow-editor/AgentVariablesPanel.vue'
 import enterFocusModeIcon from '@/assets/enter-focus-mode.svg'
 import WorkflowExitNotice from '@/features/workflow-editor/WorkflowExitNotice.vue'
+import type { KnowledgeSpaceReference } from '@odyssey/schemas'
 import WorkflowDslEditor from '@/features/workflow-editor/WorkflowDslEditor.vue'
 import { useWorkflowDsl } from '@/features/workflow-editor/useWorkflowDsl'
 
@@ -553,7 +554,7 @@ function updateAgentActionTools(toolId: UUID, bind: boolean) {
   if (bind) store.bindWorkflowAgentActionReusableTool(session.value.context, node.id, toolId)
   else store.unbindWorkflowAgentActionReusableTool(session.value.context, node.id, toolId)
 }
-function updateAgentActionKnowledgeSpaces(knowledgeSpaceId: UUID, bind: boolean) {
+function updateAgentActionKnowledgeSpaces(knowledgeSpaceId: KnowledgeSpaceReference, bind: boolean) {
   if (session.value.mode !== 'configure') return
   const node = selectedNode.value
   if (!node) return
@@ -690,7 +691,7 @@ async function setFocusMode(enabled: boolean) {
         <AgentReusableToolPanel v-else-if="reusableToolDraft" :key="`${reusableToolDraft.host}-${reusableToolDraft.tool?.id ?? reusableToolDraft.kind}`" :draft="reusableToolDraft" :variables="document.variables" :knowledge-spaces="toolKnowledgeSpaces" :knowledge-status="toolKnowledgeStatus" @save="store.saveAgentReusableTool" @cancel="store.cancelSystemTool" />
         <AgentVariablesPanel v-else-if="session.resourceBrowser.category === 'agent-variables' && !session.resourceBrowser.collapsed" :variables="document.variables" :read-only="session.mode === 'flow'" :error="variableError" :reference-count="store.variableReferenceCount" @save="store.saveAgentVariable" @delete="store.deleteAgentVariable" @collapse="store.setResourceBrowserCollapsed(true)" />
         <ReusableToolsPanel v-else-if="session.resourceBrowser.category === 'reusable-tools' && !session.resourceBrowser.collapsed" :agent-name="document.agent.name" :tools="document.reusableTools" :read-only="session.mode === 'flow'" :reference-count="store.reusableToolReferenceCount" @collapse="store.setResourceBrowserCollapsed(true)" @edit="store.editLibraryReusableTool" @delete="store.deleteLibraryReusableTool" @browse-system-tools="selectResourceCategory('tools')" @resource-drag-start="activeResourceDrag = $event" @resource-drag-end="activeResourceDrag = null" />
-        <WorkflowDslEditor v-else-if="session.resourceBrowser.category === 'dsl-edit' && !session.resourceBrowser.collapsed" :source="dsl.source.value" :phase="dsl.state.value.type" :diagnostics="dsl.diagnostics.value" :dirty="dsl.dirty.value" :read-only="session.mode === 'flow'" :blocked="persistence.saveStatus === 'saving' || persistence.saveStatus === 'conflict'" :apply-error="dsl.applyError.value" @edit="dsl.edit" @review-replacement="dsl.reviewReplacement" @apply="dsl.apply" @format="dsl.format" @revert="dsl.revert" @close="store.setResourceBrowserCollapsed(true)" />
+        <WorkflowDslEditor v-else-if="session.resourceBrowser.category === 'dsl-edit' && !session.resourceBrowser.collapsed" :source="dsl.source.value" :phase="dsl.state.value.type" :diagnostics="dsl.diagnostics.value" :dirty="dsl.dirty.value" :read-only="session.mode === 'flow'" :blocked="persistence.saveStatus === 'saving' || persistence.saveStatus === 'conflict'" :apply-error="dsl.applyError.value" @edit="dsl.edit" @review-replacement="dsl.reviewReplacement" @apply="dsl.apply" @format="dsl.format" @upgrade="dsl.upgrade" @revert="dsl.revert" @close="store.setResourceBrowserCollapsed(true)" />
         <WorkflowResourceBrowser v-else :system-tools="systemTools" :system-tool-status="systemToolStatus" :collapsed="session.resourceBrowser.collapsed" :category="session.resourceBrowser.category" :query="session.resourceBrowser.query" :page="session.resourceBrowser.page" :page-size="session.resourceBrowser.pageSize" :tools="document.reusableTools" :knowledge-spaces="knowledgeSpaces" :knowledge-status="knowledgeInventory.status" :knowledge-total="knowledgeInventory.total" :read-only="session.mode === 'flow'" @collapse="store.setResourceBrowserCollapsed" @category="selectResourceCategory" @search="searchResources" @page="changeResourcePage" @resource-drag-start="activeResourceDrag = $event" @resource-drag-end="activeResourceDrag = null" @resource-activate="activateResource" />
       </div>
     </div>

@@ -44,21 +44,31 @@ export function useWorkflowDsl(input: {
     }
     return map
   })
-  const fingerprint = computed(() => {
+  const documentFingerprint = computed(() => {
     // Commands may mutate a shallow document; sequence invalidates this projection,
     // while only semantic changes alter its value.
     input.mutationSeq()
     return JSON.stringify({
     agentId: input.document.value?.agent.id,
     document: input.document.value ? { workflow: { ...input.document.value.workflow, nodes: input.document.value.workflow.nodes.map((node) => node.type === 'loop' ? { ...node, config: { ...node.config, body: { graph: node.config.body.graph } } } : node) }, variables: input.document.value.variables, reusableTools: input.document.value.reusableTools } : null,
-    knowledge: input.knowledge.value.map((entry) => [entry.id, entry.name, entry.lifecycleStatus, entry.graphStatus]),
-    status: input.knowledgeStatus.value,
     pattern: input.journey.value?.pattern,
     })
   })
+  const fingerprint = computed(() => JSON.stringify({
+    document: documentFingerprint.value,
+    knowledge: input.knowledge.value.map((entry) => [entry.id, entry.name, entry.lifecycleStatus, entry.graphStatus]),
+    status: input.knowledgeStatus.value,
+  }))
   let baseFingerprint = ''
-  function contextDiagnostic(code: string): DslDiagnostic {
-    return { code, severity: 'info', messageKey: code, span: { start: 0, end: 0 } }
+  let baseDocumentFingerprint = ''
+  let awaitingInitialKnowledge = false
+  function captureContext() {
+    baseFingerprint = fingerprint.value
+    baseDocumentFingerprint = documentFingerprint.value
+    awaitingInitialKnowledge = input.knowledgeStatus.value !== 'ready'
+  }
+  function contextDiagnostic(code: string, messageKey = code): DslDiagnostic {
+    return { code, severity: 'info', messageKey, span: { start: 0, end: 0 } }
   }
   function check(): DslCompileResult | null {
     clearTimeout(timer)
@@ -70,7 +80,7 @@ export function useWorkflowDsl(input: {
     const current = input.document.value
     const journey = input.journey.value
     if (journey && workflowEndRoutingStatus(current.workflow, journey.pattern, current.agent.id)?.synchronized === false) {
-      state.value = { type: 'context-required', diagnostics: [contextDiagnostic('ODSL504')] }
+      state.value = { type: 'context-required', diagnostics: [...parseDsl(source.value).diagnostics, contextDiagnostic('ODSL504', 'ODSL504_EXIT_ROUTING')] }
       return null
     }
     baseMutationSeq.value = input.mutationSeq()
@@ -96,7 +106,7 @@ export function useWorkflowDsl(input: {
     syncedSource.value = printed.source
     baseline.value = printed.baseline
     baseMutationSeq.value = input.mutationSeq()
-    baseFingerprint = fingerprint.value
+    captureContext()
     allowIdentityReplacement = false
     applyError.value = ''
     check()
@@ -124,7 +134,7 @@ export function useWorkflowDsl(input: {
     syncedSource.value = source.value
     allowIdentityReplacement = false
     baseMutationSeq.value = input.mutationSeq()
-    baseFingerprint = fingerprint.value
+    captureContext()
     state.value = { type: 'synced', diagnostics: result.diagnostics }
   }
   function reviewReplacement() {
@@ -141,9 +151,17 @@ export function useWorkflowDsl(input: {
     collect(current)
     baseline.value = { nodeSignatures: baseline.value.nodeSignatures, document: agentWorkflowEditorDocumentSchema.parse(toRaw(current)), symbols: new Map([...baseline.value.symbols].filter(([, id]) => retainedIds.has(id))) }
     baseMutationSeq.value = input.mutationSeq()
-    baseFingerprint = fingerprint.value
+    captureContext()
     allowIdentityReplacement = true
     check()
+  }
+  function upgrade() {
+    const result = check()
+    if (!result || result.status !== 'checked' || !input.document.value) return
+    const document = agentWorkflowEditorDocumentSchema.parse({ ...toRaw(input.document.value), ...result.document, workflow: { ...result.document.workflow, schemaVersion: '1.2.0' } })
+    const printed = printWorkflowDsl(document, input.knowledge.value, exitNames.value)
+    baseline.value = printed.baseline
+    edit(printed.source)
   }
   function format() {
     const result = check()
@@ -161,6 +179,14 @@ export function useWorkflowDsl(input: {
       state.value = { type: 'unavailable', diagnostics: [] }; return
     }
     if (fingerprint.value === baseFingerprint) return
+    // The first complete inventory hydrates a context we could not resolve yet.
+    // Preserve the draft and recheck it; later resource replacements remain stale.
+    if (dirty.value && awaitingInitialKnowledge && input.knowledgeStatus.value === 'ready'
+        && documentFingerprint.value === baseDocumentFingerprint) {
+      captureContext()
+      check()
+      return
+    }
     if (!dirty.value) {
       if (!baseline.value) revert()
       else canvasTimer = setTimeout(() => {
@@ -171,6 +197,6 @@ export function useWorkflowDsl(input: {
     else state.value = { type: 'stale', diagnostics: [contextDiagnostic('ODSL505')] }
   }, { immediate: true })
   onScopeDispose(() => { disposed = true; clearTimeout(timer); clearTimeout(canvasTimer) })
-  return { source, state, dirty, diagnostics, applyError, edit, check, revert, format, apply, reviewReplacement }
+  return { source, state, dirty, diagnostics, applyError, edit, check, revert, format, upgrade, apply, reviewReplacement }
 }
 

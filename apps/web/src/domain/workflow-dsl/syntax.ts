@@ -7,7 +7,7 @@ export interface DslDiagnostic {
   readonly span: DslSpan
 }
 export interface DslToken extends DslSpan {
-  readonly kind: 'word' | 'string' | 'number' | 'symbol'
+  readonly kind: 'word' | 'string' | 'number' | 'symbol' | 'binding'
   readonly text: string
   readonly value: string
 }
@@ -68,6 +68,17 @@ export function parseDsl(source: string): { readonly syntax: readonly DslSyntax[
       const end = source.indexOf('*/', offset + 2)
       if (end < 0) { report('ODSL004', start, source.length); break }
       offset = end + 2; continue
+    }
+    if (character === '$') {
+      const binding = /^\$(agent|task|sys)\.([A-Za-z_][A-Za-z0-9_]*)\$/.exec(source.slice(offset))
+      if (binding) {
+        offset += binding[0].length
+        tokens.push({ kind: 'binding', text: binding[0], value: `${binding[1]}.${binding[2]}`, start, end: offset })
+      } else {
+        while (offset < source.length && !/[;\r\n{}]/.test(source[offset] ?? '')) offset++
+        report('ODSL007', start, offset)
+      }
+      continue
     }
     if (character === '"') {
       const raw = source.startsWith('"""', offset)

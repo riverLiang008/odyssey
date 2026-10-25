@@ -14,6 +14,49 @@ function setup(kind: 'minimal' | 'research' | 'loop' = 'minimal') {
   return { document, printed, context: { inventory: { knowledge, ready: true }, baseline: printed.baseline, createId: () => uuidSchema.parse(crypto.randomUUID()) } }
 }
 describe('Workflow DSL', () => {
+  it('places a new Loop body below its header and inside its container, preserving it on recompile', () => {
+    const { context } = setup()
+    const before = structuredClone(context.baseline.document)
+    const result = compileDsl(`workflow "Loop layout" version "0.1" {
+      variables { boolean user_managed approved = false; }
+      nodes {
+        start; end;
+        loop "New Loop" {
+          max_turns 3; exit_when agent.approved == true;
+          nodes {
+            loop_start; loop_end;
+            agent_action "One" { model "test"; goal "One"; }
+            agent_action "Two" { model "test"; goal "Two"; }
+            agent_action "Three" { model "test"; goal "Three"; }
+          }
+          edges { loop_start -> "One"; "One" -> "Two"; "Two" -> "Three"; "Three" -> loop_end; }
+        }
+      }
+      edges { start -> "New Loop"; "New Loop" -> end; }
+    }`, { ...context, allowIdentityReplacement: true })
+    expect(result.status).toBe('checked')
+    if (result.status !== 'checked') return
+    const loop = result.document.workflow.nodes.find((node) => node.type === 'loop')
+    if (!loop || loop.type !== 'loop') throw new Error('Expected new Loop')
+    const container = result.document.layout.nodePlacements.find((placement) => placement.nodeId === loop.id)
+    expect(container).toBeDefined()
+    const body = loop.config.body.layout.nodePlacements
+    expect(body).toHaveLength(5)
+    for (const placement of body) {
+      expect(placement.x).toBeGreaterThanOrEqual(40)
+      expect(placement.y).toBeGreaterThanOrEqual(100)
+      expect(placement.x + 280).toBeLessThanOrEqual(container?.width ?? 0)
+      expect(placement.y + 100).toBeLessThanOrEqual(container?.height ?? 0)
+    }
+    expect(new Set(body.map((placement) => `${placement.x},${placement.y}`)).size).toBe(body.length)
+    const document = { ...before, ...result.document }
+    const printed = printWorkflowDsl(document, knowledge)
+    const recompiled = compileDsl(printed.source, { ...context, baseline: printed.baseline })
+    expect(recompiled.diagnostics).toEqual([])
+    expect(recompiled.status).toBe('checked')
+    if (recompiled.status === 'checked') expect(recompiled.document).toEqual(result.document)
+    expect(context.baseline.document).toEqual(before)
+  })
   it('prints default boundaries as statements and accepts their existing block forms', () => {
     for (const kind of ['minimal', 'loop'] as const) {
       const { printed, document, context } = setup(kind)

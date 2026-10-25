@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { systemValueSourceSchema } from './systemInputs'
 
 import { jsonValueSchema, uuidSchema } from '../common'
 
@@ -15,6 +16,7 @@ export const variableTemplateSegmentSchema = z.strictObject({
 export const templateSegmentSchema = z.discriminatedUnion('kind', [
   textTemplateSegmentSchema,
   variableTemplateSegmentSchema,
+  systemValueSourceSchema,
 ])
 
 export const literalValueSourceSchema = z.strictObject({
@@ -35,6 +37,7 @@ export const templateValueSourceSchema = z.strictObject({
 export const valueSourceSchema = z.discriminatedUnion('kind', [
   literalValueSourceSchema,
   variableValueSourceSchema,
+  systemValueSourceSchema,
   templateValueSourceSchema,
 ])
 

@@ -13,10 +13,10 @@ describe('ToolValueInput', () => {
     expect(trigger.attributes('aria-expanded')).toBe('false')
     await trigger.trigger('click')
     expect(trigger.attributes('aria-expanded')).toBe('true')
-    expect(wrapper.findAll('[role="option"]')).toHaveLength(3)
-    expect(wrapper.findAll('[role="option"]')[2]?.attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('[role="option"]')).toHaveLength(4)
+    expect(wrapper.findAll('[role="option"]').find(option => option.text() === 'Variable reference')?.attributes('disabled')).toBeDefined()
 
-    await wrapper.findAll('[role="option"]')[1]!.trigger('click')
+    await wrapper.findAll('[role="option"]').find(option => option.text() === 'Static JSON')?.trigger('click')
     expect(wrapper.get('.tool-value-mode-trigger').text()).toContain('Static JSON')
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([{ kind: 'literal', value: null }])
   })

@@ -17,12 +17,10 @@ class SequentialIds:
         return result
 
 
-def test_minimum_workflow_is_start_to_end_with_separate_layout() -> None:
+def test_minimum_workflow_has_disconnected_boundaries_with_separate_layout() -> None:
     graph, layout = create_minimum_workflow(SequentialIds())
     assert [node.type for node in graph.nodes] == ["start", "end"]
-    assert len(graph.edges) == 1
-    assert graph.edges[0].source_node_id == graph.nodes[0].id
-    assert graph.edges[0].target_node_id == graph.nodes[1].id
+    assert graph.edges == []
     assert {placement.node_id for placement in layout.node_placements} == {
         node.id for node in graph.nodes
     }
@@ -53,9 +51,7 @@ def test_node_placement_accepts_optional_compound_node_size() -> None:
     ("field", "value"),
     [("width", 419), ("width", 1601), ("height", 299), ("height", 1201)],
 )
-def test_node_placement_rejects_out_of_range_compound_node_size(
-    field: str, value: int
-) -> None:
+def test_node_placement_rejects_out_of_range_compound_node_size(field: str, value: int) -> None:
     payload = {
         "nodeId": "00000000-0000-4000-8000-000000000100",
         "x": 40,

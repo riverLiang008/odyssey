@@ -4,7 +4,7 @@ import BranchConfigPanel from './BranchConfigPanel.vue'
 import ToolSelect, { type ToolSelectOption } from './ToolSelect.vue'
 import type { BranchEditIntent } from '@/domain/workflow/branchDrafts'
 import { computed, ref, watch } from 'vue'
-import { jsonValueSchema, type AgentReusableTool, type AgentVariable, type JsonValue, type KnowledgeSpaceSummary, type LoopBodyNode, type LoopNode, type UUID, type WorkflowEdge, type WorkflowNode } from '@odyssey/schemas'
+import { jsonValueSchema, type AgentReusableTool, type AgentVariable, type JsonValue, type KnowledgeSpaceReference, type KnowledgeSpaceSummary, type LoopBodyNode, type LoopNode, type UUID, type WorkflowEdge, type WorkflowNode } from '@odyssey/schemas'
 import {
   evaluateWorkflowResourceDrop,
   parseWorkflowResourceDragPayload,
@@ -12,9 +12,10 @@ import {
   WORKFLOW_RESOURCE_DRAG_MIME,
   type WorkflowResourceDropErrorCode,
 } from '@/canvas/workflow'
+import { isKnowledgeSpaceReferenceable } from '@/domain/knowledge'
 
 const props = defineProps<{ branchDraftCache?: Map<UUID, BranchPanelSession>; branchEdges?: WorkflowEdge[]; branchTargetNames?: Readonly<Record<string, string>>; branchBlocked?: boolean; branchError?: string | null; branchCreating?: boolean; node: WorkflowNode | LoopBodyNode | null; edge: WorkflowEdge | null; tools?: AgentReusableTool[]; variables?: AgentVariable[]; knowledgeSpaces?: KnowledgeSpaceSummary[]; knowledgeStatus?: 'idle' | 'loading' | 'ready' | 'error'; loopExpanded?: boolean; readOnly?: boolean }>()
-const emit = defineEmits<{ branchDirtyChange: []; applyBranch: [intent: BranchEditIntent]; close: []; openLoop: [loopNodeId: string]; updateLoop: [details: Pick<LoopNode, 'name'> & Pick<LoopNode['config'], 'maxTurns' | 'exitCondition'>]; bindTool: [toolId: UUID]; unbindTool: [toolId: UUID]; bindKnowledgeSpace: [knowledgeSpaceId: UUID]; unbindKnowledgeSpace: [knowledgeSpaceId: UUID]; rejectResource: [reason: WorkflowResourceDropErrorCode] }>()
+const emit = defineEmits<{ branchDirtyChange: []; applyBranch: [intent: BranchEditIntent]; close: []; openLoop: [loopNodeId: string]; updateLoop: [details: Pick<LoopNode, 'name'> & Pick<LoopNode['config'], 'maxTurns' | 'exitCondition'>]; bindTool: [toolId: UUID]; unbindTool: [toolId: UUID]; bindKnowledgeSpace: [knowledgeSpaceId: KnowledgeSpaceReference]; unbindKnowledgeSpace: [knowledgeSpaceId: KnowledgeSpaceReference]; rejectResource: [reason: WorkflowResourceDropErrorCode] }>()
 const loopName = ref('')
 const loopMaxTurns = ref('1')
 const loopVariableId = ref('')
@@ -90,7 +91,6 @@ function submitLoop() {
 }
 function toolLabel(toolId: UUID) { return props.tools?.find((tool) => tool.id === toolId)?.name ?? 'Unavailable Tool' }
 function knowledgeLabel(id: UUID) { return props.knowledgeSpaces?.find((space) => space.id === id)?.name ?? 'Unavailable Knowledge Space' }
-function isKnowledgeSelectable(space: KnowledgeSpaceSummary) { return ['ready', 'syncing'].includes(space.lifecycleStatus) && ['healthy', 'needs_review'].includes(space.graphStatus) }
 function dropTool(event: globalThis.DragEvent) {
   event.preventDefault()
   event.stopPropagation()
@@ -111,7 +111,7 @@ function dropKnowledgeSpace(event: globalThis.DragEvent) {
   if (props.readOnly) return
   const payload = parseWorkflowResourceDragPayload(event.dataTransfer?.getData(WORKFLOW_RESOURCE_DRAG_MIME) ?? '')
   if (!payload || props.node?.type !== 'agent_action') { emit('rejectResource', 'INVALID_RESOURCE_TARGET'); return }
-  const selectableIds = new Set(props.knowledgeSpaces?.filter(isKnowledgeSelectable).map((space) => space.id) ?? [])
+  const selectableIds = new Set(props.knowledgeSpaces?.filter(isKnowledgeSpaceReferenceable).map((space) => space.id) ?? [])
   const evaluation = evaluateWorkflowResourceDrop(payload, { kind: 'agent-action-knowledge-spaces', nodeId: props.node.id }, { node: props.node, availableReusableToolIds: new Set(), availableKnowledgeSpaceIds: selectableIds })
   if (evaluation.status === 'valid' && evaluation.action.type === 'bind-knowledge-space') emit('bindKnowledgeSpace', evaluation.action.knowledgeSpaceId)
   else if (evaluation.status !== 'valid') emit('rejectResource', evaluation.reason)
@@ -124,7 +124,7 @@ function startToolDrag(event: globalThis.DragEvent, toolId: UUID) {
 }
 function startKnowledgeDrag(event: globalThis.DragEvent, space: KnowledgeSpaceSummary) {
   if (props.readOnly) return
-  if (!event.dataTransfer || !isKnowledgeSelectable(space)) return
+  if (!event.dataTransfer || !isKnowledgeSpaceReferenceable(space)) return
   event.dataTransfer.effectAllowed = 'copy'
   event.dataTransfer.setData(WORKFLOW_RESOURCE_DRAG_MIME, serializeWorkflowResourceDragPayload(space.id, 'knowledge-space'))
 }
@@ -157,12 +157,13 @@ function startKnowledgeDrag(event: globalThis.DragEvent, space: KnowledgeSpaceSu
         <div class="resource-drop-zone" @dragover.prevent.stop @drop="dropTool">Drop a reusable Tool here</div>
         <ul v-if="node.config.reusableToolIds.length"><li v-for="toolId in node.config.reusableToolIds" :key="toolId"><span>{{ toolLabel(toolId) }}</span><button type="button" :disabled="readOnly" :aria-label="`Remove ${toolLabel(toolId)}`" @click="$emit('unbindTool', toolId)">×</button></li></ul>
         <h3>Knowledge Spaces</h3>
+        <div class="compact-resource-browser"><button type="button" :disabled="readOnly" @click="node.config.knowledgeSpaceIds.some(reference => typeof reference !== 'string') ? emit('unbindKnowledgeSpace', { kind: 'system_knowledge_space', key: 'target_knowledge_space' }) : emit('bindKnowledgeSpace', { kind: 'system_knowledge_space', key: 'target_knowledge_space' })">{{ node.config.knowledgeSpaceIds.some(reference => typeof reference !== 'string') ? 'Remove event Knowledge Space' : 'Use event Knowledge Space' }}<small>Resolved from the triggering document event</small></button></div>
         <p v-if="knowledgeStatus === 'loading'" class="inspector-note">Loading Knowledge Spaces…</p>
         <p v-else-if="knowledgeStatus === 'error'" class="inspector-note">Knowledge Spaces could not be loaded.</p>
         <p v-else-if="!knowledgeSpaces?.length" class="inspector-note">No Knowledge Spaces are available in this Workspace.</p>
-        <div v-else class="compact-resource-browser"><button v-for="space in knowledgeSpaces" :key="space.id" type="button" :draggable="!readOnly && isKnowledgeSelectable(space)" :disabled="readOnly || !isKnowledgeSelectable(space) || node.config.knowledgeSpaceIds.includes(space.id)" @dragstart="startKnowledgeDrag($event, space)" @click="$emit('bindKnowledgeSpace', space.id)">{{ space.name }}<small>{{ node.config.knowledgeSpaceIds.includes(space.id) ? 'Added' : readOnly ? 'Available in Configure mode' : isKnowledgeSelectable(space) ? 'Drag or click to add' : `${space.lifecycleStatus} · ${space.graphStatus}` }}</small></button></div>
+        <div v-else class="compact-resource-browser"><button v-for="space in knowledgeSpaces" :key="space.id" type="button" :draggable="!readOnly && isKnowledgeSpaceReferenceable(space)" :disabled="readOnly || !isKnowledgeSpaceReferenceable(space) || node.config.knowledgeSpaceIds.includes(space.id)" @dragstart="startKnowledgeDrag($event, space)" @click="$emit('bindKnowledgeSpace', space.id)">{{ space.name }}<small>{{ node.config.knowledgeSpaceIds.includes(space.id) ? 'Added' : readOnly ? 'Available in Configure mode' : isKnowledgeSpaceReferenceable(space) ? 'Drag or click to add' : `${space.lifecycleStatus} · ${space.graphStatus}` }}</small></button></div>
         <div class="resource-drop-zone" @dragover.prevent.stop @drop="dropKnowledgeSpace">Drop a Knowledge Space here</div>
-        <ul v-if="node.config.knowledgeSpaceIds.length"><li v-for="spaceId in node.config.knowledgeSpaceIds" :key="spaceId"><span>{{ knowledgeLabel(spaceId) }}</span><button type="button" :disabled="readOnly" :aria-label="`Remove ${knowledgeLabel(spaceId)}`" @click="$emit('unbindKnowledgeSpace', spaceId)">×</button></li></ul>
+        <ul v-if="node.config.knowledgeSpaceIds.length"><li v-for="spaceId in node.config.knowledgeSpaceIds.filter((id) => typeof id === 'string')" :key="spaceId"><span>{{ knowledgeLabel(spaceId) }}</span><button type="button" :disabled="readOnly" :aria-label="`Remove ${knowledgeLabel(spaceId)}`" @click="$emit('unbindKnowledgeSpace', spaceId)">×</button></li></ul>
       </section>
     </template>
     <template v-else-if="edge">

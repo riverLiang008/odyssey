@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import AppSelect from '@/components/AppSelect.vue'
-import type { AgentVariable } from '@odyssey/schemas'
+import { systemValueKeySchema, type AgentVariable } from '@odyssey/schemas'
 import type { BranchOperandDraft } from '@/domain/workflow/branchDrafts'
 const props = defineProps<{ modelValue: BranchOperandDraft; variables: readonly AgentVariable[]; label: string; disabled?: boolean; search?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: BranchOperandDraft] }>()
 const kind = computed({ get: () => props.modelValue.kind, set: (kind: string) => {
+  if (kind === 'system') emit('update:modelValue', { kind: 'system', key: 'document_id' })
   if (kind === 'variable') emit('update:modelValue', { kind: 'variable', variableId: '' })
   if (kind === 'literal') emit('update:modelValue', { kind: 'literal', dataType: 'string', raw: '' })
 } })
@@ -13,6 +14,7 @@ const query = computed({ get: () => props.modelValue.kind === 'variable' ? props
 const options = computed(() => props.variables.filter(v => v.id === query.value || `${v.displayName} ${v.key} ${v.dataType}`.toLowerCase().includes((props.search ?? '').toLowerCase())))
 const missing = computed(() => props.modelValue.kind === 'variable' && props.modelValue.variableId && !props.variables.some(v => v.id === query.value))
 const sourceOptions = computed(() => [
+  { value: 'system', label: 'System input' },
   { value: 'variable', label: 'Variable' },
   { value: 'literal', label: 'Value' },
   ...(props.modelValue.kind === 'template' ? [{ value: 'template', label: 'Existing template' }] : []),
@@ -23,6 +25,8 @@ const variableOptions = computed(() => [
   ...options.value.map(v => ({ value: v.id, label: `${v.displayName} · ${v.dataType}` })),
 ])
 const typeOptions = ['string', 'number', 'boolean', 'json'].map(value => ({ value, label: value === 'json' ? 'JSON' : value[0]?.toUpperCase() + value.slice(1) }))
+const systemOptions = systemValueKeySchema.options.map(key => ({ value: key, label: `sys.${key}` }))
+function updateSystem(key: string) { const parsed = systemValueKeySchema.safeParse(key); if (parsed.success) emit('update:modelValue', { kind: 'system', key: parsed.data }) }
 function updateType(type: string) {
   if (props.modelValue.kind === 'literal' && (type === 'string' || type === 'number' || type === 'boolean' || type === 'json')) {
     emit('update:modelValue', { ...props.modelValue, dataType: type })
@@ -32,7 +36,8 @@ function updateType(type: string) {
 <template>
   <fieldset class="branch-operand" :disabled="disabled">
     <label><span>Source</span><AppSelect v-model="kind" :options="sourceOptions" :control-label="`${label} source`" /></label>
-    <template v-if="modelValue.kind === 'variable'">
+    <label v-if="modelValue.kind === 'system'"><span>System input</span><AppSelect :model-value="modelValue.key" :options="systemOptions" :control-label="label" @update:model-value="updateSystem" /></label>
+    <template v-else-if="modelValue.kind === 'variable'">
       <label><span>Variable</span><AppSelect v-model="query" :options="variableOptions" :control-label="label" :aria-invalid="Boolean(missing)" /></label>
       <small v-if="missing" class="branch-error">This variable is unavailable. Choose another variable.</small>
     </template>

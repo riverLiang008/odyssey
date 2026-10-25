@@ -1,5 +1,7 @@
 # DSL Edit 面板双向同步实施计划
 
+> 2026-10-25 已确认的下一版增量：[直接变量绑定设计](./runtime-variable-binding-design.md)。采用 `$namespace.key$` 使用位置直接绑定，不新增 bindings 分区；资源类型与授权受约束。此设计覆盖下文固定资源/裸引用对下一版的限制，但尚未实现，现有 V0.1 示例继续表示当前 parser。
+
 > Status: First integration implemented — [首版集成报告与剩余事项](./dsl-edit-first-integration-report.md)；尚非全部 Gate 完成  
 > Date: 2026-10-22  
 > Primary outcome: 用户在现有 Agent Workflow 页面右侧 DSL Edit 面板与 Canvas 之间双向编辑同一配置  
@@ -154,3 +156,5 @@ repositories / shared schemas / API
 本计划完成后先执行 Batch A，再进入 B/C；不把“先实现 Parser”解释为改变产品范围。实施中发现合同变化更新矩阵和计划，不退化为仅文件导入导出的交付。
 
 当前节点语法：`类型 "名称" { ... }`，连线按双引号名称引用；不使用节点 alias 或块内 name。同图名称规范化后唯一，Loop body 独立；内部 UUID 继续由会话保留。详见语言规范的“节点名称语法决策”。
+
+实施入口：[直接变量绑定实施计划与 TODO](./runtime-variable-binding-implementation-plan.md)，包含合同 Gate、编译算法、文件范围、持久化与 Canvas 阶段及验收矩阵。当前仅完成计划，未开始实现。

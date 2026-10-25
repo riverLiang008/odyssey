@@ -17,9 +17,26 @@ describe('DSL application transaction', () => {
     store.setResourceBrowserCategory('dsl-edit')
     return { store, document, repository }
   }
+  it('saves and reloads unresolved system bindings through the editor transaction', async () => {
+    const { store, document, repository } = await setup()
+    const modern = structuredClone(document)
+    modern.workflow.schemaVersion = '1.2.0'
+    const action = modern.workflow.nodes.find(node => node.type === 'agent_action')
+    if (!action || action.type !== 'agent_action') throw new Error('Missing action')
+    action.config.goal = { kind: 'system', key: 'document_id' }
+    action.config.knowledgeSpaceIds = [{ kind: 'system_knowledge_space', key: 'target_knowledge_space' }]
+    const printed = printWorkflowDsl(modern, [])
+    const compiled = compileDsl(printed.source, { baseline: printed.baseline, inventory: { knowledge: [], ready: true }, createId: () => uuidSchema.parse(crypto.randomUUID()) })
+    // The fixture owns a fixed retrieval Tool, which must still resolve independently.
+    expect(compiled.status).not.toBe('checked')
+    expect(store.applyCompiledWorkflow({ workflow: modern.workflow, layout: modern.layout, variables: modern.variables, reusableTools: modern.reusableTools }, store.persistence.mutationSeq)).toEqual({ ok: true })
+    await store.save()
+    await store.load(document.agent.journeyId, document.agent.id, repository)
+    expect(store.document?.workflow).toEqual(modern.workflow)
+  })
   it('commits once, retains the DSL panel/IDs and persists through save/reload', async () => {
     const { store, document, repository } = await setup()
-    const knowledge = [{ id: document.reusableTools[0].kind === 'knowledge_retrieval' ? document.reusableTools[0].configuration.knowledgeSpaceId : uuidSchema.parse(crypto.randomUUID()), name: 'Docs' }]
+    const knowledge = [{ id: document.reusableTools[0].kind === 'knowledge_retrieval' ? document.reusableTools[0].configuration.knowledgeSpaceId : uuidSchema.parse(crypto.randomUUID()), name: 'Docs' }].filter((entry): entry is { id: ReturnType<typeof uuidSchema.parse>; name: string } => typeof entry.id === 'string')
     const printed = printWorkflowDsl(document, knowledge)
     const result = compileDsl(printed.source.replace('Research the requested topic.', 'Updated goal.'), { baseline: printed.baseline, inventory: { knowledge, ready: true }, createId: () => uuidSchema.parse(crypto.randomUUID()) })
     expect(result.status).toBe('checked')

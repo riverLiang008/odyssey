@@ -160,3 +160,22 @@ T002–T013 的 Tool/Branch/布局场景须先构建字段齐全、连线结构�
 边界简写验收：默认 start/end/loop_start/loop_end 输出分号；简写与旧空块编译等价；自定义名称和多个 End 不折叠；重复声明、名称加分号、跨作用域边界与多 End 的 end; 均阻断。
 
 Branch 名称验收：Case 仅用字符串名称声明，连线 ."名称"；重复 NFC(trim(name)) 报 ODSL201，UI 阻断 Apply 并在 Case 内提示；旧 alias 写法拒绝；."default" 与 .default 独立解析；改名保留唯一可识别 Case 的 UUID、conditions 和出边；不同 Branch 可重名。
+
+## 下一版直接绑定验收（2026-10-25，待实现）
+
+| 场景 | 预期 |
+| --- | --- |
+| knowledge 混合固定 Playbook 和 $sys.target_knowledge_space$ | 触发输入合同已知时通过类型检查 |
+| 工具 knowledgeSpaceId 引用同一系统 key | 与 Agent Knowledge 解析到同一次运行的同一 KS |
+| $agent.question$ 用作 query | 保留普通值类型，非字符串拼接 |
+| "$sys.target_knowledge_space$" | 字面名称/文本，不自动展开 |
+| string 变量作为 knowledgeSpaceId | 类型错误，即使值看起来像有效 ID |
+| 缺少闭合 $、未知 namespace/key | 源位置诊断；不生成可应用候选 |
+| 向 $sys.target_knowledge_space$ 写入 | 拒绝，只读系统输入 |
+| 事件目录已知但没有运行实例 | 不因未知具体 KS 拒绝合法动态配置 |
+| 运行事件文档不属于 KS 或权限不足 | 运行拒绝，不回退其他 KS |
+| Canvas/JSON/DSL 往返动态资源 | 保留系统引用，不能冻结为样例 UUID/名称 |
+| 相同 Workflow 连续处理 KS A、KS B | 配置不变，各次运行绑定独立，不沿用上次目标 |
+| ${agent.question} 在字符串中 | 保持文本插值；不与整值绑定混淆 |
+
+这些是下一版合同验收，不是当前 parser 已通过的测试。版本/迁移与完整规则见 [直接变量绑定设计](./runtime-variable-binding-design.md)。

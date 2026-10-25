@@ -1,29 +1,32 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { jsonValueSchema, type ValueSource } from '@odyssey/schemas'
+import { systemValueKeySchema, systemInputs, jsonValueSchema, type ValueSource } from '@odyssey/schemas'
 import type { ToolVariableOption } from '@/domain/workflow/systemToolCommands'
 const props = withDefaults(defineProps<{ modelValue: ValueSource; variables: readonly ToolVariableOption[]; label: string; compact?: boolean }>(), { compact: false })
 const emit = defineEmits<{ 'update:modelValue': [value: ValueSource] }>()
-type ValueInputMode = 'text' | 'json' | 'variable'
+type ValueInputMode = 'text' | 'json' | 'variable' | 'system'
 const mode = ref<ValueInputMode>('text')
 const text = ref('')
 const modeMenuOpen = ref(false)
 const modeSelectRoot = ref<globalThis.HTMLDivElement | null>(null)
 const modeOptions = computed(() => [
+  { value: 'system' as const, label: 'System input', disabled: false },
   { value: 'text' as const, label: 'Text + variables', disabled: false },
   { value: 'json' as const, label: 'Static JSON', disabled: false },
   { value: 'variable' as const, label: 'Variable reference', disabled: props.variables.length === 0 },
 ])
 const modeLabel = computed(() => modeOptions.value.find((option) => option.value === mode.value)?.label ?? 'Text + variables')
 watch(() => props.modelValue, (value) => {
-  if (value.kind === 'variable') { mode.value = 'variable'; text.value = value.variableId }
-  else if (value.kind === 'template') { mode.value = 'text'; text.value = value.segments.map((s) => s.kind === 'text' ? s.text : `{{${props.variables.find((v) => v.id === s.variableId)?.name ?? s.variableId}}}`).join('') }
+  if (value.kind === 'system') { mode.value = 'system'; text.value = value.key }
+  else if (value.kind === 'variable') { mode.value = 'variable'; text.value = value.variableId }
+  else if (value.kind === 'template') { mode.value = 'text'; text.value = value.segments.map((s) => s.kind === 'text' ? s.text : s.kind === 'system' ? `{{sys.${s.key}}}` : `{{${props.variables.find((v) => v.id === s.variableId)?.name ?? s.variableId}}}`).join('') }
   else { mode.value = typeof value.value === 'string' ? 'text' : 'json'; text.value = typeof value.value === 'string' ? value.value : JSON.stringify(value.value) }
 }, { immediate: true })
 function update(event?: globalThis.Event) {
   const input = event?.target
   const control = input instanceof globalThis.HTMLTextAreaElement || input instanceof globalThis.HTMLInputElement ? input : null
   control?.setCustomValidity('')
+  if (mode.value === 'system') { const key = systemValueKeySchema.safeParse(text.value); if (key.success) emit('update:modelValue', { kind: 'system', key: key.data }); return }
   if (mode.value === 'variable') {
     const variable = props.variables.find((v) => v.id === text.value)
     if (variable) emit('update:modelValue', { kind: 'variable', variableId: variable.id })
@@ -37,6 +40,11 @@ function update(event?: globalThis.Event) {
   const segments: Extract<ValueSource, { kind: 'template' }>['segments'] = []
   let offset = 0
   for (const match of text.value.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)) {
+    const system = systemValueKeySchema.safeParse(match[1]?.startsWith('sys.') ? match[1].slice(4) : undefined)
+    if (system.success) {
+      if (match.index > offset) segments.push({ kind: 'text', text: text.value.slice(offset, match.index) })
+      segments.push({ kind: 'system', key: system.data }); offset = match.index + match[0].length; continue
+    }
     const variable = props.variables.find((v) => v.name === match[1])
     if (!variable) { control?.setCustomValidity('Choose a variable in this Task scope.'); return }
     if (match.index > offset) segments.push({ kind: 'text', text: text.value.slice(offset, match.index) })
@@ -50,7 +58,8 @@ function update(event?: globalThis.Event) {
   }
 }
 function changeMode() {
-  if (mode.value === 'variable') text.value = props.variables[0]?.id ?? ''
+  if (mode.value === 'system') text.value = 'change_event'
+  else if (mode.value === 'variable') text.value = props.variables[0]?.id ?? ''
   else text.value = mode.value === 'json' ? 'null' : ''
   update()
 }
@@ -82,9 +91,10 @@ function closeModeMenuOnFocusOut(event: globalThis.FocusEvent) {
         </div>
       </div>
     </label>
+    <select v-if="mode === 'system'" v-model="text" :aria-label="`${label} system input`" @change="update()"><option v-for="input in systemInputs.filter(i => i.type !== 'knowledge_space')" :key="input.key" :value="input.key">sys.{{ input.key }}</option></select>
     <select v-if="mode === 'variable'" v-model="text" :aria-label="label" required @change="update()"><option v-for="variable in variables" :key="variable.id" :value="variable.id">{{ variable.name }}</option></select>
     <input v-if="compact && mode === 'text'" v-model="text" :aria-label="label" type="text" @input="update($event)" />
-    <textarea v-else-if="mode !== 'variable'" v-model="text" :aria-label="label" rows="3" @input="update($event)" />
+    <textarea v-else-if="mode !== 'variable' && mode !== 'system'" v-model="text" :aria-label="label" rows="3" @input="update($event)" />
     <small v-if="mode === 'text'">Use <code v-pre>{{agent.key}}</code> or <code v-pre>{{task.key}}</code> for variables listed below.</small>
   </div>
 </template>

@@ -80,8 +80,9 @@ const subtitle = computed(() => node.value.type === 'agent_action'
 function valueSourceSummary(): string {
   if (node.value.type !== 'agent_action') return ''
   const goal = node.value.config.goal
+  if (goal.kind === 'system') return `System · ${goal.key}`
   if (goal.kind === 'variable') return `Variable · ${goal.variableId.slice(0, 8)}`
-  if (goal.kind === 'template') return goal.segments.map((segment) => segment.kind === 'text' ? segment.text : `{${segment.variableId.slice(0, 8)}}`).join('')
+  if (goal.kind === 'template') return goal.segments.map((segment) => segment.kind === 'text' ? segment.text : segment.kind === 'system' ? `sys.${segment.key}` : `{${segment.variableId.slice(0, 8)}}`).join('')
   if (typeof goal.value === 'string') return goal.value
   return JSON.stringify(goal.value)
 }
@@ -330,7 +331,8 @@ function stepReorderClass(stepId: UUID): string {
         <div class="node-config-resource is-knowledge-spaces nodrag nopan" :class="targetStateClass('agent-action-knowledge-spaces')" role="group" data-no-node-inspector="true" data-workflow-resource-drop-target="agent-action-knowledge-spaces" :data-workflow-node-id="node.id" :aria-label="`Drop a Knowledge Space into ${node.name}`" @click.stop @pointerdown.stop @dragenter="resourceEnter($event, 'agent-action-knowledge-spaces')" @dragover="resourceEnter($event, 'agent-action-knowledge-spaces')" @dragleave="resourceLeave($event, 'agent-action-knowledge-spaces')" @drop="resourceDrop($event, 'agent-action-knowledge-spaces')">
           <dt>Knowledge Spaces</dt>
           <dd class="toolbox-content">
-            <span v-for="knowledgeSpaceId in node.config.knowledgeSpaceIds" :key="knowledgeSpaceId" class="tool-chip knowledge-space-chip nodrag nopan"><span :title="boundKnowledgeSpaceName(knowledgeSpaceId)">{{ boundKnowledgeSpaceName(knowledgeSpaceId) }}</span><button type="button" :aria-label="`Remove ${boundKnowledgeSpaceName(knowledgeSpaceId)}`" @click.stop="emit('unbindKnowledgeSpace', node.id, knowledgeSpaceId)">×</button></span>
+            <span v-if="node.config.knowledgeSpaceIds.some(reference => typeof reference !== 'string')" class="tool-chip knowledge-space-chip nodrag nopan" title="Resolved from the triggering event">Event Knowledge Space</span>
+            <span v-for="knowledgeSpaceId in node.config.knowledgeSpaceIds.filter((id) => typeof id === 'string')" :key="knowledgeSpaceId" class="tool-chip knowledge-space-chip nodrag nopan"><span :title="boundKnowledgeSpaceName(knowledgeSpaceId)">{{ boundKnowledgeSpaceName(knowledgeSpaceId) }}</span><button type="button" :aria-label="`Remove ${boundKnowledgeSpaceName(knowledgeSpaceId)}`" @click.stop="emit('unbindKnowledgeSpace', node.id, knowledgeSpaceId)">×</button></span>
             <span class="toolbox-drop-hint">+ Drop Knowledge Space</span>
             <span v-if="dropStatusText('agent-action-knowledge-spaces')" class="resource-drop-status" role="status">{{ dropStatusText('agent-action-knowledge-spaces') }}</span>
           </dd>

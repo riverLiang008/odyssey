@@ -1,5 +1,7 @@
 # Odyssey DSL V0.1 语法与语义检查规范
 
+> 2026-10-25 已确认的下一版增量：[直接变量绑定设计](./runtime-variable-binding-design.md)。采用 `$namespace.key$` 使用位置直接绑定，不新增 bindings 分区；资源类型与授权受约束。此设计覆盖下文固定资源/裸引用对下一版的限制，但尚未实现，现有 V0.1 示例继续表示当前 parser。
+
 > Status: Draft — 待评审；不是检查器实现完成报告  
 > Date: 2026-10-22  
 > Depends on: [语言规范](./odyssey-workflow-dsl-v0.1-spec.md)、[RFC](./agent-workflow-dsl-v1-rfc-implementation-plan.md)  
@@ -283,3 +285,17 @@ Apply 前针对最新 source 与 context 重新编译/校验，走一次原子�
 节点名称采用 STRING；同图 NFC(trim(name)) 唯一，重复报 ODSL201，空名称报 ODSL508。旧节点 alias、块内 name 或普通节点裸引用报 ODSL102。不同 Loop body 可重名，禁止跨图引用。未改内容的唯一改名保留 UUID；歧义时 ODSL507，原 Canvas 不变。
 
 边界分号简写（2026-10-23）：start; / end; 仅限主图，loop_start; / loop_end; 仅限 Loop body。简写不接受名称或配置参数；重复边界报 ODSL103；多 End 使用 end; 报错，不创建或删除 Pattern 出口。默认名称简写往返须保持 UUID、布局及既有 End binding。
+
+## Variable capability validation (2026-10-25)
+
+The only supported declaration types are string, number, boolean, and json, matching variableDataTypeSchema. UI Object / JSON maps to json. Reject Json/JSON/object/array/custom type declarations (ODSL303 in the current compiler); check Agent and Task-local declarations identically. Never infer declaration types from API payload schemas or silently convert objects into string variables. Reject non-null defaults incompatible with the declared type (ODSL301). Member access and array indexing are not variable-reference syntax; extract values through explicit tools before Branch comparisons. See the language specification’s Variable type capability constraint.
+
+## 下一版绑定检查增量（已确认，待实现）
+
+检查完整 `$namespace.key$` 边界、已注册系统输入、引用类型与字段角色；Knowledge 列表与 knowledgeSpaceId 只接受正确 KS 引用或固定名称，不接受普通字符串变量冒充资源。写入 sys、未知 key、越域 task 引用和资源类型错位均拒绝。已知事件合同提供的动态 KS 在编辑期没有具体实例不构成错误；事件合同/输入目录缺失须区分 error 与 context-required。运行时继续校验真实身份、归属、授权和版本。错误码在实现时统一分配，不声称现有检查器已支持。完整合同见[直接变量绑定设计](./runtime-variable-binding-design.md)。
+
+## Runtime binding implementation amendment — DSL 0.2
+
+The accepted [runtime binding implementation contract](./runtime-variable-binding-design.md#10-implementation-contract-2026-10-25) defines the executable 0.2 extension and canonical graph 1.2.0. Old 0.1 syntax remains supported. Whole-value references in 0.2 must use `$agent.key$`, `$task.key$` or registered `$sys.key$`; `${...}` inside strings remains interpolation. `ODSL007` reports malformed bindings, `ODSL008` reports old bare reference syntax in 0.2, and `ODSL206` reports unknown/wrong-role system keys. Read-only system destinations use `ODSL302`. System keys are typed separately from ordinary variables, which retain string/number/boolean/json.
+
+Knowledge lists and both retrieval configuration surfaces accept `$sys.target_knowledge_space$`. Known system bindings do not require a runtime event instance during validation or persistence. Resource and primitive roles cannot be interchanged. Upgrade uses compile/print to preserve semantic identity and layout while normalizing source formatting/comments; Apply remains explicit.

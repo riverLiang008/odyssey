@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "key": "document-curator-playbook",
+  "documents": [
+    {
+      "key": "metadata-guidelines",
+      "path": "metadata-guidelines.md",
+      "summary": "Proposed rules for evidence-grounded Summary, Guide, and tag annotations on a changed document, including source revisions, existing-tag reuse, provenance, and protection of source text.",
+      "guide": "Use when proposing metadata for an added or updated document. Read Review & Change Policy before applying any proposal; metadata generation does not establish indexing readiness.",
+      "tags": [
+        "metadata-quality"
+      ],
+      "status": "indexed"
+    },
+    {
+      "key": "relationship-guidelines",
+      "path": "relationship-guidelines.md",
+      "summary": "Proposed rules for seven supported relationship kinds, direction, explicit-reference evidence, local candidate discovery, duplicate prevention, and review of conflicts or removals.",
+      "guide": "Use when selecting relationship kinds and resolving source and target documents. An explicit reference may qualify for automatic addition only after every change-policy gate passes.",
+      "tags": [
+        "graph-relationships"
+      ],
+      "status": "indexed"
+    },
+    {
+      "key": "review-and-change-policy",
+      "path": "review-and-change-policy.md",
+      "summary": "Proposed local-change policy defining automatic application, human review, blocked or stale outcomes, protected data, atomic writes, revision checks, idempotency, and producer provenance.",
+      "guide": "Read before routing or applying any Curator proposal. If any operation needs review, preserve the whole pending change set for review; approval cannot bypass technical validation or grant wider scope.",
+      "tags": [
+        "change-governance"
+      ],
+      "status": "indexed"
+    }
+  ],
+  "tags": [
+    {
+      "key": "metadata-quality",
+      "name": "Metadata Quality",
+      "colorToken": "blue"
+    },
+    {
+      "key": "graph-relationships",
+      "name": "Graph Relationships",
+      "colorToken": "green"
+    },
+    {
+      "key": "change-governance",
+      "name": "Change Governance",
+      "colorToken": "purple"
+    }
+  ],
+  "relations": [
+    {
+      "key": "metadata-guidelines-references-relationship-guidelines",
+      "source": "metadata-guidelines",
+      "target": "relationship-guidelines",
+      "kind": "references",
+      "status": "active",
+      "description": "Metadata Guidelines explicitly links Relationship Guidelines as a companion policy."
+    },
+    {
+      "key": "metadata-guidelines-references-review-and-change-policy",
+      "source": "metadata-guidelines",
+      "target": "review-and-change-policy",
+      "kind": "references",
+      "status": "active",
+      "description": "Metadata Guidelines explicitly delegates application eligibility to Review & Change Policy."
+    },
+    {
+      "key": "relationship-guidelines-references-metadata-guidelines",
+      "source": "relationship-guidelines",
+      "target": "metadata-guidelines",
+      "kind": "references",
+      "status": "active",
+      "description": "Relationship Guidelines explicitly links Metadata Guidelines for grounded annotations."
+    },
+    {
+      "key": "relationship-guidelines-references-review-and-change-policy",
+      "source": "relationship-guidelines",
+      "target": "review-and-change-policy",
+      "kind": "references",
+      "status": "active",
+      "description": "Relationship Guidelines explicitly links Review & Change Policy for application safeguards."
+    },
+    {
+      "key": "review-and-change-policy-references-metadata-guidelines",
+      "source": "review-and-change-policy",
+      "target": "metadata-guidelines",
+      "kind": "references",
+      "status": "active",
+      "description": "Review & Change Policy explicitly governs proposals made under Metadata Guidelines."
+    },
+    {
+      "key": "review-and-change-policy-references-relationship-guidelines",
+      "source": "review-and-change-policy",
+      "target": "relationship-guidelines",
+      "kind": "references",
+      "status": "active",
+      "description": "Review & Change Policy explicitly governs proposals made under Relationship Guidelines."
+    }
+  ],
+  "issues": [],
+  "graph": {
+    "status": "healthy"
+  }
+}

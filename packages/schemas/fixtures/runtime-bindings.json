@@ -1,0 +1,86 @@
+{
+  "workflow": {
+    "schemaVersion": "1.2.0",
+    "nodes": [
+      {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "type": "start",
+        "name": "Start",
+        "config": {}
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000002",
+        "type": "end",
+        "name": "End",
+        "config": {}
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000003",
+        "type": "agent_action",
+        "name": "Curator",
+        "config": {
+          "model": "test",
+          "goal": {
+            "kind": "template",
+            "segments": [
+              {
+                "kind": "text",
+                "text": "Read "
+              },
+              {
+                "kind": "system",
+                "key": "document_id"
+              }
+            ]
+          },
+          "knowledgeSpaceIds": [
+            "00000000-0000-4000-8000-000000000099",
+            {
+              "kind": "system_knowledge_space",
+              "key": "target_knowledge_space"
+            }
+          ],
+          "reusableToolIds": [
+            "00000000-0000-4000-8000-000000000004"
+          ]
+        }
+      }
+    ],
+    "edges": []
+  },
+  "layout": {
+    "schemaVersion": "1.0.0",
+    "nodePlacements": [],
+    "viewport": {
+      "x": 0,
+      "y": 0,
+      "zoom": 1
+    }
+  },
+  "variables": [],
+  "reusableTools": [
+    {
+      "id": "00000000-0000-4000-8000-000000000004",
+      "name": "Search event KS",
+      "sourceTemplateId": null,
+      "kind": "knowledge_retrieval",
+      "configuration": {
+        "knowledgeSpaceId": {
+          "kind": "system_knowledge_space",
+          "key": "target_knowledge_space"
+        },
+        "query": {
+          "kind": "system",
+          "key": "document_id"
+        }
+      },
+      "inputBindings": [
+        {
+          "kind": "system",
+          "key": "change_event"
+        }
+      ],
+      "outputBinding": null
+    }
+  ]
+}

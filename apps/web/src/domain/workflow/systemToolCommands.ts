@@ -19,7 +19,8 @@ export function toolVariables(task: TaskNode, variables: readonly AgentVariable[
 }
 function references(value: ValueSource): UUID[] {
   switch (value.kind) {
-    case 'literal': return []
+    case 'literal':
+    case 'system': return []
     case 'variable': return [value.variableId]
     case 'template': return value.segments.flatMap((s) => s.kind === 'variable' ? [s.variableId] : [])
   }
@@ -73,7 +74,7 @@ export function changeTaskTool(task: TaskNode, intent: ToolEditIntent, context: 
     const targetId = step.kind === 'set_variable' ? step.configuration.targetVariableId : step.outputMapping?.targetVariableId
     const target = targetId ? variables.find((v) => v.id === targetId && v.writable) : null
     if ((targetId && !target) || inputs(step).some((id) => !variables.some((v) => v.id === id))) return { ok: false, error: 'INVALID_REFERENCE' }
-    if (step.kind === 'knowledge_retrieval' && !context.knowledgeSpaceIds.has(step.configuration.knowledgeSpaceId)) return { ok: false, error: 'INVALID_REFERENCE' }
+    if (step.kind === 'knowledge_retrieval' && typeof step.configuration.knowledgeSpaceId === 'string' && !context.knowledgeSpaceIds.has(step.configuration.knowledgeSpaceId)) return { ok: false, error: 'INVALID_REFERENCE' }
     if (step.kind === 'set_variable') {
       const config = step.configuration
       if (!target || (config.operation === 'increment' && target.dataType !== 'number') || (config.operation === 'toggle' && target.dataType !== 'boolean') || (config.operation === 'append' && !['string', 'json'].includes(target.dataType))) return { ok: false, error: 'INVALID_CONFIGURATION' }

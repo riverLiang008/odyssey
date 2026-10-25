@@ -2,6 +2,9 @@ import type { DslDiagnostic } from '@/domain/workflow-dsl/syntax'
 
 /** UI presentation is separate from the compiler's stable diagnostic keys. */
 const messages: Readonly<Record<string, string>> = {
+  ODSL007: 'Invalid binding. Use $agent.key$, $task.key$, or $sys.key$.',
+  ODSL008: 'DSL 0.2 requires $namespace.key$ for whole-value references.',
+  ODSL206: 'Unknown system input, or this input cannot be used as a Knowledge Space.',
   ODSL001: 'Unexpected character.', ODSL002: 'String is not closed.',
   ODSL003: 'Invalid string escape.', ODSL004: 'Block comment is not closed.',
   ODSL005: 'Invalid or non-finite number.',
@@ -42,7 +45,8 @@ const messages: Readonly<Record<string, string>> = {
   ODSL501: 'The resource or Pattern exit name is unavailable.',
   ODSL502: 'More than one resource or exit matches this name. Rename duplicates first.',
   ODSL503: 'Reusable Tool names must be unique within this Agent.',
-  ODSL504: 'Required resource or exit context is not ready. Synchronize Workflow exits in Journey if needed.',
+  ODSL504: 'Required resource inventory is not ready. Wait for resources to load; if loading failed, reload the editor and retry.',
+  ODSL504_EXIT_ROUTING: 'Workflow Ends are out of sync with the Journey Pattern. Return to Journey and reload the Agent Workflow after its exits are synchronized. DSL cannot create or change Pattern-owned exits.',
   ODSL505: 'Canvas or resources changed. Review replacement or revert; your draft is preserved.',
   ODSL506: 'A Tool or node contains an invalid or out-of-scope dependency.',
   ODSL507: 'Object identities cannot be matched safely. Review replacement before applying.',

@@ -259,6 +259,19 @@ class LiteralValueSource(ApiModel):
     value: JsonValue
 
 
+class SystemValueSource(ApiModel):
+    kind: Literal["system"]
+    key: Literal["change_event", "document_id", "document_revision"]
+
+
+class SystemKnowledgeSpaceReference(ApiModel):
+    kind: Literal["system_knowledge_space"]
+    key: Literal["target_knowledge_space"]
+
+
+KnowledgeSpaceReference = UUID | SystemKnowledgeSpaceReference
+
+
 class VariableValueSource(ApiModel):
     kind: Literal["variable"]
     variable_id: UUID
@@ -275,7 +288,7 @@ class VariableTemplateSegment(ApiModel):
 
 
 TemplateSegment = Annotated[
-    TextTemplateSegment | VariableTemplateSegment, Field(discriminator="kind")
+    TextTemplateSegment | VariableTemplateSegment | SystemValueSource, Field(discriminator="kind")
 ]
 
 
@@ -285,7 +298,7 @@ class TemplateValueSource(ApiModel):
 
 
 ValueSource = Annotated[
-    LiteralValueSource | VariableValueSource | TemplateValueSource,
+    LiteralValueSource | VariableValueSource | TemplateValueSource | SystemValueSource,
     Field(discriminator="kind"),
 ]
 
@@ -310,15 +323,19 @@ class ToolOutputMapping(ApiModel):
 
 
 class KnowledgeRetrievalConfiguration(ApiModel):
-    knowledge_space_id: UUID
+    knowledge_space_id: KnowledgeSpaceReference
     query: ValueSource
     top_k: Annotated[int, Field(gt=0)] | None = None
 
 
 class ReusableKnowledgeConfiguration(ApiModel):
-    knowledge_space_id: UUID
-    query: ValueSource | None = None
-    top_k: Annotated[int, Field(gt=0)] | None = None
+    knowledge_space_id: KnowledgeSpaceReference
+    # The shared editor contract models these fields as optional, not nullable.
+    # Keep accepting persisted legacy nulls, but omit them at the API boundary.
+    query: ValueSource | None = Field(default=None, exclude_if=lambda value: value is None)
+    top_k: Annotated[int, Field(gt=0)] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class ScriptInput(ApiModel):
@@ -500,12 +517,17 @@ ToolStep = Annotated[
 class AgentActionConfig(ApiModel):
     model: Annotated[str, Field(min_length=1)]
     goal: ValueSource
-    knowledge_space_ids: list[UUID]
+    knowledge_space_ids: list[KnowledgeSpaceReference]
     reusable_tool_ids: list[UUID]
 
     @model_validator(mode="after")
     def validate_unique_references(self) -> "AgentActionConfig":
-        if len(set(self.knowledge_space_ids)) != len(self.knowledge_space_ids):
+        if len(
+            {
+                str(reference) if isinstance(reference, UUID) else reference.key
+                for reference in self.knowledge_space_ids
+            }
+        ) != len(self.knowledge_space_ids):
             raise ValueError("Knowledge Space references must be unique")
         if len(set(self.reusable_tool_ids)) != len(self.reusable_tool_ids):
             raise ValueError("Reusable Tool references must be unique")
@@ -738,13 +760,15 @@ def _validate_graph_references(
 
 
 class WorkflowGraph(ApiModel):
-    schema_version: Literal["1.0.0", "1.1.0"]
+    schema_version: Literal["1.0.0", "1.1.0", "1.2.0"]
     nodes: list[WorkflowNode]
     edges: list[WorkflowEdge]
 
     @model_validator(mode="after")
     def validate_references(self) -> "WorkflowGraph":
         _validate_graph_references(self.nodes, self.edges)
+        if self.schema_version != "1.2.0" and _nodes_have_system_binding(self.nodes):
+            raise ValueError("System bindings require Workflow schemaVersion 1.2.0")
         if self.schema_version == "1.0.0" and any(
             isinstance(node, EndNode) and node.configuration.binding is not None
             for node in self.nodes
@@ -820,9 +844,80 @@ AgentReusableTool = Annotated[
 ]
 
 
+def _value_has_system_binding(value: ValueSource | None) -> bool:
+    return isinstance(value, SystemValueSource) or (
+        isinstance(value, TemplateValueSource)
+        and any(isinstance(segment, SystemValueSource) for segment in value.segments)
+    )
+
+
+def _tool_has_system_binding(tool: ToolStep | AgentReusableTool) -> bool:
+    if isinstance(tool, ReusableToolBase) and any(
+        _value_has_system_binding(value) for value in tool.input_bindings
+    ):
+        return True
+    config = tool.configuration
+    if isinstance(config, KnowledgeRetrievalConfiguration | ReusableKnowledgeConfiguration):
+        return isinstance(
+            config.knowledge_space_id, SystemKnowledgeSpaceReference
+        ) or _value_has_system_binding(config.query)
+    if isinstance(config, LlmCallConfiguration):
+        return _value_has_system_binding(config.prompt) or _value_has_system_binding(
+            config.system_prompt
+        )
+    if isinstance(config, SetVariableValueConfiguration):
+        return _value_has_system_binding(config.value)
+    if isinstance(config, ApiRequestConfiguration):
+        body = config.body
+        return (
+            _value_has_system_binding(config.url)
+            or any(_value_has_system_binding(header.value) for header in config.headers)
+            or (isinstance(body, JsonApiRequestBody) and _value_has_system_binding(body.value))
+            or (
+                isinstance(body, FormDataApiRequestBody)
+                and any(_value_has_system_binding(entry.value) for entry in body.entries)
+            )
+        )
+    return False
+
+
+def _nodes_have_system_binding(nodes: list[WorkflowNode] | list[LoopBodyNode]) -> bool:
+    for node in nodes:
+        if isinstance(node, AgentActionNode):
+            if _value_has_system_binding(node.configuration.goal) or any(
+                isinstance(reference, SystemKnowledgeSpaceReference)
+                for reference in node.configuration.knowledge_space_ids
+            ):
+                return True
+        elif isinstance(node, TaskNode):
+            if any(_tool_has_system_binding(step) for step in node.configuration.steps):
+                return True
+        elif isinstance(node, BranchNode):
+            if any(
+                _value_has_system_binding(condition.left)
+                or (
+                    isinstance(condition, BinaryBranchCondition)
+                    and _value_has_system_binding(condition.right)
+                )
+                for case in node.configuration.cases
+                for condition in case.conditions
+            ):
+                return True
+        elif isinstance(node, LoopNode) and _nodes_have_system_binding(
+            node.configuration.body.graph.nodes
+        ):
+            return True
+    return False
+
+
 def _validate_agent_reusable_tool_references(
     workflow: WorkflowGraph, reusable_tools: list[AgentReusableTool]
 ) -> None:
+    if workflow.schema_version != "1.2.0" and (
+        _nodes_have_system_binding(workflow.nodes)
+        or any(_tool_has_system_binding(tool) for tool in reusable_tools)
+    ):
+        raise ValueError("System bindings require Workflow schemaVersion 1.2.0")
     reusable_tool_ids = [tool.id for tool in reusable_tools]
     if len(set(reusable_tool_ids)) != len(reusable_tool_ids):
         raise ValueError("Reusable Tool IDs must be unique within an Agent")
@@ -893,6 +988,11 @@ class AgentTemplateSnapshot(ApiModel):
     layout: CanvasLayout
     variables: list[AgentVariable]
     reusable_tools: list[AgentReusableTool]
+
+    @model_validator(mode="after")
+    def validate_system_bindings(self) -> "AgentTemplateSnapshot":
+        _validate_agent_reusable_tool_references(self.workflow, self.reusable_tools)
+        return self
 
 
 class AgentTemplate(ApiModel):

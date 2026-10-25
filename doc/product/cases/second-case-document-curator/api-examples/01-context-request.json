@@ -1,0 +1,7 @@
+{
+  "eventId": "example-add-rainy-day",
+  "eventType": "document_added",
+  "targetKnowledgeSpace": "Moonberry Island - Curator Demo",
+  "documentPath": "06-rainy-day-activities.md",
+  "sourceRevision": "example-revision-1"
+}

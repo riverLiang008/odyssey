@@ -1,22 +1,78 @@
 import { effectScope, nextTick, ref, shallowRef } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createAgentWorkflowEditorDocumentFixture, FIXTURE_IDS } from '@/fixtures'
+import { createAgentWorkflowEditorDocumentFixture, createJourneyEditorDocumentFixture, FIXTURE_IDS } from '@/fixtures'
 import { uuidSchema, type KnowledgeSpaceSummary, type AgentWorkflowEditorDocument } from '@odyssey/schemas'
 import { useWorkflowDsl } from './useWorkflowDsl'
 
 describe('DSL synchronization session', () => {
   afterEach(() => vi.useRealTimers())
-  function setup() {
+  function setup(withJourney = false, initialKnowledgeStatus: 'loading' | 'ready' | 'error' = 'ready') {
     vi.useFakeTimers()
     const document = shallowRef<AgentWorkflowEditorDocument | null>(createAgentWorkflowEditorDocumentFixture('research'))
     const knowledge = ref([{ id: uuidSchema.parse(FIXTURE_IDS.knowledgeSpace), name: 'Product Docs', lifecycleStatus: 'ready', graphStatus: 'healthy' }] as KnowledgeSpaceSummary[])
     const sequence = ref(0)
+    const knowledgeStatus = ref(initialKnowledgeStatus)
     const scope = effectScope()
     const apply = vi.fn((candidate, _expectedMutationSeq: number) => { void _expectedMutationSeq; if (document.value) document.value = { ...document.value, ...candidate }; sequence.value++; return { ok: true } })
-    const session = scope.run(() => useWorkflowDsl({ document, journey: ref(null), knowledge, knowledgeStatus: ref('ready'), mutationSeq: () => sequence.value, apply }))
+    const session = scope.run(() => useWorkflowDsl({ document, journey: ref(withJourney ? createJourneyEditorDocumentFixture() : null), knowledge, knowledgeStatus, mutationSeq: () => sequence.value, apply }))
     if (!session) throw new Error('Scope initialization failed')
-    return { document, knowledge, sequence, scope, session, apply }
+    return { document, knowledge, knowledgeStatus, sequence, scope, session, apply }
   }
+  it('previews an explicit 0.2 upgrade without mutating Canvas until Apply', () => {
+    const { session, document, scope, apply } = setup()
+    const before = structuredClone(document.value)
+    session.upgrade()
+    expect(session.source.value).toContain('version "0.2"')
+    expect(session.source.value).toContain('$agent.')
+    expect(document.value).toEqual(before)
+    expect(apply).not.toHaveBeenCalled()
+    session.apply()
+    expect(document.value?.workflow.schemaVersion).toBe('1.2.0')
+    expect(document.value?.layout).toEqual(before?.layout)
+    expect(document.value?.workflow.nodes.map(node => node.id)).toEqual(before?.workflow.nodes.map(node => node.id))
+    scope.stop()
+  })
+  it.each(['loading', 'error'] as const)('rechecks an unapplied draft when the initial inventory becomes ready from %s', async (status) => {
+    const { session, knowledgeStatus, scope, apply } = setup(false, status)
+    const draft = session.source.value.replace('Research the requested topic.', 'Draft before resources arrive.')
+    session.edit(draft)
+    await vi.advanceTimersByTimeAsync(250)
+    expect(session.state.value.type).toBe('context-required')
+    knowledgeStatus.value = 'ready'
+    await nextTick()
+    expect(session.state.value.type).toBe('ready')
+    expect(session.source.value).toBe(draft)
+    expect(apply).not.toHaveBeenCalled()
+    session.apply()
+    expect(apply).toHaveBeenCalledOnce()
+    scope.stop()
+  })
+  it('does not rebase initial resource loading over a changed Canvas', async () => {
+    const { session, knowledgeStatus, document, sequence, scope, apply } = setup(false, 'loading')
+    session.edit(session.source.value + '\n// draft')
+    if (!document.value) throw new Error('Missing document')
+    document.value = { ...document.value, workflow: { ...document.value.workflow, nodes: document.value.workflow.nodes.map(node => node.type === 'agent_action' ? { ...node, name: 'New Canvas action' } : node) } }
+    sequence.value++
+    knowledgeStatus.value = 'ready'
+    await nextTick()
+    expect(session.state.value.type).toBe('stale')
+    session.apply()
+    expect(apply).not.toHaveBeenCalled()
+    scope.stop()
+  })
+  it('blocks unsynchronized Pattern exits and still reports syntax errors without mutating Canvas', async () => {
+    const { session, scope, apply } = setup(true)
+    expect(session.state.value.type).toBe('context-required')
+    expect(session.diagnostics.value).toContainEqual(expect.objectContaining({ code: 'ODSL504', messageKey: 'ODSL504_EXIT_ROUTING' }))
+    const draft = session.source.value + '\n"unfinished'
+    session.edit(draft)
+    await vi.advanceTimersByTimeAsync(250)
+    expect(session.diagnostics.value.some(item => item.severity === 'error')).toBe(true)
+    session.apply()
+    expect(apply).not.toHaveBeenCalled()
+    expect(session.source.value).toBe(draft)
+    scope.stop()
+  })
   it('opens without mutation, refreshes for Canvas edits, applies once and retains source', async () => {
     const fixture = setup()
     const { session, document, scope, apply } = fixture

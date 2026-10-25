@@ -411,3 +411,56 @@ async def test_legacy_upgrade_on_pattern_save_only_requires_confirmation_for_con
             if isinstance(node, EndNode)
         )
         assert persisted.agent.revision == agent.agent.revision + 1
+
+
+@pytest.mark.integration
+async def test_runtime_binding_save_reload_and_template_preserve_system_resource(
+    hub_workspace: tuple[UUID, CreateMinimumAgentResponse],
+) -> None:
+    from odyssey_api.journeys.dto import AgentActionNode
+
+    workspace_id, created = hub_workspace
+    document = created.agent
+    graph = document.workflow.model_copy(deep=True)
+    graph.schema_version = "1.2.0"
+    graph.nodes.append(
+        AgentActionNode.model_validate(
+            {
+                "id": str(uuid4()),
+                "name": "Runtime Curator",
+                "type": "agent_action",
+                "config": {
+                    "model": "test",
+                    "goal": {"kind": "system", "key": "document_id"},
+                    "knowledgeSpaceIds": [
+                        {"kind": "system_knowledge_space", "key": "target_knowledge_space"}
+                    ],
+                    "reusableToolIds": [],
+                },
+            }
+        )
+    )
+    async with async_session_factory() as session:
+        saved = await save_agent_workflow(
+            session,
+            document.agent.journey_id,
+            document.agent.id,
+            workspace_id,
+            SaveAgentWorkflowRequest(
+                expected_revision=document.agent.revision,
+                workflow=graph,
+                layout=document.layout,
+                variables=[],
+                reusable_tools=[],
+            ),
+        )
+    async with async_session_factory() as session:
+        loaded = await load_agent_workflow(
+            session, document.agent.journey_id, document.agent.id, workspace_id
+        )
+    assert loaded.workflow == saved.workflow
+    assert loaded.workflow.schema_version == "1.2.0"
+    assert (
+        loaded.workflow.nodes[-1].configuration.knowledge_space_ids[0].key
+        == "target_knowledge_space"
+    )

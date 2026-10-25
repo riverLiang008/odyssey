@@ -4,6 +4,7 @@ import { computed, shallowReactive, ref, onMounted, onBeforeUnmount } from 'vue'
 import { toolStepSchema, uuidSchema, type AgentVariable, type KnowledgeSpaceSummary, type TaskLocalVariable, type ValueSource, type TaskNode, type VariableDataType } from '@odyssey/schemas'
 import type { SystemToolDraft } from '@/stores/workflowEditor'
 import { toolVariables, type TaskToolSaveDraft } from '@/domain/workflow/systemToolCommands'
+import { isKnowledgeSpaceReferenceable } from '@/domain/knowledge'
 import outputArrow from '@/assets/tool-output-arrow.svg'
 import ToolValueInput from './ToolValueInput.vue'
 import ToolSelect from './ToolSelect.vue'
@@ -24,7 +25,7 @@ const literal = (value = ''): ValueSource => ({ kind: 'literal', value })
 const form = shallowReactive({
   label: existing?.label ?? '', failure: existing?.failureBehavior.kind ?? 'fail_task',
   output: existing?.outputMapping?.targetVariableId ?? '',
-  knowledgeSpaceId: existing?.kind === 'knowledge_retrieval' ? existing.configuration.knowledgeSpaceId : '',
+  knowledgeSpaceId: existing?.kind === 'knowledge_retrieval' ? typeof existing.configuration.knowledgeSpaceId === 'string' ? existing.configuration.knowledgeSpaceId : 'sys.target_knowledge_space' : '',
   query: existing?.kind === 'knowledge_retrieval' ? existing.configuration.query : literal(),
   topK: existing?.kind === 'knowledge_retrieval' ? existing.configuration.topK ?? 5 : 5,
   language: existing?.kind === 'script_execution' ? existing.configuration.language : 'python',
@@ -58,7 +59,7 @@ const outputOptions = computed(() => [
   { value: '', label: 'No output binding' },
   ...writable.value.map((variable) => ({ value: variable.id, label: variable.name })),
 ])
-const spaces = computed(() => props.knowledgeSpaces.filter((s) => ['ready', 'syncing'].includes(s.lifecycleStatus) && ['healthy', 'needs_review'].includes(s.graphStatus)))
+const spaces = computed(() => props.knowledgeSpaces.filter(isKnowledgeSpaceReferenceable))
 const title = { knowledge_retrieval: 'Knowledge Retrieval', script_execution: 'Script Execution', api_request: 'API Request', set_variable: 'Set Variable', llm_call: 'LLM Call' }[kind]
 const outputKeys = { knowledge_retrieval: 'retrieved_documents', script_execution: 'result', api_request: 'response.data', set_variable: '', llm_call: 'response.text' }
 function setBody(event: globalThis.Event) {
@@ -74,7 +75,7 @@ function submit() {
   if (createTaskVariable.value && !variableKey) { validationError.value = 'Task Variable name is required.'; return }
   const outputVariableId = createTaskVariable.value ? newVariableId : form.output
   const base = { id: existing?.id ?? newId(), kind, label: form.label.trim() || null, failureBehavior: form.failure === 'retry' ? { kind: 'retry', maxAttempts: 2 } : { kind: 'fail_task' }, outputMapping: kind === 'set_variable' || !outputVariableId ? null : { sourceKey: outputKeys[kind], targetVariableId: outputVariableId } }
-  const configuration = kind === 'knowledge_retrieval' ? { knowledgeSpaceId: form.knowledgeSpaceId, query: form.query, topK: form.topK }
+  const configuration = kind === 'knowledge_retrieval' ? { knowledgeSpaceId: form.knowledgeSpaceId === 'sys.target_knowledge_space' ? { kind: 'system_knowledge_space', key: 'target_knowledge_space' } : form.knowledgeSpaceId, query: form.query, topK: form.topK }
     : kind === 'script_execution' ? { language: form.language, inputs: form.inputs, script: form.script }
     : kind === 'api_request' ? { method: form.method, url: form.url, headers: form.headers, body: form.body }
     : kind === 'set_variable' ? { targetVariableId: form.target, operation: form.operation, ...(form.operation === 'toggle' ? {} : { value: form.value }) }
@@ -96,7 +97,7 @@ function submit() {
       <label>Label · optional<input ref="firstInput" v-model="form.label" /></label>
       <h3>CONFIGURATION</h3>
       <template v-if="kind === 'knowledge_retrieval'">
-        <label>Knowledge Space *<select v-model="form.knowledgeSpaceId" required><option value="" disabled>Choose a Knowledge Space</option><option v-for="space in spaces" :key="space.id" :value="space.id">{{ space.name }}</option></select></label>
+        <label>Knowledge Space *<select v-model="form.knowledgeSpaceId" required><option value="" disabled>Choose a Knowledge Space</option><option value="sys.target_knowledge_space">From event · target_knowledge_space</option><option v-for="space in spaces" :key="space.id" :value="space.id">{{ space.name }}</option></select></label>
         <p v-if="knowledgeStatus === 'loading'" role="status">Loading Knowledge Spaces…</p><p v-else-if="knowledgeStatus === 'error'" role="alert">Knowledge Spaces could not be loaded.</p><p v-else-if="!spaces.length">No available Knowledge Space in this Workspace.</p>
         <ToolValueInput v-model="form.query" label="Query" :variables="variables" />
         <label>Top K<input v-model.number="form.topK" type="number" min="1" step="1" required /></label>

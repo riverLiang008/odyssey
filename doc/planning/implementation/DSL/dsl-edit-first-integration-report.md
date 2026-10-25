@@ -60,3 +60,9 @@
 更新决策：layout 不进入 DSL；仅布局变化不使草稿 stale，Apply 保留最新 Canvas 布局。
 
 当前节点语法：`类型 "名称" { ... }`，连线按双引号名称引用；不使用节点 alias 或块内 name。同图名称规范化后唯一，Loop body 独立；内部 UUID 继续由会话保留。详见语言规范的“节点名称语法决策”。
+
+## 2026-10-23 真实后端补验收
+
+已用独立 Workspace、API 8315、Web 5173 和 PostgreSQL 55432 验证 DSL Apply → autosave → reload。另用两个浏览器窗口复现真实 revision conflict，确认保留本地修改、暂停保存，并在两步确认 Reload 后恢复服务器内容。未知变量错误会阻止 Apply；未应用草稿离开页面时出现保护提示。Overwrite 和所有网络失败时序尚未逐项验收。
+
+本轮还修复了 DSL 新建 Loop 子节点横向排列到容器外的问题，保留已有布局。详细步骤、测试和截图见 [验收记录](../../project/odyssey-acceptance-2026-10-23.md)。

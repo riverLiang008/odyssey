@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { knowledgeSpaceReferenceSchema } from './systemInputs'
 
 import { uuidSchema } from '../common'
 import { valueSourceSchema } from './values'
@@ -38,7 +39,7 @@ export const toolOutputMappingSchema = z.strictObject({
 })
 
 export const knowledgeRetrievalConfigurationSchema = z.strictObject({
-  knowledgeSpaceId: uuidSchema,
+  knowledgeSpaceId: knowledgeSpaceReferenceSchema,
   query: valueSourceSchema,
   topK: z.number().int().positive().optional(),
 })
@@ -182,7 +183,7 @@ const reusableToolBase = {
 } as const
 
 const reusableKnowledgeConfigurationSchema = z.strictObject({
-  knowledgeSpaceId: uuidSchema,
+  knowledgeSpaceId: knowledgeSpaceReferenceSchema,
   query: valueSourceSchema.optional(),
   topK: z.number().int().positive().optional(),
 })

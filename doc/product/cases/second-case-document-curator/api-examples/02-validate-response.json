@@ -1,0 +1,47 @@
+{
+  "valid": true,
+  "requiresReview": false,
+  "validationId": "example-validation-001",
+  "validationToken": "EXAMPLE_ONLY_NOT_A_REAL_TOKEN",
+  "contextId": "example-context-001",
+  "eventId": "example-add-rainy-day",
+  "target": {
+    "workspaceId": "example-workspace",
+    "knowledgeSpaceId": "example-game-ks",
+    "documentId": "example-rainy-day"
+  },
+  "producerId": "document-curator",
+  "sourceRevision": "example-revision-1",
+  "graphRevision": 12,
+  "policySnapshotId": "example-policy-snapshot-001",
+  "readSet": [
+    {
+      "documentId": "example-rainy-day",
+      "sourceRevision": "example-revision-1"
+    },
+    {
+      "documentId": "example-crops",
+      "sourceRevision": "example-crops-1"
+    }
+  ],
+  "normalizedProposal": {
+    "operations": [
+      {
+        "kind": "set_summary",
+        "documentId": "example-rainy-day",
+        "expectedValue": null,
+        "value": "Explains that rain waters outdoor crops automatically and directs readers to Crops & Seasons for watering and harvest rules.",
+        "evidence": [
+          {
+            "documentId": "example-rainy-day",
+            "sourceRevision": "example-revision-1",
+            "locator": "Rainy Day Activities",
+            "quote": "Rain waters outdoor crops automatically. See Crops & Seasons for watering and harvest rules."
+          }
+        ]
+      }
+    ],
+    "findings": []
+  },
+  "reviewReasons": []
+}

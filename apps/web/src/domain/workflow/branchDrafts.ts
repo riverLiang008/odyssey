@@ -1,9 +1,10 @@
-import { branchNodeSchema, jsonValueSchema, uuidSchema, type AgentVariable, type BranchNode, type JsonValue, type UUID, type ValueSource, type WorkflowEdge } from '@odyssey/schemas'
+import { branchNodeSchema, jsonValueSchema, uuidSchema, type AgentVariable, type BranchNode, type JsonValue, type UUID, type ValueSource, type WorkflowEdge, systemValueType } from '@odyssey/schemas'
 
 export type BranchCondition = BranchNode['config']['cases'][number]['conditions'][number]
 export type BranchOperator = BranchCondition['operator']
 export type BranchOperandDraft =
   | { kind: 'variable'; variableId: string }
+  | { kind: 'system'; key: 'change_event' | 'document_id' | 'document_revision' }
   | { kind: 'literal'; dataType: AgentVariable['dataType']; raw: string }
   | { kind: 'template'; source: Extract<ValueSource, { kind: 'template' }> }
 export interface BranchConditionDraft { id: UUID; left: BranchOperandDraft; operator: BranchOperator; right: BranchOperandDraft }
@@ -33,6 +34,7 @@ export function emptyBranchCondition(id: UUID): BranchConditionDraft {
   return { id, left: { kind: 'variable', variableId: '' }, operator: 'eq', right: { kind: 'literal', dataType: 'string', raw: '' } }
 }
 function operandDraft(value: ValueSource): BranchOperandDraft {
+  if (value.kind === 'system') return { ...value }
   if (value.kind === 'variable') return { ...value }
   if (value.kind === 'template') return { kind: 'template', source: structuredClone(value) }
   return { kind: 'literal', dataType: typeof value.value === 'number' ? 'number' : typeof value.value === 'boolean' ? 'boolean' : typeof value.value === 'string' ? 'string' : 'json', raw: typeof value.value === 'string' ? value.value : JSON.stringify(value.value) }
@@ -41,6 +43,7 @@ export function branchDraftFromNode(node: BranchNode): BranchDraft {
   return { id: node.id, name: node.name, defaultCase: { ...node.config.defaultCase }, cases: node.config.cases.map(c => ({ id: c.id, label: c.label, conditions: c.conditions.map(c => ({ id: c.id, left: operandDraft(c.left), operator: c.operator, right: 'right' in c ? operandDraft(c.right) : { kind: 'literal', dataType: 'string', raw: '' } })) })) }
 }
 function parseOperand(draft: BranchOperandDraft, variables: readonly AgentVariable[]): { source: ValueSource; dataType: AgentVariable['dataType'] } | BranchDraftError {
+  if (draft.kind === 'system') return { source: { ...draft }, dataType: systemValueType(draft.key) }
   if (draft.kind === 'variable') {
     const v = variables.find(v => v.id === draft.variableId)
     return v ? { source: { kind: 'variable', variableId: v.id }, dataType: v.dataType } : 'VARIABLE_UNAVAILABLE'
@@ -94,8 +97,9 @@ export function parseBranchDraft(draft: BranchDraft, variables: readonly AgentVa
   return parsed.success ? { ok: true, node: parsed.data } : { ok: false, issues: [{ code: 'CONFIG_INVALID' }] }
 }
 export function branchOperandSummary(source: ValueSource, variables: readonly AgentVariable[]): string {
+  if (source.kind === 'system') return `sys.${source.key}`
   if (source.kind === 'variable') return variables.find(v => v.id === source.variableId)?.displayName ?? 'Unavailable variable'
-  if (source.kind === 'template') return source.segments.map(s => s.kind === 'text' ? s.text : variables.find(v => v.id === s.variableId)?.displayName ?? 'Unavailable variable').join('')
+  if (source.kind === 'template') return source.segments.map(s => s.kind === 'text' ? s.text : s.kind === 'system' ? `sys.${s.key}` : variables.find(v => v.id === s.variableId)?.displayName ?? 'Unavailable variable').join('')
   return JSON.stringify(source.value)
 }
 export function branchConditionSummary(condition: BranchCondition, variables: readonly AgentVariable[]): string {

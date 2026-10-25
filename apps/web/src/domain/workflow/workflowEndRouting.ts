@@ -55,7 +55,7 @@ export function reconcileWorkflowEnds(
   const removed = new Set(removedEndIds)
   const removedEdgeIds = graph.edges.filter((edge) => removed.has(edge.sourceNodeId) || removed.has(edge.targetNodeId)).map((edge) => edge.id)
   const graphCopy = structuredClone(graph)
-  graphCopy.schemaVersion = '1.1.0'
+  graphCopy.schemaVersion = graph.schemaVersion === '1.2.0' ? '1.2.0' : '1.1.0'
   graphCopy.nodes = [...graphCopy.nodes.filter((node) => node.type !== 'end'), ...nextEnds]
   graphCopy.edges = graphCopy.edges.filter((edge) => !removed.has(edge.sourceNodeId) && !removed.has(edge.targetNodeId))
   const layoutCopy = structuredClone(layout)
@@ -73,7 +73,7 @@ export function reconcileWorkflowEnds(
   // Preserve original node ordering and object values on the no-op path.
   const oldById = new Map(graph.nodes.map((node) => [node.id, node]))
   const sameEnds = nextEnds.length === ends.length && nextEnds.every((end) => JSON.stringify(end) === JSON.stringify(oldById.get(end.id)))
-  const changed = graph.schemaVersion !== '1.1.0' || !sameEnds || removedEdgeIds.length > 0 || layoutCopy.nodePlacements.length !== layout.nodePlacements.length
+  const changed = graph.schemaVersion === '1.0.0' || !sameEnds || removedEdgeIds.length > 0 || layoutCopy.nodePlacements.length !== layout.nodePlacements.length
   return { graph: changed ? graphCopy : structuredClone(graph), layout: changed ? layoutCopy : structuredClone(layout), removedEndIds, removedEdgeIds, changed }
 }
 

@@ -4,6 +4,7 @@ import type { SystemToolDefinition, AgentReusableTool, KnowledgeSpaceSummary, UU
 import { serializeWorkflowResourceDragPayload, WORKFLOW_RESOURCE_DRAG_MIME } from '@/canvas/workflow'
 import type { WorkflowResourceDragPayload } from '@/canvas/workflow'
 import type { KnowledgeInventoryStatus, WorkflowResourceCategory } from '@/stores/workflowEditor'
+import { isKnowledgeSpaceReferenceable } from '@/domain/knowledge'
 import ResourcePanelCloseButton from './ResourcePanelCloseButton.vue'
 import ToolSelect from './ToolSelect.vue'
 
@@ -61,9 +62,6 @@ function selectToolKind(value: string) {
   toolKind.value = value
   emit('page', 1)
 }
-function isKnowledgeSelectable(space: KnowledgeSpaceSummary) {
-  return ['ready', 'syncing'].includes(space.lifecycleStatus) && ['healthy', 'needs_review'].includes(space.graphStatus)
-}
 function startDrag(event: globalThis.DragEvent, resourceId: UUID, kind: 'reusable-tool' | 'knowledge-space') {
   if (props.readOnly) return
   if (!event.dataTransfer) return
@@ -119,7 +117,7 @@ function startSystemDrag(event: globalThis.DragEvent, tool: SystemToolDefinition
         <p v-if="knowledgeStatus === 'loading'" class="resource-browser-empty" role="status">Loading Knowledge Spaces…</p>
         <p v-else-if="knowledgeStatus === 'error'" class="resource-browser-empty" role="alert">Knowledge Spaces could not be loaded.</p>
         <p v-else-if="!knowledgeSpaces.length" class="resource-browser-empty">No matching Knowledge Spaces.</p>
-        <article v-for="space in knowledgeSpaces" v-else :key="space.id" :draggable="!readOnly && isKnowledgeSelectable(space)" :tabindex="!readOnly && isKnowledgeSelectable(space) ? 0 : -1" :class="{ 'is-disabled': readOnly || !isKnowledgeSelectable(space) }" @dragstart="isKnowledgeSelectable(space) && startDrag($event, space.id, 'knowledge-space')" @dragend="emit('resourceDragEnd')" @dblclick="isKnowledgeSelectable(space) && activateResource(space.id, 'knowledge-space')" @keydown.enter.prevent="isKnowledgeSelectable(space) && activateResource(space.id, 'knowledge-space')"><i aria-hidden="true" /><span><strong>{{ space.name }}</strong><small>{{ space.lifecycleStatus }} · {{ space.graphStatus }}</small></span><span class="resource-card-grip" aria-hidden="true">⋮⋮</span></article>
+        <article v-for="space in knowledgeSpaces" v-else :key="space.id" :draggable="!readOnly && isKnowledgeSpaceReferenceable(space)" :tabindex="!readOnly && isKnowledgeSpaceReferenceable(space) ? 0 : -1" :class="{ 'is-disabled': readOnly || !isKnowledgeSpaceReferenceable(space) }" @dragstart="isKnowledgeSpaceReferenceable(space) && startDrag($event, space.id, 'knowledge-space')" @dragend="emit('resourceDragEnd')" @dblclick="isKnowledgeSpaceReferenceable(space) && activateResource(space.id, 'knowledge-space')" @keydown.enter.prevent="isKnowledgeSpaceReferenceable(space) && activateResource(space.id, 'knowledge-space')"><i aria-hidden="true" /><span><strong>{{ space.name }}</strong><small>{{ space.lifecycleStatus }} · {{ space.graphStatus }}</small></span><span class="resource-card-grip" aria-hidden="true">⋮⋮</span></article>
       </div>
       <footer v-if="totalPages > 1"><button type="button" :disabled="page <= 1" @click="emit('page', page - 1)">Previous</button><span>{{ page }} / {{ totalPages }}</span><button type="button" :disabled="page >= totalPages" @click="emit('page', page + 1)">Next</button></footer>
       <p class="resource-browser-hint">Drag a System Tool to a Task sequence or Agent Action Toolbox. Select a target and press Enter on a Tool for keyboard access.</p>

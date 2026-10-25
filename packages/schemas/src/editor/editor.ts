@@ -1,3 +1,4 @@
+import { toolHasRuntimeBinding } from '../workflow/runtimeBindings'
 import { z } from 'zod'
 
 import { revisionSchema, utcTimestampSchema, uuidSchema } from '../common'
@@ -194,6 +195,7 @@ export function createAgentWorkflowEditorDocumentSchema(
     reusableTools: z.array(agentReusableToolSchema),
   })
   .superRefine((document, context) => {
+    if (document.workflow.schemaVersion !== '1.2.0' && document.reusableTools.some(toolHasRuntimeBinding)) context.addIssue({ code: 'custom', message: 'System bindings require Workflow schemaVersion 1.2.0', path: ['workflow', 'schemaVersion'] })
     const nodeIds = new Set(document.workflow.nodes.map((node) => node.id))
     document.layout.nodePlacements.forEach((placement, index) => {
       if (!nodeIds.has(placement.nodeId)) {
@@ -384,13 +386,13 @@ export function createAgentTemplateSchema(options: AgentWorkflowEditorSchemaOpti
     if (template.visibility === 'public') {
       const referencedKnowledgeSpaces = new Set<string>()
       template.snapshot.reusableTools.forEach((tool) => {
-        if (tool.kind === 'knowledge_retrieval') referencedKnowledgeSpaces.add(tool.configuration.knowledgeSpaceId)
+        if (tool.kind === 'knowledge_retrieval' && typeof tool.configuration.knowledgeSpaceId === 'string') referencedKnowledgeSpaces.add(tool.configuration.knowledgeSpaceId)
       })
       const collectKnowledgeSpaces = (nodes: Array<WorkflowNode | LoopStartNode | LoopEndNode>): void => {
         nodes.forEach((node) => {
-          if (node.type === 'agent_action') node.config.knowledgeSpaceIds.forEach((id) => referencedKnowledgeSpaces.add(id))
+          if (node.type === 'agent_action') node.config.knowledgeSpaceIds.forEach((id) => { if (typeof id === 'string') referencedKnowledgeSpaces.add(id) })
           if (node.type === 'task') node.config.steps.forEach((step) => {
-            if (step.kind === 'knowledge_retrieval') referencedKnowledgeSpaces.add(step.configuration.knowledgeSpaceId)
+            if (step.kind === 'knowledge_retrieval' && typeof step.configuration.knowledgeSpaceId === 'string') referencedKnowledgeSpaces.add(step.configuration.knowledgeSpaceId)
           })
           if (node.type === 'loop') collectKnowledgeSpaces(node.config.body.graph.nodes)
         })

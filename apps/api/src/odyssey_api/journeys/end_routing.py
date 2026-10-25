@@ -70,7 +70,9 @@ def bind_template_exits(
             edges.append(edge)
             seen.add(key)
     result.workflow.edges = edges
-    result.workflow.schema_version = "1.1.0"
+    result.workflow.schema_version = (
+        "1.2.0" if snapshot.workflow.schema_version == "1.2.0" else "1.1.0"
+    )
     return result
 
 
@@ -137,7 +139,7 @@ def reconcile_workflow_ends(
         if edge.source_node_id in removed or edge.target_node_id in removed
     )
     graph = workflow.model_copy(deep=True)
-    graph.schema_version = "1.1.0"
+    graph.schema_version = "1.2.0" if workflow.schema_version == "1.2.0" else "1.1.0"
     graph.nodes = [node for node in graph.nodes if not isinstance(node, EndNode)] + next_ends
     graph.edges = [
         edge
@@ -164,7 +166,7 @@ def reconcile_workflow_ends(
             next_layout.node_placements.append(NodePlacement(node_id=end.id, x=x, y=y))
     old_by_id = {end.id: end for end in ends}
     changed = (
-        workflow.schema_version != "1.1.0"
+        workflow.schema_version == "1.0.0"
         or len(ends) != len(next_ends)
         or any(old_by_id.get(end.id) != end for end in next_ends)
         or next_layout != layout

@@ -1,5 +1,7 @@
 # Odyssey Agent Workflow DSL V1 RFC 与实施计划
 
+> 2026-10-25 已确认的下一版增量：[直接变量绑定设计](./runtime-variable-binding-design.md)。采用 `$namespace.key$` 使用位置直接绑定，不新增 bindings 分区；资源类型与授权受约束。此设计覆盖下文固定资源/裸引用对下一版的限制，但尚未实现，现有 V0.1 示例继续表示当前 parser。
+
 > 当前语法以 [V0.1 规范](./odyssey-workflow-dsl-v0.1-spec.md) 为准：节点使用 `类型 "名称" { ... }`，连线引用名称，无节点 alias 或块内 name；下文早期草案保留作设计背景。
 
 > 2026-10-22 产品入口澄清：[DSL Edit 双向同步实施计划](./dsl-edit-bidirectional-sync-implementation-plan.md) 为当前交付计划。最终目标是现有面板内 Canvas ↔ DSL 双向编辑，canonical JSON 在内存中桥接，用户无须文件中转。下文“先文件导入”的历史阶段安排不再作为产品交付前置门槛。
@@ -718,3 +720,7 @@ Gate：三个代表性 Case 在刷新后语义等价，且不存在静默数据�
 5. 召开一次语法 review，冻结 V1 grammar 后再开始 Batch B。
 
 这能确保语言首先服务真实 Case，而不是先造一套漂亮但不实用的语法。
+
+## Variable capability boundary (2026-10-25)
+
+DSL types must match product/canonical support: string, number, boolean, json. The editor labels json as Object / JSON. No extra object/array/Json/custom types may be introduced by DSL examples. See the V0.1 language specification’s Variable type capability constraint; future type changes require coordinated schema, editor, compiler, and Printer updates.

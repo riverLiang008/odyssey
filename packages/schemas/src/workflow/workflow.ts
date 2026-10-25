@@ -1,4 +1,6 @@
+import { nodesHaveRuntimeBinding } from './runtimeBindings'
 import { z } from 'zod'
+import { knowledgeSpaceReferenceSchema, knowledgeReferenceKey } from './systemInputs'
 
 import { jsonValueSchema, uuidSchema } from '../common'
 import { embeddedCanvasLayoutSchema } from './layout'
@@ -40,7 +42,10 @@ export const agentActionNodeSchema = z.strictObject({
   config: z.strictObject({
     model: z.string().min(1),
     goal: valueSourceSchema,
-    knowledgeSpaceIds: uniqueUuidArraySchema,
+    knowledgeSpaceIds: z.array(knowledgeSpaceReferenceSchema).superRefine((values, ctx) => {
+    const keys = values.map(knowledgeReferenceKey)
+    if (new Set(keys).size !== keys.length) ctx.addIssue({ code: 'custom', message: 'Knowledge references must be unique' })
+  }),
     reusableToolIds: uniqueUuidArraySchema,
   }),
 })
@@ -234,14 +239,15 @@ export const workflowNodeSchema = z.discriminatedUnion('type', [
   loopNodeSchema,
 ])
 
-export const workflowGraphSchema = z
+export const workflowGraphSchema: z.ZodType<WorkflowGraph> = z
   .strictObject({
-    schemaVersion: z.enum(['1.0.0', '1.1.0']),
+    schemaVersion: z.enum(['1.0.0', '1.1.0', '1.2.0']),
     nodes: z.array(workflowNodeSchema),
     edges: z.array(workflowEdgeSchema),
   })
   .superRefine((graph, context) => {
     addGraphReferenceIssues(graph, context)
+    if (graph.schemaVersion !== '1.2.0' && nodesHaveRuntimeBinding(graph.nodes)) context.addIssue({ code: 'custom', message: 'System bindings require Workflow schemaVersion 1.2.0', path: ['schemaVersion'] })
     if (graph.schemaVersion === '1.0.0' && graph.nodes.some((node) => node.type === 'end' && node.config.binding)) {
       context.addIssue({ code: 'custom', message: 'Pattern-bound exits require Workflow schemaVersion 1.1.0', path: ['schemaVersion'] })
     }
@@ -259,4 +265,8 @@ export type LoopBodyGraph = z.infer<typeof loopBodyGraphSchema>
 export type LoopNode = z.infer<typeof loopNodeSchema>
 export type WorkflowNode = z.infer<typeof workflowNodeSchema>
 export type WorkflowEdge = z.infer<typeof workflowEdgeSchema>
-export type WorkflowGraph = z.infer<typeof workflowGraphSchema>
+export interface WorkflowGraph {
+  schemaVersion: '1.0.0' | '1.1.0' | '1.2.0'
+  nodes: WorkflowNode[]
+  edges: WorkflowEdge[]
+}

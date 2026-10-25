@@ -29,7 +29,7 @@ function makeEmptySlotJourney() {
 }
 
 describe('Agent template lifecycle', () => {
-  it('creates a minimum Start-to-End Agent and assigns it atomically', () => {
+  it('creates a minimum Agent with disconnected Start and End and assigns it atomically', () => {
     const { journey, slot } = makeEmptySlotJourney()
     const before = structuredClone(journey)
     const result = createMinimalAgent(journey, slot.id, 'New Agent', null, '2026-08-13T00:00:00Z', factory())
@@ -37,7 +37,7 @@ describe('Agent template lifecycle', () => {
     expect(journey).toEqual(before)
     if (!result.ok) throw new Error(result.error.code)
     expect(result.value.agent.workflow.nodes.map((node) => node.type)).toEqual(['start', 'end'])
-    expect(result.value.agent.workflow.edges).toHaveLength(1)
+    expect(result.value.agent.workflow.edges).toHaveLength(0)
     expect(result.value.agent.layout.nodePlacements).toEqual([
       { nodeId: result.value.agent.workflow.nodes[0]!.id, ...MINIMUM_WORKFLOW_START_POSITION },
       { nodeId: result.value.agent.workflow.nodes[1]!.id, ...MINIMUM_WORKFLOW_END_POSITION },

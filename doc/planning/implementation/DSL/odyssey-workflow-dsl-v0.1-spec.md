@@ -1,5 +1,7 @@
 # Odyssey Agent Workflow DSL V0.1 语法规范（评审稿）
 
+> 2026-10-25 已确认的下一版增量：[直接变量绑定设计](./runtime-variable-binding-design.md)。采用 `$namespace.key$` 使用位置直接绑定，不新增 bindings 分区；资源类型与授权受约束。此设计覆盖下文固定资源/裸引用对下一版的限制，但尚未实现，现有 V0.1 示例继续表示当前 parser。
+
 > Status: V0.1 实施中 — 已接入 DSL Edit，节点名称语法已更新  
 > Date: 2026-10-20  
 > Updated: 2026-10-22 — 节点直接以名称声明和引用；layout 不进入 DSL  
@@ -133,6 +135,25 @@ variables {
 | agent_managed | 禁止 | 允许 |
 
 Agent Action 的 Goal 中自然语言提到更新某变量，不等于编译器能证明或强制该更新；执行时权限与结构化更新协议属于未来 runtime。
+
+### Variable type capability constraint (2026-10-25)
+
+DSL variable declarations must use the current canonical variable type inventory, not types invented for an example or returned by an API. The current implementation supports the following exact, case-sensitive keywords:
+
+| Variable panel label | Canonical dataType | DSL keyword |
+| --- | --- | --- |
+| String | string | string |
+| Number | number | number |
+| Boolean | boolean | boolean |
+| Object / JSON | json | json |
+
+Object / JSON is the UI label for the existing json type; it is not a separate object type. Json, JSON, object, array, integer, map, and custom record names are not valid declaration keywords. Objects and arrays can be values of a json variable, not additional variable types. This applies to both Agent and Task-local declarations.
+
+Sources: packages/schemas/src/workflow/variables.ts (variableDataTypeSchema), apps/web/src/features/workflow-editor/AgentVariablesPanel.vue (dataTypeOptions), and the DSL compiler's declaration type checks. Keep the language, editor, and canonical schema aligned when capabilities change. An API returning an object does not authorize a new variable type.
+
+Use type-compatible literal defaults: string text must be quoted; number and boolean use their corresponding literals; json can contain JSON values. A JSON-encoded string is still a string, not a json object, and JSON.parse/stringify in a script is an explicit conversion rather than an implicit DSL feature. A quoted string containing braces does not become an object automatically.
+
+Object member access and indexing remain unsupported in DSL variable references. To branch on validation.requiresReview, a script_execution step must explicitly extract and validate a boolean into a declared boolean variable; writing agent.validation.requiresReview in a Branch is not supported. Compilation checks configuration and references, not the future runtime types of tool responses.
 
 ### 4.2 引用与作用域
 
@@ -508,3 +529,13 @@ Printer 对默认名称、无额外 DSL 配置的边界输出分号简写；自�
 ### Branch Case 名称决策（2026-10-23）
 
 使用 `case "通过" { when ...; }`，不再提供 Case alias。连线使用 `"审核"."通过" -> "发布";`，Default 固定通过 .default 引用。Case 名称按 NFC(trim(name)) 匹配、大小写敏感、同 Branch 唯一；不同 Branch 可重名。UI 与 DSL 均拒绝空名称和重名。Case 调序保留 ID 与连接；单纯改名可唯一匹配未变条件时保留 ID，歧义时要求 review。
+
+## 下一版直接绑定约束（已确认，待实现）
+
+`knowledge ["Document Curator Playbook", $sys.target_knowledge_space$];` 与 `knowledgeSpaceId = $sys.target_knowledge_space$;` 直接引用同一个运行目标。普通整值引用统一迁移为 `$agent.key$` / `$task.key$` / `$sys.key$`；字符串内 `${agent.key}` 保留文本插值。带引号的 `$...$` 是字面字符串，变量默认值仍为字面量。具体词法、类型、位置、触发输入与 JSON 往返约束以[直接变量绑定设计](./runtime-variable-binding-design.md)为准。不得把普通 string/json 当作资源引用，不新增用户变量类型，不开放任意对象成员访问。
+
+## Runtime binding implementation amendment — DSL 0.2
+
+The accepted [runtime binding implementation contract](./runtime-variable-binding-design.md#10-implementation-contract-2026-10-25) defines the executable 0.2 extension and canonical graph 1.2.0. Old 0.1 syntax remains supported. Whole-value references in 0.2 must use `$agent.key$`, `$task.key$` or registered `$sys.key$`; `${...}` inside strings remains interpolation. `ODSL007` reports malformed bindings, `ODSL008` reports old bare reference syntax in 0.2, and `ODSL206` reports unknown/wrong-role system keys. Read-only system destinations use `ODSL302`. System keys are typed separately from ordinary variables, which retain string/number/boolean/json.
+
+Knowledge lists and both retrieval configuration surfaces accept `$sys.target_knowledge_space$`. Known system bindings do not require a runtime event instance during validation or persistence. Resource and primitive roles cannot be interchanged. Upgrade uses compile/print to preserve semantic identity and layout while normalizing source formatting/comments; Apply remains explicit.

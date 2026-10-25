@@ -48,16 +48,16 @@ function collectKnowledgeSpaceIds(document: AgentWorkflowExportDocument): Set<st
   const ids = new Set<string>()
   const visitNodes = (nodes: readonly ImportNode[]) => {
     nodes.forEach((node) => {
-      if (node.type === 'agent_action') node.config.knowledgeSpaceIds.forEach((id) => ids.add(id))
+      if (node.type === 'agent_action') node.config.knowledgeSpaceIds.forEach((id) => { if (typeof id === 'string') ids.add(id) })
       if (node.type === 'task') node.config.steps.forEach((step) => {
-        if (step.kind === 'knowledge_retrieval') ids.add(step.configuration.knowledgeSpaceId)
+        if (step.kind === 'knowledge_retrieval' && typeof step.configuration.knowledgeSpaceId === 'string') ids.add(step.configuration.knowledgeSpaceId)
       })
       if (node.type === 'loop') visitNodes(node.config.body.graph.nodes)
     })
   }
   visitNodes(document.workflow.nodes)
   document.reusableTools.forEach((tool) => {
-    if (tool.kind === 'knowledge_retrieval') ids.add(tool.configuration.knowledgeSpaceId)
+    if (tool.kind === 'knowledge_retrieval' && typeof tool.configuration.knowledgeSpaceId === 'string') ids.add(tool.configuration.knowledgeSpaceId)
   })
   return ids
 }

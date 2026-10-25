@@ -1,10 +1,12 @@
-import type { AgentWorkflowEditorDocument, AgentVariable, TaskLocalVariable, AgentReusableTool, ToolStep, ValueSource, WorkflowNode, LoopBodyNode, UUID } from '@odyssey/schemas'
+import type { AgentWorkflowEditorDocument, AgentVariable, TaskLocalVariable, AgentReusableTool, ToolStep, ValueSource, WorkflowNode, LoopBodyNode, KnowledgeSpaceReference, UUID } from '@odyssey/schemas'
 import type { DslBaseline } from './compiler'
 import { caseSymbolPath, collectNodeSignatures, nodeSymbolPath, parseDsl, dslReservedWords, normalizeDslName } from './syntax'
 
 export interface PrintedDsl { readonly source: string; readonly baseline: DslBaseline }
 const quote = (value: string) => JSON.stringify(value)
 export function printWorkflowDsl(document: AgentWorkflowEditorDocument, knowledge: readonly { id: string; name: string }[], exitNames?: ReadonlyMap<string, string>): PrintedDsl {
+  const modern = document.workflow.schemaVersion === '1.2.0'
+  const ref = (reference: string) => modern ? `$${reference}$` : reference
   const symbols = new Map<string, UUID>()
   const references = new Map<string, string>()
   const variableAliases = new Map<string, string>()
@@ -42,10 +44,11 @@ export function printWorkflowDsl(document: AgentWorkflowEditorDocument, knowledg
     line(depth, '}')
   }
   const value = (entry: ValueSource): string => {
-    if (entry.kind === 'variable') return references.get(entry.variableId) ?? `agent.unavailable_variable`
+    if (entry.kind === 'system') return `$sys.${entry.key}$`
+    if (entry.kind === 'variable') return ref(references.get(entry.variableId) ?? `agent.unavailable_variable`)
     if (entry.kind === 'literal') return typeof entry.value === 'string' && entry.value.includes('${') ? `literal(${quote(entry.value)})` : JSON.stringify(entry.value)
     const content = entry.segments.map((segment) => segment.kind === 'text'
-      ? segment.text.replaceAll('${', '\uE000{') : `\${${references.get(segment.variableId) ?? 'agent.unavailable_variable'}}`).join('')
+      ? segment.text.replaceAll('${', '\uE000{') : segment.kind === 'system' ? `\${sys.${segment.key}}` : `\${${references.get(segment.variableId) ?? 'agent.unavailable_variable'}}`).join('')
     return quote(content).replaceAll('\uE000', '\\$')
   }
   const record = (entries: readonly { name: string; value: ValueSource; id: UUID }[], path: string, key: string) => `[${entries.map((entry, index) => {
@@ -53,18 +56,19 @@ export function printWorkflowDsl(document: AgentWorkflowEditorDocument, knowledg
     return `{ name: ${quote(entry.name)}, value: ${value(entry.value)} }`
   }).join(', ')}]`
   const knowledgeNames = new Map(knowledge.map((entry) => [entry.id, normalizeDslName(entry.name)]))
+  const knowledgeRef = (reference: KnowledgeSpaceReference) => typeof reference === 'string' ? quote(knowledgeNames.get(reference) ?? 'Unavailable Knowledge Space') : `$sys.${reference.key}$`
   const config = (tool: ToolStep | AgentReusableTool, depth: number, path: string) => {
     const setting = (key: string, rendered: string) => line(depth + 1, `${key} = ${rendered};`)
     line(depth, 'config {')
     switch (tool.kind) {
       case 'knowledge_retrieval':
-        setting('knowledgeSpaceId', quote(knowledgeNames.get(tool.configuration.knowledgeSpaceId) ?? 'Unavailable Knowledge Space'))
+        setting('knowledgeSpaceId', knowledgeRef(tool.configuration.knowledgeSpaceId))
         if (tool.configuration.query) setting('query', value(tool.configuration.query))
         if (tool.configuration.topK !== undefined) setting('topK', String(tool.configuration.topK))
         break
       case 'script_execution':
         setting('language', tool.configuration.language)
-        if (tool.configuration.inputs) setting('inputs', `[${tool.configuration.inputs.map((input) => `{ alias: ${quote(input.alias)}, variableId: ${references.get(input.variableId) ?? 'agent.unavailable_variable'} }`).join(', ')}]`)
+        if (tool.configuration.inputs) setting('inputs', `[${tool.configuration.inputs.map((input) => `{ alias: ${quote(input.alias)}, variableId: ${ref(references.get(input.variableId) ?? 'agent.unavailable_variable')} }`).join(', ')}]`)
         setting('script', quote(tool.configuration.script)); break
       case 'api_request': {
         setting('method', tool.configuration.method)
@@ -75,7 +79,7 @@ export function printWorkflowDsl(document: AgentWorkflowEditorDocument, knowledg
         break
       }
       case 'set_variable':
-        setting('targetVariableId', references.get(tool.configuration.targetVariableId) ?? 'agent.unavailable_variable')
+        setting('targetVariableId', ref(references.get(tool.configuration.targetVariableId) ?? 'agent.unavailable_variable'))
         setting('operation', tool.configuration.operation)
         if ('value' in tool.configuration) setting('value', value(tool.configuration.value))
         break
@@ -86,7 +90,7 @@ export function printWorkflowDsl(document: AgentWorkflowEditorDocument, knowledg
     }
     line(depth, '}')
   }
-  line(0, `workflow ${quote(document.agent.name)} version "0.1" {`)
+  line(0, `workflow ${quote(document.agent.name)} version "${modern ? '0.2' : '0.1'}" {`)
   line(1, 'variables {')
   document.variables.forEach((entry) => variable(entry, 2, 'root', false))
   line(1, '}')
@@ -101,7 +105,7 @@ export function printWorkflowDsl(document: AgentWorkflowEditorDocument, knowledg
       line(3, `name ${quote(tool.name)};`)
       config(tool, 3, path)
       line(3, `input_bindings [${tool.inputBindings.map(value).join(', ')}];`)
-      line(3, tool.outputBinding ? `output_binding { sourceKey: ${quote(tool.outputBinding.sourceKey)}, targetVariable: ${references.get(tool.outputBinding.targetVariableId) ?? 'agent.unavailable_variable'} };` : 'output_binding none;')
+      line(3, tool.outputBinding ? `output_binding { sourceKey: ${quote(tool.outputBinding.sourceKey)}, targetVariable: ${ref(references.get(tool.outputBinding.targetVariableId) ?? 'agent.unavailable_variable')} };` : 'output_binding none;')
       line(2, '}')
     })
     line(1, '}')
@@ -135,7 +139,7 @@ export function printWorkflowDsl(document: AgentWorkflowEditorDocument, knowledg
         case 'agent_action':
           line(depth + 2, `model ${quote(node.config.model)};`)
           line(depth + 2, `goal ${value(node.config.goal)};`)
-          line(depth + 2, `knowledge [${node.config.knowledgeSpaceIds.map((key) => quote(knowledgeNames.get(key) ?? 'Unavailable Knowledge Space')).join(', ')}];`)
+          line(depth + 2, `knowledge [${node.config.knowledgeSpaceIds.map((key) => knowledgeRef(key)).join(', ')}];`)
           line(depth + 2, `toolbox [${node.config.reusableToolIds.map((key) => toolAliases.get(key) ?? 'unavailable_tool').join(', ')}];`)
           break
         case 'task':
@@ -149,7 +153,7 @@ export function printWorkflowDsl(document: AgentWorkflowEditorDocument, knowledg
             remember(stepPath, step.id)
             line(depth + 3, `step ${stepKey} using system_tool ${step.kind} {`)
             config(step, depth + 4, stepPath)
-            if (step.outputMapping) line(depth + 4, `output ${quote(step.outputMapping.sourceKey)} -> ${references.get(step.outputMapping.targetVariableId) ?? 'agent.unavailable_variable'};`)
+            if (step.outputMapping) line(depth + 4, `output ${quote(step.outputMapping.sourceKey)} -> ${ref(references.get(step.outputMapping.targetVariableId) ?? 'agent.unavailable_variable')};`)
             line(depth + 4, `on_failure ${step.failureBehavior.kind === 'retry' ? 'retry 2' : 'fail_task'};`)
             line(depth + 3, '}')
           })
@@ -177,7 +181,7 @@ export function printWorkflowDsl(document: AgentWorkflowEditorDocument, knowledg
           line(depth + 2, `max_turns ${node.config.maxTurns};`)
           const exit = node.config.exitCondition
           const operator = { eq: '==', neq: '!=', gt: '>', gte: '>=', lt: '<', lte: '<=' }[exit.operator]
-          line(depth + 2, `exit_when ${references.get(exit.variableId) ?? 'agent.unavailable_variable'} ${operator} ${JSON.stringify(exit.value)};`)
+          line(depth + 2, `exit_when ${ref(references.get(exit.variableId) ?? 'agent.unavailable_variable')} ${operator} ${JSON.stringify(exit.value)};`)
           graph(node.config.body.graph.nodes, node.config.body.graph.edges, depth + 2, nodePath)
           break
         }

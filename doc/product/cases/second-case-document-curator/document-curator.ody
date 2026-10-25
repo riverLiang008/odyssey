@@ -1,0 +1,152 @@
+// Design fixture only; API contracts remain illustrative. Runtime injection and Agent Action output require the future executor.
+workflow "Document Curator" version "0.2" {
+  variables {
+    json shared context = {} {
+      display_name "context";
+      read_only false;
+    }
+    json shared discovered_evidence = [] {
+      display_name "discovered_evidence";
+      read_only false;
+    }
+    json shared proposal = {} {
+      display_name "proposal";
+      read_only false;
+    }
+    json shared validation_request = {} {
+      display_name "validation_request";
+      read_only false;
+    }
+    json shared validation = {} {
+      display_name "validation";
+      read_only false;
+    }
+    boolean shared requires_review = true {
+      display_name "requires_review";
+      read_only false;
+    }
+    json shared result = {} {
+      display_name "result";
+      read_only false;
+    }
+  }
+  tools {
+    reusable_tool tool_1_Find_Related_Game_Documents using system_tool knowledge_retrieval {
+      name "Find Related Game Documents";
+      config {
+        knowledgeSpaceId = $sys.target_knowledge_space$;
+        topK = 5;
+      }
+      input_bindings [$sys.document_id$];
+      output_binding { sourceKey: "retrieved_documents", targetVariable: $agent.discovered_evidence$ };
+    }
+  }
+  nodes {
+    start;
+    end;
+    task "Read Document Context" {
+      variables {
+      }
+      steps {
+        step step_0_api_request using system_tool api_request {
+          config {
+            method = POST;
+            url = "https://curator.example.invalid/context";
+            headers = [{ name: "Content-Type", value: "application/json" }];
+            body = { kind: json, value: $sys.change_event$ };
+          }
+          output "response.data" -> $agent.context$;
+          on_failure fail_task;
+        }
+      }
+    }
+    agent_action "Propose Local Changes" {
+      model "gpt-5";
+      goal "Act as Document Curator for the event target Knowledge Space. Read the complete policy snapshot and changed source in this prepared context: ${agent.context}. Follow Metadata Guidelines, Relationship Guidelines, and Review & Change Policy from Document Curator Playbook. Use Find Related Game Documents only for additional local evidence, not to replace exact source revisions or complete policy loading. Its input binding is the system document identity; use the prepared context to interpret the returned evidence. Propose grounded Summary, Guide, existing tag additions, and incident relationships. Preserve source text, unrelated graph data, and protected annotations. Separate concrete operations from unresolved findings; include source identities, revisions, locators, passages, prior values, and reasons. New tags, removals, non-reference relations, protected edits, and conflicts require review. Do not approve or apply changes. Write one structured candidate object with operations and findings arrays into agent.proposal. Do not set trusted validation outcomes. This proposal-write instruction requires the future Agent Action output contract; it is not an explicit DSL output mapping.";
+      knowledge ["Document Curator Playbook", $sys.target_knowledge_space$];
+      toolbox [tool_1_Find_Related_Game_Documents];
+    }
+    task "Validate Proposal" {
+      variables {
+      }
+      steps {
+        step step_0_script_execution using system_tool script_execution {
+          config {
+            language = javascript;
+            inputs = [{ alias: "context", variableId: $agent.context$ }, { alias: "proposal", variableId: $agent.proposal$ }];
+            script = "if (!context || typeof context !== 'object' || !proposal || typeof proposal !== 'object' || !Array.isArray(proposal.operations) || !Array.isArray(proposal.findings)) throw new Error('INVALID_PROPOSAL_SHAPE'); return { context, proposal };";
+          }
+          output "result" -> $agent.validation_request$;
+          on_failure fail_task;
+        }
+        step step_1_api_request using system_tool api_request {
+          config {
+            method = POST;
+            url = "https://curator.example.invalid/validate";
+            headers = [{ name: "Content-Type", value: "application/json" }];
+            body = { kind: json, value: $agent.validation_request$ };
+          }
+          output "response.data" -> $agent.validation$;
+          on_failure fail_task;
+        }
+        step step_2_script_execution using system_tool script_execution {
+          config {
+            language = javascript;
+            inputs = [{ alias: "validation", variableId: $agent.validation$ }];
+            script = "if (!validation || validation.valid !== true || typeof validation.requiresReview !== 'boolean') throw new Error('INVALID_OR_REJECTED_VALIDATION'); return validation.requiresReview;";
+          }
+          output "result" -> $agent.requires_review$;
+          on_failure fail_task;
+        }
+      }
+    }
+    branch "Choose Disposition" {
+      case "Auto Apply" {
+        when $agent.requires_review$ == false;
+      }
+      default "Human Review";
+    }
+    task "Apply Validated Changes" {
+      variables {
+      }
+      steps {
+        step step_0_api_request using system_tool api_request {
+          config {
+            method = POST;
+            url = "https://curator.example.invalid/apply";
+            headers = [{ name: "Content-Type", value: "application/json" }];
+            body = { kind: json, value: $agent.validation$ };
+          }
+          output "response.data" -> $agent.result$;
+          on_failure fail_task;
+        }
+      }
+    }
+    task "Save Review Proposal" {
+      variables {
+      }
+      steps {
+        step step_0_api_request using system_tool api_request {
+          config {
+            method = POST;
+            url = "https://curator.example.invalid/reviews";
+            headers = [{ name: "Content-Type", value: "application/json" }];
+            body = { kind: json, value: $agent.validation$ };
+          }
+          output "response.data" -> $agent.result$;
+          on_failure fail_task;
+        }
+      }
+    }
+  }
+  edges {
+    start -> "Read Document Context";
+    "Read Document Context" -> "Propose Local Changes";
+    "Propose Local Changes" -> "Validate Proposal";
+    "Validate Proposal" -> "Choose Disposition";
+    "Choose Disposition"."Auto Apply" -> "Apply Validated Changes";
+    "Choose Disposition".default -> "Save Review Proposal";
+    "Apply Validated Changes" -> end;
+    "Save Review Proposal" -> end;
+  }
+}

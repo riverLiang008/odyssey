@@ -1,0 +1,9 @@
+{
+  "status": "review_required",
+  "reviewId": "example-review-001",
+  "eventId": "example-add-rainy-day",
+  "documentId": "example-rainy-day",
+  "graphRevision": 12,
+  "appliedOperationCount": 0,
+  "replayed": false
+}

@@ -12,6 +12,7 @@ from odyssey_api.journeys.dto import (
     EndNode,
     PatternKind,
     TemplateEndAssignment,
+    WorkflowEdge,
 )
 from odyssey_api.journeys.end_routing import (
     bind_template_exits,
@@ -25,6 +26,12 @@ from odyssey_api.journeys.workflow_domain import create_minimum_workflow
 def test_hub_generates_empty_targets_without_ambiguous_legacy_fanout() -> None:
     pattern = instantiate_pattern(PatternKind.HUB_AND_SPOKE, uuid4)
     workflow, layout = create_minimum_workflow(uuid4)
+    # Explicit legacy connected graph: new workflows now start disconnected.
+    workflow.edges = [
+        WorkflowEdge(
+            id=uuid4(), source_node_id=workflow.nodes[0].id, target_node_id=workflow.nodes[1].id
+        )
+    ]
     original = workflow.model_copy(deep=True)
     result = reconcile_workflow_ends(workflow, layout, pattern, pattern.slots[0].id, uuid4)
     assert len([node for node in result.workflow.nodes if isinstance(node, EndNode)]) == 4

@@ -15,7 +15,6 @@ from odyssey_api.journeys.dto import (
     ReusableKnowledgeTool,
     StartNode,
     TaskNode,
-    WorkflowEdge,
     WorkflowGraph,
 )
 
@@ -44,6 +43,8 @@ def extract_knowledge_space_references(
             node_path = (*path, node_index)
             if isinstance(node, AgentActionNode):
                 for index, knowledge_space_id in enumerate(node.configuration.knowledge_space_ids):
+                    if not isinstance(knowledge_space_id, UUID):
+                        continue
                     reference_path = (*node_path, "config", "knowledgeSpaceIds", index)
                     references.append(
                         WorkflowKnowledgeReference(
@@ -55,7 +56,9 @@ def extract_knowledge_space_references(
                     )
             elif isinstance(node, TaskNode):
                 for step_index, step in enumerate(node.configuration.steps):
-                    if not isinstance(step, KnowledgeRetrievalToolStep):
+                    if not isinstance(step, KnowledgeRetrievalToolStep) or not isinstance(
+                        step.configuration.knowledge_space_id, UUID
+                    ):
                         continue
                     reference_path = (
                         *node_path,
@@ -81,7 +84,9 @@ def extract_knowledge_space_references(
 
     visit_nodes(workflow.nodes, ("workflow", "nodes"))
     for index, tool in enumerate(reusable_tools):
-        if not isinstance(tool, ReusableKnowledgeTool):
+        if not isinstance(tool, ReusableKnowledgeTool) or not isinstance(
+            tool.configuration.knowledge_space_id, UUID
+        ):
             continue
         path = ("reusableTools", index, "configuration", "knowledgeSpaceId")
         references.append(
@@ -106,13 +111,7 @@ def create_minimum_workflow(
             StartNode(id=start_id, name="Start", type="start", config={}),
             EndNode(id=end_id, name="End", type="end", config={}),
         ],
-        edges=[
-            WorkflowEdge(
-                id=id_factory(),
-                source_node_id=start_id,
-                target_node_id=end_id,
-            )
-        ],
+        edges=[],
     )
     layout = CanvasLayout(
         schema_version="1.0.0",

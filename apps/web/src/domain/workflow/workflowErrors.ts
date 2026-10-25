@@ -62,11 +62,11 @@ export type WorkflowDomainError =
   | { readonly code: 'INVALID_NODE_CONFIG'; readonly nodeId: UUID }
   | { readonly code: 'INVALID_LOOP_BODY'; readonly loopNodeId: UUID; readonly issues: readonly WorkflowValidationIssue[] }
   | { readonly code: 'RESOURCE_TARGET_INVALID'; readonly nodeId: UUID }
-  | { readonly code: 'RESOURCE_NOT_AVAILABLE'; readonly resourceId: UUID }
-  | { readonly code: 'RESOURCE_ALREADY_BOUND'; readonly nodeId: UUID; readonly resourceId: UUID }
-  | { readonly code: 'RESOURCE_NOT_BOUND'; readonly nodeId: UUID; readonly resourceId: UUID }
-  | { readonly code: 'RESOURCE_IN_USE'; readonly resourceId: UUID; readonly referenceCount: number }
-  | { readonly code: 'RESOURCE_ID_CONFLICT'; readonly resourceId: UUID }
+  | { readonly code: 'RESOURCE_NOT_AVAILABLE'; readonly resourceId: string }
+  | { readonly code: 'RESOURCE_ALREADY_BOUND'; readonly nodeId: UUID; readonly resourceId: string }
+  | { readonly code: 'RESOURCE_NOT_BOUND'; readonly nodeId: UUID; readonly resourceId: string }
+  | { readonly code: 'RESOURCE_IN_USE'; readonly resourceId: string; readonly referenceCount: number }
+  | { readonly code: 'RESOURCE_ID_CONFLICT'; readonly resourceId: string }
 
 export type WorkflowCommandResult<T> =
   | { readonly ok: true; readonly value: T; readonly validation: WorkflowValidationReport }

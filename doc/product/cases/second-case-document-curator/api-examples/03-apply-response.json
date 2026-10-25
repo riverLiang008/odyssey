@@ -1,0 +1,9 @@
+{
+  "status": "applied",
+  "receiptId": "example-apply-001",
+  "eventId": "example-add-rainy-day",
+  "documentId": "example-rainy-day",
+  "graphRevision": 13,
+  "appliedOperationCount": 1,
+  "replayed": false
+}

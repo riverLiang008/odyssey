@@ -98,12 +98,10 @@ export function createMinimalAgent(
   let agentId: UUID
   let startId: UUID
   let endId: UUID
-  let edgeId: UUID
   try {
     agentId = factory.agentId()
     startId = factory.workflowNodeId()
     endId = factory.workflowNodeId()
-    edgeId = factory.workflowEdgeId()
   } catch {
     return failure({ code: 'ID_FACTORY_FAILED' })
   }
@@ -116,7 +114,7 @@ export function createMinimalAgent(
     ...journey.data.agents.map((agent) => agent.id),
     ...systemVariableIds,
   ])
-  const generated = [agentId, startId, endId, edgeId]
+  const generated = [agentId, startId, endId]
   if (new Set(generated).size !== generated.length || generated.some((id) => reserved.has(id))) {
     return failure({ code: 'GENERATED_ID_COLLISION' })
   }
@@ -137,7 +135,7 @@ export function createMinimalAgent(
         { id: startId, type: 'start', name: 'Start', config: {} },
         { id: endId, type: 'end', name: 'End', config: {} },
       ],
-      edges: [{ id: edgeId, sourceNodeId: startId, targetNodeId: endId }],
+      edges: [],
     },
     layout: {
       schemaVersion: '1.0.0',
@@ -221,13 +219,13 @@ export function instantiateAgentTemplate(
   const requestedName = name?.trim() || template.data.name
   const snapshot = structuredClone(template.data.snapshot)
   snapshot.reusableTools.forEach((tool) => {
-    if (tool.kind === 'knowledge_retrieval') tool.configuration.knowledgeSpaceId = mappings.get(tool.configuration.knowledgeSpaceId) ?? tool.configuration.knowledgeSpaceId
+    if (tool.kind === 'knowledge_retrieval' && typeof tool.configuration.knowledgeSpaceId === 'string') tool.configuration.knowledgeSpaceId = mappings.get(tool.configuration.knowledgeSpaceId) ?? tool.configuration.knowledgeSpaceId
   })
   const rewriteKnowledgeSpaces = (nodes: Array<WorkflowNode | LoopStartNode | LoopEndNode>): void => {
     nodes.forEach((node) => {
-      if (node.type === 'agent_action') node.config.knowledgeSpaceIds = node.config.knowledgeSpaceIds.map((id) => mappings.get(id) ?? id)
+      if (node.type === 'agent_action') node.config.knowledgeSpaceIds = node.config.knowledgeSpaceIds.map((id) => typeof id === 'string' ? mappings.get(id) ?? id : id)
       if (node.type === 'task') node.config.steps.forEach((step) => {
-        if (step.kind === 'knowledge_retrieval') step.configuration.knowledgeSpaceId = mappings.get(step.configuration.knowledgeSpaceId) ?? step.configuration.knowledgeSpaceId
+        if (step.kind === 'knowledge_retrieval' && typeof step.configuration.knowledgeSpaceId === 'string') step.configuration.knowledgeSpaceId = mappings.get(step.configuration.knowledgeSpaceId) ?? step.configuration.knowledgeSpaceId
       })
       if (node.type === 'loop') rewriteKnowledgeSpaces(node.config.body.graph.nodes)
     })

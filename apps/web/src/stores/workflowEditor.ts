@@ -1,5 +1,7 @@
+import { nodesHaveRuntimeBinding, toolHasRuntimeBinding, type KnowledgeSpaceReference } from '@odyssey/schemas'
 import { containLoopChildren, type LoopChildSize } from '@/canvas/workflow/loopBounds'
 import { applyBranchEdit } from '@/domain/workflow/branchCommands'
+import { isKnowledgeSpaceReferenceable } from '@/domain/knowledge'
 import type { BranchEditIntent } from '@/domain/workflow/branchDrafts'
 import { computed, reactive, shallowRef, toRaw } from 'vue'
 import { defineStore } from 'pinia'
@@ -484,6 +486,10 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
 
   function markDirty() {
+    const current = document.value
+    if (current && current.workflow.schemaVersion !== '1.2.0' && (nodesHaveRuntimeBinding(current.workflow.nodes) || current.reusableTools.some(toolHasRuntimeBinding))) {
+      document.value = { ...current, workflow: { ...current.workflow, schemaVersion: '1.2.0' } }
+    }
     const state = persistenceState.value
     if (!state) return
     persistenceState.value = markPersistenceDirty(state, Date.now() + WORKFLOW_AUTOSAVE_DELAY_MS)
@@ -819,7 +825,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     if (!task || !document.value) return false
     const result = changeTaskTool(task, intent, {
       mode: session.mode, variables: document.value.variables,
-      knowledgeSpaceIds: new Set(toolKnowledgeSpaces.value.filter((s) => ['ready', 'syncing'].includes(s.lifecycleStatus) && ['healthy', 'needs_review'].includes(s.graphStatus)).map((s) => s.id)),
+      knowledgeSpaceIds: new Set(toolKnowledgeSpaces.value.filter(isKnowledgeSpaceReferenceable).map((space) => space.id)),
     })
     if (!result.ok) { toolError.value = result.error; return false }
     if (context.kind === 'root') {
@@ -994,16 +1000,13 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     return changeAgentActionReusableTool(context, nodeId, reusableToolId, 'unbind')
   }
 
-  function changeAgentActionKnowledgeSpace(context: WorkflowCanvasContext, nodeId: UUID, knowledgeSpaceId: UUID, operation: 'bind' | 'unbind') {
+  function changeAgentActionKnowledgeSpace(context: WorkflowCanvasContext, nodeId: UUID, knowledgeSpaceId: KnowledgeSpaceReference, operation: 'bind' | 'unbind') {
     const current = document.value
     if (!current) return null
     const loop = context.kind === 'loop-body' ? findLoop(context.loopNodeId) : null
     if (context.kind === 'loop-body' && !loop) return null
     const graph = loop?.config.body.graph ?? current.workflow
-    const availableIds = new Set(knowledgeSpaces.value
-      .filter((space) => ['ready', 'syncing'].includes(space.lifecycleStatus)
-        && ['healthy', 'needs_review'].includes(space.graphStatus))
-      .map((space) => space.id))
+    const availableIds = new Set(knowledgeSpaces.value.filter(isKnowledgeSpaceReferenceable).map((space) => space.id))
     const command = operation === 'bind' ? bindAgentActionKnowledgeSpaceCommand : unbindAgentActionKnowledgeSpaceCommand
     const resourceResult = command(graph.nodes, availableIds, { nodeId, knowledgeSpaceId })
     if (!resourceResult.ok) {
@@ -1021,10 +1024,10 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     return applyLoopApplicationResult(loop.id, { ok: true, value: { graph: graphResult.value, layout: structuredClone(loop.config.body.layout) } })
   }
 
-  function bindWorkflowAgentActionKnowledgeSpace(context: WorkflowCanvasContext, nodeId: UUID, knowledgeSpaceId: UUID) {
+  function bindWorkflowAgentActionKnowledgeSpace(context: WorkflowCanvasContext, nodeId: UUID, knowledgeSpaceId: KnowledgeSpaceReference) {
     return changeAgentActionKnowledgeSpace(context, nodeId, knowledgeSpaceId, 'bind')
   }
-  function unbindWorkflowAgentActionKnowledgeSpace(context: WorkflowCanvasContext, nodeId: UUID, knowledgeSpaceId: UUID) {
+  function unbindWorkflowAgentActionKnowledgeSpace(context: WorkflowCanvasContext, nodeId: UUID, knowledgeSpaceId: KnowledgeSpaceReference) {
     return changeAgentActionKnowledgeSpace(context, nodeId, knowledgeSpaceId, 'unbind')
   }
 

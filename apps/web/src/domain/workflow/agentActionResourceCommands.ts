@@ -1,3 +1,4 @@
+import { knowledgeReferenceKey, type KnowledgeSpaceReference } from '@odyssey/schemas'
 import type { AgentActionNode, LoopBodyNode, UUID, WorkflowNode } from '@odyssey/schemas'
 
 import type { WorkflowDomainError } from './workflowErrors'
@@ -13,7 +14,7 @@ export interface AgentActionReusableToolIntent {
 
 export interface AgentActionKnowledgeSpaceIntent {
   readonly nodeId: UUID
-  readonly knowledgeSpaceId: UUID
+  readonly knowledgeSpaceId: KnowledgeSpaceReference
 }
 
 function findAgentAction(
@@ -72,8 +73,8 @@ export function bindAgentActionKnowledgeSpace(
 ): AgentActionResourceResult {
   const node = findAgentAction(nodes, intent.nodeId)
   if (!node) return { ok: false, error: { code: 'RESOURCE_TARGET_INVALID', nodeId: intent.nodeId } }
-  if (!availableKnowledgeSpaceIds.has(intent.knowledgeSpaceId)) return { ok: false, error: { code: 'RESOURCE_NOT_AVAILABLE', resourceId: intent.knowledgeSpaceId } }
-  if (node.config.knowledgeSpaceIds.includes(intent.knowledgeSpaceId)) return { ok: false, error: { code: 'RESOURCE_ALREADY_BOUND', nodeId: node.id, resourceId: intent.knowledgeSpaceId } }
+  if (typeof intent.knowledgeSpaceId === 'string' && !availableKnowledgeSpaceIds.has(intent.knowledgeSpaceId)) return { ok: false, error: { code: 'RESOURCE_NOT_AVAILABLE', resourceId: knowledgeReferenceKey(intent.knowledgeSpaceId) } }
+  if (node.config.knowledgeSpaceIds.some(reference => knowledgeReferenceKey(reference) === knowledgeReferenceKey(intent.knowledgeSpaceId))) return { ok: false, error: { code: 'RESOURCE_ALREADY_BOUND', nodeId: node.id, resourceId: knowledgeReferenceKey(intent.knowledgeSpaceId) } }
   return { ok: true, value: { ...structuredClone(node.config), knowledgeSpaceIds: [...node.config.knowledgeSpaceIds, intent.knowledgeSpaceId] } }
 }
 
@@ -84,7 +85,7 @@ export function unbindAgentActionKnowledgeSpace(
 ): AgentActionResourceResult {
   const node = findAgentAction(nodes, intent.nodeId)
   if (!node) return { ok: false, error: { code: 'RESOURCE_TARGET_INVALID', nodeId: intent.nodeId } }
-  if (!availableKnowledgeSpaceIds.has(intent.knowledgeSpaceId)) return { ok: false, error: { code: 'RESOURCE_NOT_AVAILABLE', resourceId: intent.knowledgeSpaceId } }
-  if (!node.config.knowledgeSpaceIds.includes(intent.knowledgeSpaceId)) return { ok: false, error: { code: 'RESOURCE_NOT_BOUND', nodeId: node.id, resourceId: intent.knowledgeSpaceId } }
-  return { ok: true, value: { ...structuredClone(node.config), knowledgeSpaceIds: node.config.knowledgeSpaceIds.filter((id) => id !== intent.knowledgeSpaceId) } }
+  if (typeof intent.knowledgeSpaceId === 'string' && !availableKnowledgeSpaceIds.has(intent.knowledgeSpaceId)) return { ok: false, error: { code: 'RESOURCE_NOT_AVAILABLE', resourceId: knowledgeReferenceKey(intent.knowledgeSpaceId) } }
+  if (!node.config.knowledgeSpaceIds.some(reference => knowledgeReferenceKey(reference) === knowledgeReferenceKey(intent.knowledgeSpaceId))) return { ok: false, error: { code: 'RESOURCE_NOT_BOUND', nodeId: node.id, resourceId: knowledgeReferenceKey(intent.knowledgeSpaceId) } }
+  return { ok: true, value: { ...structuredClone(node.config), knowledgeSpaceIds: node.config.knowledgeSpaceIds.filter((id) => knowledgeReferenceKey(id) !== knowledgeReferenceKey(intent.knowledgeSpaceId)) } }
 }

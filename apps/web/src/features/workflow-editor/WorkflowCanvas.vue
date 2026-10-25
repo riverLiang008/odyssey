@@ -15,6 +15,7 @@ import {
 } from '@vue-flow/core'
 import type { JourneyEditorDocument, AgentVariable, SystemToolDefinition, AgentReusableTool, CanvasLayout, KnowledgeSpaceSummary, LoopBodyGraph, LoopNode, UUID, WorkflowGraph } from '@odyssey/schemas'
 import type { WorkflowMode } from '@/stores/workflowEditor'
+import { isKnowledgeSpaceReferenceable } from '@/domain/knowledge'
 
 import {
   connectionToIntent,
@@ -309,7 +310,7 @@ function handleResourceDrop(payload: WorkflowResourceDragPayload, target: Workfl
   const node = projection.value.nodes.find(candidate => candidate.id === target.nodeId)?.data?.node
   const evaluation = evaluateWorkflowResourceDrop(payload, target, {
     node: node?.type === 'agent_action' || node?.type === 'task' ? node : null,
-    systemTools: props.systemTools, mode: props.mode, availableReusableToolIds: new Set(props.availableReusableToolIds ?? []), availableKnowledgeSpaceIds: new Set((props.knowledgeSpaces ?? []).map((space) => space.id)),
+    systemTools: props.systemTools, mode: props.mode, availableReusableToolIds: new Set(props.availableReusableToolIds ?? []), availableKnowledgeSpaceIds: new Set((props.knowledgeSpaces ?? []).filter(isKnowledgeSpaceReferenceable).map((space) => space.id)),
   })
   if (evaluation.status === 'valid') {
     resourceDropFeedback.value = { nodeId: null, targetKind: null, status: 'idle' }
@@ -320,11 +321,11 @@ function handleResourceDrop(payload: WorkflowResourceDragPayload, target: Workfl
   }
 }
 function evaluateResourceTarget(payload: WorkflowResourceDragPayload, target: WorkflowResourceDropTarget) {
-  if (target.kind === 'canvas-pane') return evaluateWorkflowResourceDrop(payload, target, { node: null, systemTools: props.systemTools, mode: props.mode, availableReusableToolIds: new Set(props.availableReusableToolIds ?? []), availableKnowledgeSpaceIds: new Set((props.knowledgeSpaces ?? []).map((space) => space.id)) })
+  if (target.kind === 'canvas-pane') return evaluateWorkflowResourceDrop(payload, target, { node: null, systemTools: props.systemTools, mode: props.mode, availableReusableToolIds: new Set(props.availableReusableToolIds ?? []), availableKnowledgeSpaceIds: new Set((props.knowledgeSpaces ?? []).filter(isKnowledgeSpaceReferenceable).map((space) => space.id)) })
   const node = projection.value.nodes.find(candidate => candidate.id === target.nodeId)?.data?.node
   return evaluateWorkflowResourceDrop(payload, target, {
     node: node?.type === 'agent_action' || node?.type === 'task' ? node : null,
-    systemTools: props.systemTools, mode: props.mode, availableReusableToolIds: new Set(props.availableReusableToolIds ?? []), availableKnowledgeSpaceIds: new Set((props.knowledgeSpaces ?? []).map((space) => space.id)),
+    systemTools: props.systemTools, mode: props.mode, availableReusableToolIds: new Set(props.availableReusableToolIds ?? []), availableKnowledgeSpaceIds: new Set((props.knowledgeSpaces ?? []).filter(isKnowledgeSpaceReferenceable).map((space) => space.id)),
   })
 }
 function resourceEnter(payload: WorkflowResourceDragPayload, target: WorkflowResourceDropTarget) {

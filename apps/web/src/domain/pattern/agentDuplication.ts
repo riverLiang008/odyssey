@@ -106,14 +106,14 @@ function externalIds(source: AgentWorkflowEditorDocument, systemVariableIds: rea
   const ids = [...systemVariableIds]
   source.reusableTools.forEach((tool) => {
     if (tool.sourceTemplateId) ids.push(tool.sourceTemplateId)
-    if (tool.kind === 'knowledge_retrieval') ids.push(tool.configuration.knowledgeSpaceId)
+    if (tool.kind === 'knowledge_retrieval' && typeof tool.configuration.knowledgeSpaceId === 'string') ids.push(tool.configuration.knowledgeSpaceId)
   })
   const collectNodes = (nodes: readonly AnyNode[]): void => {
     nodes.forEach((node) => {
-      if (node.type === 'agent_action') ids.push(...node.config.knowledgeSpaceIds)
+      if (node.type === 'agent_action') ids.push(...node.config.knowledgeSpaceIds.filter((id) => typeof id === 'string'))
       if (node.type === 'task') {
         node.config.steps.forEach((step) => {
-          if (step.kind === 'knowledge_retrieval') ids.push(step.configuration.knowledgeSpaceId)
+          if (step.kind === 'knowledge_retrieval' && typeof step.configuration.knowledgeSpaceId === 'string') ids.push(step.configuration.knowledgeSpaceId)
         })
       }
       if (node.type === 'loop') collectNodes(node.config.body.graph.nodes)
