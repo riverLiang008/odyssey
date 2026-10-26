@@ -228,21 +228,19 @@ function contextForNodeId(nodeId: UUID): CanvasTargetContext {
   return { kind: 'root' }
 }
 function creationTarget(nodeType: WorkflowPaletteNodeType, position: { x: number; y: number }): { context: CanvasTargetContext; point: { x: number; y: number } } | null {
-  if (!('schemaVersion' in props.graph)) return { context: { kind: 'root' }, point: position }
-  const placements = new Map(props.layout.nodePlacements.map((placement) => [placement.nodeId, placement]))
-  const loop = [...props.graph.nodes].reverse().find((node) => {
-    if (node.type !== 'loop') return false
-    const placement = placements.get(node.id)
-    if (!placement) return false
-    const width = placement.width ?? 720
-    const height = placement.height ?? 480
-    return position.x >= placement.x && position.x <= placement.x + width && position.y >= placement.y + 58 && position.y <= placement.y + height
+  const rootTarget = { context: { kind: 'root' as const }, point: fromWorkflowCanvasPosition(position, props.layout, props.mode) }
+  if (!('schemaVersion' in props.graph)) return rootTarget
+  // Root Configure spacing moves the frame, but does not scale its child coordinates.
+  // Hit-test the displayed frame, including view-only expansion for large content.
+  const loop = [...projection.value.nodes].reverse().find(node => {
+    if (!node.data?.compoundLoop || !node.style || typeof node.style !== 'object') return false
+    const width = Number.parseFloat(String(node.style.width)) || 720
+    const height = Number.parseFloat(String(node.style.height)) || 480
+    return position.x >= node.position.x && position.x <= node.position.x + width && position.y >= node.position.y + 58 && position.y <= node.position.y + height
   })
-  if (!loop || loop.type !== 'loop') return { context: { kind: 'root' }, point: position }
-  if (nodeType !== 'task' && nodeType !== 'agent_action') return null
-  const placement = placements.get(loop.id)
-  if (!placement) return null
-  return { context: { kind: 'loop-body', loopNodeId: loop.id }, point: { x: Math.max(12, position.x - placement.x), y: Math.max(70, position.y - placement.y) } }
+  if (!loop || loop.data?.node.type !== 'loop') return rootTarget
+  if (nodeType === 'loop') return null
+  return { context: { kind: 'loop-body', loopNodeId: loop.data.node.id }, point: { x: Math.max(16, position.x - loop.position.x), y: Math.max(70, position.y - loop.position.y) } }
 }
 function drop(event: globalThis.DragEvent) {
   event.preventDefault()
@@ -264,10 +262,10 @@ function drop(event: globalThis.DragEvent) {
   const bounds = root.value?.getBoundingClientRect()
   if (!bounds) { emit('reject', 'INVALID_DROP_PAYLOAD'); return }
   emit('clearError')
-  const position = fromWorkflowCanvasPosition(projectPoint({
+  const position = projectPoint({
     x: event.clientX - bounds.left,
     y: event.clientY - bounds.top,
-  }), props.layout, props.mode)
+  })
   const target = creationTarget(payload.nodeType, position)
   if (!target) { emit('reject', 'INVALID_DROP_PAYLOAD'); return }
   emit('create', target.context, payload.nodeType, target.point)
@@ -290,11 +288,7 @@ function createFromClientPoint(nodeType: WorkflowPaletteNodeType, clientX: numbe
     return false
   }
   emit('clearError')
-  const position = fromWorkflowCanvasPosition(
-    projectPoint({ x: clientX - bounds.left, y: clientY - bounds.top }),
-    props.layout,
-    props.mode,
-  )
+  const position = projectPoint({ x: clientX - bounds.left, y: clientY - bounds.top })
   const target = creationTarget(nodeType, position)
   if (!target) { emit('reject', 'INVALID_DROP_PAYLOAD'); return false }
   emit('create', target.context, nodeType, target.point)

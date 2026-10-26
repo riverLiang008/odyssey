@@ -7,6 +7,26 @@ import { VueFlow } from '@vue-flow/core'
 import WorkflowNodeRenderer from '@/features/workflow-editor/WorkflowNodeRenderer.vue'
 
 describe('WorkflowPreview', () => {
+  it('shows resolved knowledge names, preserves read-only behavior and exposes metadata retry', async () => {
+    const document = createAgentWorkflowEditorDocumentFixture('research')
+    const action = document.workflow.nodes.find(node => node.type === 'agent_action')
+    const spaceId = action?.config.knowledgeSpaceIds.find(id => typeof id === 'string')
+    if (typeof spaceId !== 'string') throw new Error('Fixture requires a bound Knowledge Space')
+    const wrapper = mount(WorkflowPreview, {
+      props: { agentId: document.agent.id, agentName: document.agent.name, status: 'ready', document, error: null,
+        knowledgeStatus: 'ready', knowledgeSpaceLabels: { [spaceId]: 'Real Library' } },
+      attachTo: globalThis.document.body,
+    })
+    try {
+      await flushPromises()
+      expect(wrapper.text()).toContain('Real Library')
+      expect(wrapper.text()).not.toContain('Unavailable Knowledge Space')
+      expect(wrapper.find('.workflow-preview-canvas__surface').attributes('inert')).toBeDefined()
+      await wrapper.setProps({ knowledgeStatus: 'error' })
+      await wrapper.get('[role="alert"] button').trigger('click')
+      expect(wrapper.emitted('retryKnowledge')).toHaveLength(1)
+    } finally { wrapper.unmount() }
+  })
   it('keeps Loop child cards compact like the editor so their configured bounds stay inside the container', async () => {
     const document = createAgentWorkflowEditorDocumentFixture('loop')
     const before = structuredClone(document)

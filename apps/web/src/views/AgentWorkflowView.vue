@@ -42,6 +42,7 @@ import AgentReusableToolPanel from '@/features/workflow-editor/AgentReusableTool
 import AgentVariablesPanel from '@/features/workflow-editor/AgentVariablesPanel.vue'
 import enterFocusModeIcon from '@/assets/enter-focus-mode.svg'
 import WorkflowExitNotice from '@/features/workflow-editor/WorkflowExitNotice.vue'
+import WorkflowCanvasContextMenu from '@/features/workflow-editor/WorkflowCanvasContextMenu.vue'
 import type { KnowledgeSpaceReference } from '@odyssey/schemas'
 import WorkflowDslEditor from '@/features/workflow-editor/WorkflowDslEditor.vue'
 import { useWorkflowDsl } from '@/features/workflow-editor/useWorkflowDsl'
@@ -494,12 +495,20 @@ function applyBranch(intent: BranchEditIntent) {
       ? store.createWorkflowNode(intent.node, creation.point)
       : store.createWorkflowLoopBodyNode(creation.context.loopNodeId, intent.node, creation.point)
     if (!result?.ok) { branchError.value = 'Branch could not be created. Review the configuration.'; return }
+    branchDraftCache.delete(intent.node.id)
+    updateBranchDraftDirty()
     branchCreation.value = null
     store.selectNode(intent.node.id)
     store.setPanel({ type: 'node-inspector', nodeId: intent.node.id })
     return
   }
-  if (!store.applyWorkflowBranchEdit(session.value.context, intent)) branchError.value = 'Branch could not be applied. It may have changed; reload its settings and try again.'
+  if (!store.applyWorkflowBranchEdit(session.value.context, intent)) {
+    branchError.value = 'Branch could not be applied. It may have changed; reload its settings and try again.'
+    return
+  }
+  // Applying can unmount the panel before it observes the updated node.
+  branchDraftCache.delete(intent.node.id)
+  updateBranchDraftDirty()
 }
 watch(() => session.value.selectedNodeId, () => { branchError.value = null })
 watch(document, current => {
@@ -695,11 +704,11 @@ async function setFocusMode(enabled: boolean) {
         <WorkflowResourceBrowser v-else :system-tools="systemTools" :system-tool-status="systemToolStatus" :collapsed="session.resourceBrowser.collapsed" :category="session.resourceBrowser.category" :query="session.resourceBrowser.query" :page="session.resourceBrowser.page" :page-size="session.resourceBrowser.pageSize" :tools="document.reusableTools" :knowledge-spaces="knowledgeSpaces" :knowledge-status="knowledgeInventory.status" :knowledge-total="knowledgeInventory.total" :read-only="session.mode === 'flow'" @collapse="store.setResourceBrowserCollapsed" @category="selectResourceCategory" @search="searchResources" @page="changeResourcePage" @resource-drag-start="activeResourceDrag = $event" @resource-drag-end="activeResourceDrag = null" @resource-activate="activateResource" />
       </div>
     </div>
-    <div v-if="canvasContextMenu" class="workflow-canvas-context-menu" role="menu" :aria-label="canvasContextMenu.type === 'node' ? 'Node actions' : canvasContextMenu.type === 'edge' ? 'Route actions' : 'Tool step actions'" :style="{ left: `${canvasContextMenu.x}px`, top: `${canvasContextMenu.y}px` }" @click.stop>
+    <WorkflowCanvasContextMenu v-if="canvasContextMenu" :label="canvasContextMenu.type === 'node' ? 'Node actions' : canvasContextMenu.type === 'edge' ? 'Route actions' : 'Tool step actions'" :style="{ left: `${canvasContextMenu.x}px`, top: `${canvasContextMenu.y}px` }" @close="closeCanvasContextMenu">
       <button v-if="canvasContextMenu.type === 'node'" type="button" role="menuitem" @click="deleteContextNode">Delete node</button>
       <button v-else-if="canvasContextMenu.type === 'edge'" type="button" role="menuitem" @click="deleteContextEdge">Delete route</button>
       <template v-else><button type="button" role="menuitem" class="is-neutral" @click="editContextToolStep">Edit configuration</button><button type="button" role="menuitem" class="is-neutral" @click="saveContextToolStepToReusableTools">Save to Reusable Tools</button><button type="button" role="menuitem" @click="deleteContextToolStep">Delete step</button></template>
-    </div>
+    </WorkflowCanvasContextMenu>
     <WorkflowNodeCreationDialog v-if="session.creationDraft.type !== 'closed'" :draft="session.creationDraft" :variables="document.variables" :error="draftError" @close="closeCreationDraft" @submit-agent-action="submitAgentActionDraft" @submit-loop="submitLoopDraft" />
     <RevisionConflictDialog v-if="conflictDialogOpen" subject="Workflow" @stay="conflictDialogOpen = false" @reload="reloadServerVersion" @overwrite="overwriteServerVersion" />
     <UnsavedChangesDialog v-if="unsavedChangesGuard.confirmationOpen.value" @stay="unsavedChangesGuard.stay" @leave="unsavedChangesGuard.leave" />

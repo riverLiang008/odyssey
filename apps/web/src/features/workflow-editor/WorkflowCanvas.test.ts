@@ -9,6 +9,7 @@ const flow = vi.hoisted(() => ({
   initialized: null as (() => Promise<void>) | null,
   fitView: vi.fn().mockResolvedValue(true),
   setViewport: vi.fn().mockResolvedValue(true),
+  project: vi.fn(),
 }))
 vi.mock('@vue-flow/core', async importOriginal => ({
   ...await importOriginal<typeof import('@vue-flow/core')>(),
@@ -16,12 +17,40 @@ vi.mock('@vue-flow/core', async importOriginal => ({
     onInit: vi.fn(),
     onNodesInitialized: (callback: () => Promise<void>) => { flow.initialized = callback },
     fitView: flow.fitView,
-    project: vi.fn(), setCenter: vi.fn(), setViewport: flow.setViewport, viewport: ref({ x: 0, y: 0, zoom: 1 }),
+    project: flow.project, setCenter: vi.fn(), setViewport: flow.setViewport, viewport: ref({ x: 0, y: 0, zoom: 1 }),
   })),
 }))
 
 describe('WorkflowCanvas initial viewport', () => {
   beforeEach(() => { flow.fitView.mockClear(); flow.setViewport.mockClear(); flow.initialized = null })
+
+  it.each(['branch', 'task', 'agent_action', 'loop'] as const)('routes dropped %s through the Loop creation boundary', nodeType => {
+    const document = createAgentWorkflowEditorDocumentFixture('loop')
+    const loop = document.workflow.nodes.find(node => node.type === 'loop')
+    const first = document.workflow.nodes[0]
+    if (!loop || !first) throw new Error('Fixture requires Loop and boundary nodes')
+    document.layout.nodePlacements = [
+      { nodeId: first.id, x: 0, y: 0 },
+      { nodeId: loop.id, x: 10, y: 20, width: 720, height: 480 },
+    ]
+    const before = structuredClone(document)
+    flow.project.mockReturnValue({ x: 100, y: 300 })
+    const wrapper = mount(WorkflowCanvas, {
+      props: { graph: markRaw(document.workflow), layout: markRaw(document.layout), mode: 'configure', canvasId: 'creation-test' },
+      global: { stubs: { VueFlow: true } },
+    })
+    try {
+      vi.spyOn(wrapper.element, 'getBoundingClientRect').mockReturnValue(new globalThis.DOMRect(0, 0, 1000, 800))
+      expect(wrapper.vm.createFromClientPoint(nodeType, 100, 300)).toBe(nodeType !== 'loop')
+      if (nodeType === 'loop') {
+        expect(wrapper.emitted('create')).toBeUndefined()
+        expect(wrapper.emitted('reject')).toEqual([['INVALID_DROP_PAYLOAD']])
+      } else {
+        expect(wrapper.emitted('create')).toEqual([[{ kind: 'loop-body', loopNodeId: loop.id }, nodeType, { x: expect.closeTo(75.5, 3), y: expect.closeTo(253, 3) }]])
+      }
+      expect(document).toEqual(before)
+    } finally { wrapper.unmount() }
+  })
 
   it.each([false, true])('centers measured boundary nodes, saved viewport: %s', async savedViewport => {
     const document = createAgentWorkflowEditorDocumentFixture('minimal')

@@ -82,6 +82,11 @@ function confirmDialog() {
   void cancelDialog()
 }
 function close() { if (dirty.value) requestDialog({ type: 'discard' }); else emit('close') }
+function formKeydown(event: globalThis.KeyboardEvent) {
+  if (event.key !== 'Escape' || dialog.value.type !== 'closed') return
+  event.preventDefault()
+  close()
+}
 function submit() {
   if (disabled.value || stale.value) return
   const parsed = parseBranchDraft(toRaw(draft.value), props.variables)
@@ -106,7 +111,7 @@ function conditionIssues(caseId: UUID, conditionId?: UUID) { return issues.value
     <p v-if="blocked" class="branch-error" role="alert">Resolve the revision conflict before applying changes.</p>
     <p v-if="stale" class="branch-error" role="alert">This Branch changed while you were editing. Your draft is preserved. Reload the latest settings before applying.</p>
     <p v-if="error" class="branch-error" role="alert">{{ error }}</p>
-    <form @submit.prevent="submit" @keydown.stop @pointerdown.stop>
+    <form @submit.prevent="submit" @keydown.stop="formKeydown" @pointerdown.stop>
       <fieldset :disabled="disabled">
         <label>Name<input v-model="draft.name" aria-label="Branch name" /></label>
         <p v-for="i in issues.filter(i => !i.caseId)" :key="i.code" class="branch-error" role="alert">{{ messages[i.code] }}</p>

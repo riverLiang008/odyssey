@@ -18,6 +18,7 @@ const props = defineProps<NodeProps<WorkflowCanvasNodeData> & {
   readOnly?: boolean
   tools?: readonly AgentReusableTool[]
   knowledgeSpaces?: readonly KnowledgeSpaceSummary[]
+  knowledgeSpaceLabels?: Readonly<Record<string, string>>
   activeResourceDrag?: WorkflowResourceDragPayload | null
   resourceDropState?: 'idle' | 'valid' | 'invalid' | 'duplicate' | 'unavailable'
   resourceDropNodeId?: string | null
@@ -137,7 +138,7 @@ function closeModelMenuOnFocusOut(event: globalThis.FocusEvent) {
   modelMenuOpen.value = false
 }
 function boundToolName(toolId: UUID): string { return toolById.value.get(toolId)?.name ?? 'Unavailable Tool' }
-function boundKnowledgeSpaceName(knowledgeSpaceId: UUID): string { return knowledgeSpaceById.value.get(knowledgeSpaceId)?.name ?? 'Unavailable Knowledge Space' }
+function boundKnowledgeSpaceName(knowledgeSpaceId: UUID): string { return props.knowledgeSpaceLabels?.[knowledgeSpaceId] ?? knowledgeSpaceById.value.get(knowledgeSpaceId)?.name ?? 'Unavailable Knowledge Space' }
 async function beginNameEdit() {
   if (!['agent_action', 'task', 'branch', 'loop'].includes(node.value.type)) return
   nameDraft.value = node.value.name

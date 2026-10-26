@@ -20,6 +20,7 @@ import RoutingImpactDialog from '@/features/journey-editor/RoutingImpactDialog.v
 import SaveAgentTemplateDialog from '@/features/journey-editor/SaveAgentTemplateDialog.vue'
 import GuardrailContextMenu from '@/features/journey-editor/GuardrailContextMenu.vue'
 import WorkflowPreview from '@/features/journey-editor/WorkflowPreview.vue'
+import { usePreviewKnowledgeSpaces } from '@/features/journey-editor/usePreviewKnowledgeSpaces'
 import { useUnsavedChangesGuard } from '@/composables/useUnsavedChangesGuard'
 import RevisionConflictDialog from '@/features/editor-persistence/RevisionConflictDialog.vue'
 import UnsavedChangesDialog from '@/features/editor-persistence/UnsavedChangesDialog.vue'
@@ -29,6 +30,7 @@ const router = useRouter()
 const repository = useEditorRepository()
 const store = useJourneyEditorStore()
 const { templateExitMapping, routingImpact, agentTemplates, document, guardrailOperation, lifecycle, persistence, hasUnsavedChanges, previewDocument, previewState, session } = storeToRefs(store)
+const { state: previewKnowledge, retry: retryPreviewKnowledge } = usePreviewKnowledgeSpaces(previewDocument, repository)
 const patternStageBounds = ref<CanvasBounds>(SYSTEM_PATTERN_BOUNDS)
 const identity = computed(() => parseJourneyRoute(route.params.journeyId, route.query.tab))
 const canvasModel = computed(() => document.value
@@ -331,9 +333,12 @@ async function saveTemplate() {
           :agent-name="previewDocument?.agent.name ?? document.agents.find((agent) => agent.id === session.previewAgentId)?.name ?? 'Agent'"
           :status="previewState.type"
           :document="previewDocument"
+          :knowledge-space-labels="previewKnowledge.labels"
+          :knowledge-status="previewKnowledge.type"
           :error="previewState.type === 'error' ? previewState.error : null"
           @close="store.closeWorkflowPreview"
           @retry="retryWorkflowPreview"
+          @retry-knowledge="retryPreviewKnowledge"
           @open="openPreviewCanvas"
         />
         <p v-if="lifecycle.operationStatus === 'error'" class="journey-feedback" role="alert">{{ lifecycle.error?.code }}</p>

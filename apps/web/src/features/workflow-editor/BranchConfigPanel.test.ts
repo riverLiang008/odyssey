@@ -10,6 +10,26 @@ const variable: AgentVariable = { id: id(10), key: 'count', displayName: 'Count'
 const branch = (): BranchNode => ({ id: id(2), type: 'branch', name: 'Evidence', config: { cases: [{ id: id(3), label: 'Enough', match: 'all', conditions: [{ id: id(4), left: { kind: 'variable', variableId: variable.id }, operator: 'gte', right: { kind: 'literal', value: 3 } }] }], defaultCase: { id: id(5), label: 'Default' } } })
 const props = () => ({ node: branch(), edges: [{ id: id(7), sourceNodeId: id(2), sourceHandleId: id(3), targetNodeId: id(8) }], variables: [variable] })
 describe('Branch configuration', () => {
+  it('handles Escape from form inputs without discarding an unapplied draft', async () => {
+    const wrapper = mount(BranchConfigPanel, { attachTo: globalThis.document.body, props: props() })
+    try {
+      const name = wrapper.get<HTMLInputElement>('[aria-label="Branch name"]')
+      await name.setValue('Unapplied keyboard draft')
+      name.element.focus()
+      await name.trigger('keydown', { key: 'Escape' })
+      await flushPromises()
+      const dialog = globalThis.document.querySelector('[role="dialog"]')
+      expect(dialog?.textContent).toContain('Discard unapplied Branch changes?')
+      expect(wrapper.emitted('close')).toBeUndefined()
+      expect(name.element.value).toBe('Unapplied keyboard draft')
+      const cancel = [...(dialog?.querySelectorAll('button') ?? [])].find(button => button.textContent?.trim() === 'Cancel')
+      if (!cancel) throw new Error('Expected cancel button')
+      cancel.click()
+      await flushPromises()
+      expect(name.element.value).toBe('Unapplied keyboard draft')
+      expect(globalThis.document.activeElement).toBe(name.element)
+    } finally { wrapper.unmount() }
+  })
   it('blocks duplicate case names and lets the user correct them', async () => {
     const p = props()
     const first = p.node.config.cases[0]

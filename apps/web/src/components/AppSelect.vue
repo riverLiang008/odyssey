@@ -16,6 +16,7 @@ const props = defineProps<{
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 const isOpen = ref(false)
 const root = ref<globalThis.HTMLDivElement | null>(null)
+const trigger = ref<globalThis.HTMLButtonElement | null>(null)
 const optionButtons = ref<Array<globalThis.HTMLButtonElement | undefined>>([])
 const selectedIndex = computed(() => Math.max(0, props.options.findIndex((option) => option.value === props.modelValue)))
 const selectedLabel = computed(() => props.options[selectedIndex.value]?.label ?? '')
@@ -23,12 +24,27 @@ const selectedLabel = computed(() => props.options[selectedIndex.value]?.label ?
 async function openAndFocusSelected() {
   isOpen.value = true
   await nextTick()
-  optionButtons.value[selectedIndex.value]?.focus()
+  const selected = optionButtons.value[selectedIndex.value]
+  const target = selected && !selected.disabled ? selected : optionButtons.value.find(button => button && !button.disabled)
+  target?.focus()
+}
+
+async function closeAndRestoreFocus() {
+  isOpen.value = false
+  await nextTick()
+  trigger.value?.focus()
+}
+
+function escape(event: globalThis.KeyboardEvent) {
+  if (!isOpen.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  void closeAndRestoreFocus()
 }
 
 function select(option: AppSelectOption) {
   if (option.disabled) return
-  isOpen.value = false
+  void closeAndRestoreFocus()
   if (option.value !== props.modelValue) emit('update:modelValue', option.value)
 }
 
@@ -52,8 +68,9 @@ function focusAdjacent(currentIndex: number, direction: 1 | -1) {
 </script>
 
 <template>
-  <div ref="root" class="app-select" @focusout="closeOnFocusOut" @keydown.escape.stop="isOpen = false">
+  <div ref="root" class="app-select" @focusout="closeOnFocusOut" @keydown.escape="escape">
     <button
+      ref="trigger"
       type="button"
       class="app-select__trigger"
       aria-haspopup="listbox"

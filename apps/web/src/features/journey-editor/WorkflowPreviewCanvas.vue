@@ -9,7 +9,7 @@ import '@vue-flow/core/dist/theme-default.css'
 import type { WorkflowPreviewViewModel } from '@/canvas/workflow-preview'
 import WorkflowNodeRenderer from '@/features/workflow-editor/WorkflowNodeRenderer.vue'
 
-const props = defineProps<{ model: WorkflowPreviewViewModel }>()
+const props = defineProps<{ model: WorkflowPreviewViewModel; knowledgeSpaceLabels?: Readonly<Record<string, string>> }>()
 const canvasId = `workflow-preview-${useId()}`
 const root = ref<globalThis.HTMLElement | null>(null)
 const measuredSizes = shallowRef<readonly LoopChildSize[]>([])
@@ -78,7 +78,7 @@ onBeforeUnmount(() => {
         :min-zoom="0.001" :max-zoom="1"
       >
         <template #node-workflow="nodeProps">
-          <WorkflowNodeRenderer class="workflow-preview-node" v-bind="nodeProps" :configure-expanded="(nodeProps.data.context?.kind ?? 'root') === 'root' || nodeProps.data.node.type === 'branch'" :read-only="true" :variables="nodeProps.data.node.type === 'branch' ? model.branchVariables : undefined" />
+          <WorkflowNodeRenderer class="workflow-preview-node" v-bind="nodeProps" :knowledge-space-labels="knowledgeSpaceLabels" :configure-expanded="(nodeProps.data.context?.kind ?? 'root') === 'root' || nodeProps.data.node.type === 'branch'" :read-only="true" :variables="nodeProps.data.node.type === 'branch' ? model.branchVariables : undefined" />
         </template>
       </VueFlow>
     </div>
