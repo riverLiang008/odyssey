@@ -263,3 +263,11 @@ No database migration is needed: existing validated graph/reusable-tool JSONB st
 - Browser: opened the existing Document Curator through a temporary local Web/API pair (4175/8205). Verified Upgrade to 0.2 produces an unapplied draft, fixed Playbook plus `$sys.target_knowledge_space$` checks with zero diagnostics, Apply becomes enabled while Save remains disabled, and retrieval settings expose From event plus typed System input choices.
 - Browser drafts were discarded/cancelled. Existing persisted Document Curator remains unchanged; the repository's revised `.ody` fixture is ready for user import/review. Temporary verification services were stopped.
 - Registry fingerprint/async-descriptor TODOs are deferred as described above, rather than claiming a remote mutable catalog exists. Runtime/event injection remains future executor work.
+
+### Existing-Agent paste regression fix
+
+A full Curator case pasted into an already configured Agent could report ODSL503 when its local reusable-tool alias differed from the printer's alias (tool_1 vs tool_0). The compiler retained the old tool and created a second tool with the same display name. Resolution now prefers the existing alias identity, then reuses an unclaimed, uniquely named tool of the same kind. Child header/form identities follow the reconciled alias. Genuine duplicate source names remain errors; unrelated retained tools are preserved.
+
+Regression coverage includes pasting the generic Curator into a populated Agent, genuine duplicate names, and retaining API header IDs on alias changes. Targeted DSL/session/store tests: **49 passed**; lint, typecheck and production build passed. Browser validation in the existing Curator Agent: **Ready to Apply, zero errors/warnings/infos**, without saving changes.
+
+The user's reported 4173 address was serving the separate River writing site at diagnosis time; its existing browser page behaved like an old Odyssey compiler. Current Odyssey was started via dev:all on **4175**, with API on 8200 and existing PostgreSQL on 55432. The other project's service was left running. Runtime port override is process-local. Browser proof: `doc/temp/curator-binding-fixed.png`.

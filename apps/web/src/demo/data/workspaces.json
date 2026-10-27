@@ -1,0 +1,493 @@
+{
+  "journeys": [
+    {
+      "journey": {
+        "id": "02601027-0000-4000-8000-d721990f8800",
+        "workspaceId": "02601027-0000-4000-8000-d721990f8000",
+        "name": "Moonberry Island · Knowledge QA",
+        "description": "Explore a branching knowledge-assisted workflow for a fictional farming game.",
+        "status": "draft",
+        "tags": [
+          "public-demo"
+        ],
+        "revision": 1,
+        "createdAt": "2026-08-12T00:00:00Z",
+        "updatedAt": "2026-08-12T00:00:00Z"
+      },
+      "pattern": {
+        "schemaVersion": "1.0.0",
+        "id": "02601027-0000-4000-8000-d721990f8a40",
+        "templateKey": "solo_component",
+        "kind": "solo_component",
+        "name": "Solo Agent",
+        "slots": [
+          {
+            "id": "02601027-0000-4000-8000-d721990f8b10",
+            "topologyRole": "solo",
+            "label": "Agent 1",
+            "order": null,
+            "agentId": "02601027-0000-4000-8000-d721990f8801",
+            "configuration": {}
+          }
+        ],
+        "routes": [],
+        "configuration": {}
+      },
+      "agents": [
+        {
+          "id": "02601027-0000-4000-8000-d721990f8801",
+          "name": "Island Guide",
+          "description": "research proof workflow",
+          "revision": 1,
+          "updatedAt": "2026-08-12T00:00:00Z"
+        }
+      ],
+      "inputGuardrail": {
+        "state": "inactive"
+      },
+      "outputGuardrail": {
+        "state": "inactive"
+      }
+    },
+    {
+      "journey": {
+        "id": "02601027-0001-4000-8000-d721990f8800",
+        "workspaceId": "02601027-0001-4000-8000-d721990f8000",
+        "name": "Research · Review Loop",
+        "description": "Inspect a bounded review loop with local tools and an Agent Action.",
+        "status": "draft",
+        "tags": [
+          "public-demo"
+        ],
+        "revision": 1,
+        "createdAt": "2026-08-12T00:00:00Z",
+        "updatedAt": "2026-08-12T00:00:00Z"
+      },
+      "pattern": {
+        "schemaVersion": "1.0.0",
+        "id": "02601027-0001-4000-8000-d721990f8a40",
+        "templateKey": "solo_component",
+        "kind": "solo_component",
+        "name": "Solo Agent",
+        "slots": [
+          {
+            "id": "02601027-0001-4000-8000-d721990f8b10",
+            "topologyRole": "solo",
+            "label": "Agent 1",
+            "order": null,
+            "agentId": "02601027-0001-4000-8000-d721990f8803",
+            "configuration": {}
+          }
+        ],
+        "routes": [],
+        "configuration": {}
+      },
+      "agents": [
+        {
+          "id": "02601027-0001-4000-8000-d721990f8803",
+          "name": "Research Reviewer",
+          "description": "loop proof workflow",
+          "revision": 1,
+          "updatedAt": "2026-08-12T00:00:00Z"
+        }
+      ],
+      "inputGuardrail": {
+        "state": "inactive"
+      },
+      "outputGuardrail": {
+        "state": "inactive"
+      }
+    }
+  ],
+  "agents": [
+    {
+      "agent": {
+        "id": "02601027-0000-4000-8000-d721990f8801",
+        "journeyId": "02601027-0000-4000-8000-d721990f8800",
+        "name": "Island Guide",
+        "description": "research proof workflow",
+        "revision": 1,
+        "createdAt": "2026-08-12T00:00:00Z",
+        "updatedAt": "2026-08-12T00:00:00Z"
+      },
+      "workflow": {
+        "schemaVersion": "1.1.0",
+        "nodes": [
+          {
+            "id": "02601027-0000-4000-8000-d721990f8d10",
+            "name": "Start",
+            "type": "start",
+            "config": {}
+          },
+          {
+            "id": "02601027-0000-4000-8000-d721990f8d11",
+            "name": "Research and synthesize",
+            "type": "agent_action",
+            "config": {
+              "model": "gpt-4o",
+              "goal": {
+                "kind": "literal",
+                "value": "Answer questions using the Moonberry Island guides. Cite the relevant document and explain uncertainty."
+              },
+              "knowledgeSpaceIds": [
+                "0195f076-b6e6-7ef0-98db-d721990f8890"
+              ],
+              "reusableToolIds": [
+                "02601027-0000-4000-8000-d721990f8870"
+              ]
+            }
+          },
+          {
+            "id": "02601027-0000-4000-8000-d721990f8d12",
+            "name": "Enough sources?",
+            "type": "branch",
+            "config": {
+              "cases": [
+                {
+                  "id": "02601027-0000-4000-8000-d721990f8f10",
+                  "label": "Enough evidence",
+                  "match": "all",
+                  "conditions": [
+                    {
+                      "id": "02601027-0000-4000-8000-d721990f8f12",
+                      "left": {
+                        "kind": "variable",
+                        "variableId": "02601027-0000-4000-8000-d721990f8860"
+                      },
+                      "operator": "gte",
+                      "right": {
+                        "kind": "literal",
+                        "value": 3
+                      }
+                    }
+                  ]
+                }
+              ],
+              "defaultCase": {
+                "id": "02601027-0000-4000-8000-d721990f8f11",
+                "label": "Gather more"
+              }
+            }
+          },
+          {
+            "id": "02601027-0000-4000-8000-d721990f8d13",
+            "name": "Prepare brief",
+            "type": "task",
+            "config": {
+              "localVariables": [],
+              "steps": []
+            }
+          },
+          {
+            "id": "02601027-0000-4000-8000-d721990f8d15",
+            "name": "End",
+            "type": "end",
+            "config": {
+              "binding": {
+                "sourceSlotId": "02601027-0000-4000-8000-d721990f8b10",
+                "target": {
+                  "type": "journey_end"
+                }
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "02601027-0000-4000-8000-d721990f8e00",
+            "sourceNodeId": "02601027-0000-4000-8000-d721990f8d10",
+            "targetNodeId": "02601027-0000-4000-8000-d721990f8d11"
+          },
+          {
+            "id": "02601027-0000-4000-8000-d721990f8e01",
+            "sourceNodeId": "02601027-0000-4000-8000-d721990f8d11",
+            "targetNodeId": "02601027-0000-4000-8000-d721990f8d12"
+          },
+          {
+            "id": "02601027-0000-4000-8000-d721990f8e02",
+            "sourceNodeId": "02601027-0000-4000-8000-d721990f8d12",
+            "sourceHandleId": "02601027-0000-4000-8000-d721990f8f10",
+            "targetNodeId": "02601027-0000-4000-8000-d721990f8d13"
+          },
+          {
+            "id": "02601027-0000-4000-8000-d721990f8e03",
+            "sourceNodeId": "02601027-0000-4000-8000-d721990f8d12",
+            "sourceHandleId": "02601027-0000-4000-8000-d721990f8f11",
+            "targetNodeId": "02601027-0000-4000-8000-d721990f8d15"
+          },
+          {
+            "id": "02601027-0000-4000-8000-d721990f8e04",
+            "sourceNodeId": "02601027-0000-4000-8000-d721990f8d13",
+            "targetNodeId": "02601027-0000-4000-8000-d721990f8d15"
+          }
+        ]
+      },
+      "layout": {
+        "schemaVersion": "1.0.0",
+        "nodePlacements": [
+          {
+            "nodeId": "02601027-0000-4000-8000-d721990f8d10",
+            "x": 50,
+            "y": 110
+          },
+          {
+            "nodeId": "02601027-0000-4000-8000-d721990f8d11",
+            "x": 270,
+            "y": 110
+          },
+          {
+            "nodeId": "02601027-0000-4000-8000-d721990f8d12",
+            "x": 490,
+            "y": 110
+          },
+          {
+            "nodeId": "02601027-0000-4000-8000-d721990f8d13",
+            "x": 710,
+            "y": 110
+          },
+          {
+            "nodeId": "02601027-0000-4000-8000-d721990f8d15",
+            "x": 930,
+            "y": 110
+          }
+        ],
+        "viewport": {
+          "x": 35,
+          "y": 80,
+          "zoom": 0.65
+        }
+      },
+      "variables": [
+        {
+          "id": "02601027-0000-4000-8000-d721990f8860",
+          "key": "source_count",
+          "displayName": "Source count",
+          "description": null,
+          "dataType": "number",
+          "ownership": "agent_managed",
+          "defaultValue": 0,
+          "readOnly": false
+        }
+      ],
+      "reusableTools": [
+        {
+          "id": "02601027-0000-4000-8000-d721990f8870",
+          "name": "Search Product Documents",
+          "sourceTemplateId": null,
+          "inputBindings": [],
+          "outputBinding": null,
+          "kind": "knowledge_retrieval",
+          "configuration": {
+            "knowledgeSpaceId": "0195f076-b6e6-7ef0-98db-d721990f8890",
+            "topK": 5
+          }
+        }
+      ]
+    },
+    {
+      "agent": {
+        "id": "02601027-0001-4000-8000-d721990f8803",
+        "journeyId": "02601027-0001-4000-8000-d721990f8800",
+        "name": "Research Reviewer",
+        "description": "loop proof workflow",
+        "revision": 1,
+        "createdAt": "2026-08-12T00:00:00Z",
+        "updatedAt": "2026-08-12T00:00:00Z"
+      },
+      "workflow": {
+        "schemaVersion": "1.1.0",
+        "nodes": [
+          {
+            "id": "02601027-0001-4000-8000-d721990f8d10",
+            "name": "Start",
+            "type": "start",
+            "config": {}
+          },
+          {
+            "id": "02601027-0001-4000-8000-d721990f8d14",
+            "name": "Gather evidence",
+            "type": "loop",
+            "config": {
+              "maxTurns": 3,
+              "exitCondition": {
+                "kind": "variable_comparison",
+                "variableId": "02601027-0001-4000-8000-d721990f8860",
+                "operator": "gte",
+                "value": 3
+              },
+              "body": {
+                "graph": {
+                  "nodes": [
+                    {
+                      "id": "02601027-0001-4000-8000-d721990f8d16",
+                      "name": "Loop Start",
+                      "type": "loop_start",
+                      "config": {}
+                    },
+                    {
+                      "id": "02601027-0001-4000-8000-d721990f8d17",
+                      "name": "Prepare brief",
+                      "type": "task",
+                      "config": {
+                        "localVariables": [],
+                        "steps": []
+                      }
+                    },
+                    {
+                      "id": "02601027-0001-4000-8000-d721990f8d18",
+                      "name": "Research and synthesize",
+                      "type": "agent_action",
+                      "config": {
+                        "model": "gpt-4o",
+                        "goal": {
+                          "kind": "literal",
+                          "value": "Research the requested topic."
+                        },
+                        "knowledgeSpaceIds": [
+                          "0195f076-b6e6-7ef0-98db-d721990f8890"
+                        ],
+                        "reusableToolIds": [
+                          "02601027-0001-4000-8000-d721990f8870"
+                        ]
+                      }
+                    },
+                    {
+                      "id": "02601027-0001-4000-8000-d721990f8d19",
+                      "name": "Loop End",
+                      "type": "loop_end",
+                      "config": {}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "02601027-0001-4000-8000-d721990f8e05",
+                      "sourceNodeId": "02601027-0001-4000-8000-d721990f8d16",
+                      "targetNodeId": "02601027-0001-4000-8000-d721990f8d17"
+                    },
+                    {
+                      "id": "02601027-0001-4000-8000-d721990f8e06",
+                      "sourceNodeId": "02601027-0001-4000-8000-d721990f8d17",
+                      "targetNodeId": "02601027-0001-4000-8000-d721990f8d18"
+                    },
+                    {
+                      "id": "02601027-0001-4000-8000-d721990f8e07",
+                      "sourceNodeId": "02601027-0001-4000-8000-d721990f8d18",
+                      "targetNodeId": "02601027-0001-4000-8000-d721990f8d19"
+                    }
+                  ]
+                },
+                "layout": {
+                  "nodePlacements": [
+                    {
+                      "nodeId": "02601027-0001-4000-8000-d721990f8d16",
+                      "x": 40,
+                      "y": 100
+                    },
+                    {
+                      "nodeId": "02601027-0001-4000-8000-d721990f8d17",
+                      "x": 380,
+                      "y": 100
+                    },
+                    {
+                      "nodeId": "02601027-0001-4000-8000-d721990f8d18",
+                      "x": 40,
+                      "y": 280
+                    },
+                    {
+                      "nodeId": "02601027-0001-4000-8000-d721990f8d19",
+                      "x": 380,
+                      "y": 280
+                    }
+                  ],
+                  "viewport": {
+                    "x": 0,
+                    "y": 0,
+                    "zoom": 1
+                  }
+                }
+              }
+            }
+          },
+          {
+            "id": "02601027-0001-4000-8000-d721990f8d15",
+            "name": "End",
+            "type": "end",
+            "config": {
+              "binding": {
+                "sourceSlotId": "02601027-0001-4000-8000-d721990f8b10",
+                "target": {
+                  "type": "journey_end"
+                }
+              }
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "02601027-0001-4000-8000-d721990f8e00",
+            "sourceNodeId": "02601027-0001-4000-8000-d721990f8d10",
+            "targetNodeId": "02601027-0001-4000-8000-d721990f8d14"
+          },
+          {
+            "id": "02601027-0001-4000-8000-d721990f8e01",
+            "sourceNodeId": "02601027-0001-4000-8000-d721990f8d14",
+            "targetNodeId": "02601027-0001-4000-8000-d721990f8d15"
+          }
+        ]
+      },
+      "layout": {
+        "schemaVersion": "1.0.0",
+        "nodePlacements": [
+          {
+            "nodeId": "02601027-0001-4000-8000-d721990f8d10",
+            "x": 50,
+            "y": 110
+          },
+          {
+            "nodeId": "02601027-0001-4000-8000-d721990f8d14",
+            "x": 270,
+            "y": 110,
+            "width": 760,
+            "height": 540
+          },
+          {
+            "nodeId": "02601027-0001-4000-8000-d721990f8d15",
+            "x": 1150,
+            "y": 110
+          }
+        ],
+        "viewport": {
+          "x": 35,
+          "y": 80,
+          "zoom": 0.65
+        }
+      },
+      "variables": [
+        {
+          "id": "02601027-0001-4000-8000-d721990f8860",
+          "key": "source_count",
+          "displayName": "Source count",
+          "description": null,
+          "dataType": "number",
+          "ownership": "agent_managed",
+          "defaultValue": 0,
+          "readOnly": false
+        }
+      ],
+      "reusableTools": [
+        {
+          "id": "02601027-0001-4000-8000-d721990f8870",
+          "name": "Search Product Documents",
+          "sourceTemplateId": null,
+          "inputBindings": [],
+          "outputBinding": null,
+          "kind": "knowledge_retrieval",
+          "configuration": {
+            "knowledgeSpaceId": "0195f076-b6e6-7ef0-98db-d721990f8890",
+            "topK": 5
+          }
+        }
+      ]
+    }
+  ]
+}

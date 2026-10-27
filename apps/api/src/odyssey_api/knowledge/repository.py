@@ -683,6 +683,25 @@ async def get_visible_knowledge_space_ids(
     )
 
 
+async def get_referenceable_knowledge_space_ids(
+    session: AsyncSession, workspace_id: UUID, knowledge_space_ids: set[UUID]
+) -> set[UUID]:
+    if not knowledge_space_ids:
+        return set()
+    return set(
+        (
+            await session.scalars(
+                select(KnowledgeSpace.id).where(
+                    KnowledgeSpace.workspace_id == workspace_id,
+                    KnowledgeSpace.id.in_(knowledge_space_ids),
+                    KnowledgeSpace.lifecycle_status.in_(("ready", "syncing")),
+                    KnowledgeSpace.graph_status.in_(("healthy", "needs_review")),
+                )
+            )
+        ).all()
+    )
+
+
 async def cas_update_knowledge_space(
     session: AsyncSession,
     *,

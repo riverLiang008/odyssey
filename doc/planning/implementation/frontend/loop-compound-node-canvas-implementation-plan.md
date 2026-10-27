@@ -1,7 +1,7 @@
 # Loop Compound Node 单画布实施计划
 
-状态：核心交互已实施，兼容清理与浏览器验收待完成  
-适用范围：Agent Workflow Editor / Canvas / workflow import-export / persisted editor layout  
+状态：部分浏览器验收通过；Loop 内 Branch 越界和模式切换视野问题待修复
+适用范围：Agent Workflow Editor / Canvas / workflow import-export / persisted editor layout
 产品依据：`doc/product/information-architecture/odyssey-figma-information-architecture.md` §5.3.1
 
 ## 1. 目标
@@ -78,3 +78,9 @@
 ## 6. 实施顺序与风险控制
 
 按 A → B → C → D → E 实施。先扩展兼容 schema，再建立纯 projection，最后移除旧模式，避免持久化文档在中间状态不可读取。主要风险是 Vue Flow parent node 的坐标、尺寸与事件 ID 语义；通过 adapter 统一映射并用测试固定，不让第三方结构进入 store/domain。
+
+## 2026-10-23 补验收
+
+已在真实 HTTP / PostgreSQL 环境验证 Loop 移动、调整尺寸、已有子节点的拖动边界、Loop 内 Task / Branch 创建，以及 JSON 导出再导入后的尺寸和相对位置保持。嵌套 Loop 入口禁用。
+
+仍不能整项验收通过：Loop 内新建的展开 Branch 可能超出容器；切换到 Flow 后当前节点可能移出视野。两项都有浏览器复现和截图，见 [本轮验收记录](../../project/odyssey-acceptance-2026-10-23.md)。没有把未覆盖的拖放、连线和兼容清理项目勾为完成。

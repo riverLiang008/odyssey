@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from odyssey_api.bootstrap import bootstrap_builtin_tool_definitions
 from odyssey_api.db.models import (
@@ -830,6 +830,12 @@ async def test_workflow_reference_sync_cleanup_hidden_not_found_and_rollback(
                 tool_definition_id = existing_definition_id
         journey_id, agent_id, boundaries = await _create_agent(workspace_id)
         reusable_tool_id = uuid4()
+        async with async_session_factory() as session, session.begin():
+            await session.execute(
+                update(KnowledgeSpace)
+                .where(KnowledgeSpace.id.in_((ids[2], ids[3])))
+                .values(lifecycle_status="ready", graph_status="healthy")
+            )
         request = _workflow_request(
             boundaries=boundaries, revision=1, space_ids=ids, reusable_tool_id=reusable_tool_id
         )
@@ -901,6 +907,38 @@ async def test_workflow_reference_sync_cleanup_hidden_not_found_and_rollback(
                     await save_agent_workflow(session, journey_id, agent_id, workspace_id, rejected)
             assert error.value.code is ErrorCode.NOT_FOUND
             assert error.value.details == {}
+
+        async with async_session_factory() as session, session.begin():
+            await session.execute(
+                update(KnowledgeSpace)
+                .where(KnowledgeSpace.id == ids[2])
+                .values(lifecycle_status="failed", graph_status="error")
+            )
+        async with async_session_factory() as session:
+            with pytest.raises(ApplicationError) as unavailable:
+                await save_agent_workflow(
+                    session,
+                    journey_id,
+                    agent_id,
+                    workspace_id,
+                    _workflow_request(
+                        boundaries=boundaries,
+                        revision=3,
+                        space_ids=ids,
+                        reusable_tool_id=uuid4(),
+                    ),
+                )
+        assert unavailable.value.code is ErrorCode.STATE_CONFLICT
+        assert unavailable.value.details == {
+            "reason": "KNOWLEDGE_SPACE_UNAVAILABLE",
+            "knowledgeSpaceIds": [str(ids[2])],
+        }
+        async with async_session_factory() as session, session.begin():
+            await session.execute(
+                update(KnowledgeSpace)
+                .where(KnowledgeSpace.id == ids[2])
+                .values(lifecycle_status="ready", graph_status="healthy")
+            )
 
         async def fail_sync(*args: object, **kwargs: object) -> None:
             raise RuntimeError("injected reference synchronization failure")
@@ -1038,7 +1076,20 @@ async def test_concurrent_workflow_save_has_one_cas_winner() -> None:
     workspace_id, other_workspace_id = uuid4(), uuid4()
     ids, _, category_ids = await _seed_spaces(workspace_id, other_workspace_id)
     journey_id: UUID | None = None
+    seeded_tool_kinds: tuple[str, ...] = ()
     try:
+        # This test must also work on a freshly migrated database without dev seed.
+        async with async_session_factory() as session:
+            seed_result = await bootstrap_builtin_tool_definitions(
+                session, Settings(environment="development")
+            )
+            seeded_tool_kinds = seed_result.created_kinds
+        async with async_session_factory() as session, session.begin():
+            await session.execute(
+                update(KnowledgeSpace)
+                .where(KnowledgeSpace.id.in_((ids[2], ids[3])))
+                .values(lifecycle_status="ready", graph_status="healthy")
+            )
         journey_id, agent_id, boundaries = await _create_agent(workspace_id)
 
         async def attempt() -> object:
@@ -1068,4 +1119,9 @@ async def test_concurrent_workflow_save_has_one_cas_winner() -> None:
         if journey_id is not None:
             async with async_session_factory() as session, session.begin():
                 await session.execute(delete(OdyJourney).where(OdyJourney.id == journey_id))
+        if seeded_tool_kinds:
+            async with async_session_factory() as session, session.begin():
+                await session.execute(
+                    delete(ToolDefinition).where(ToolDefinition.kind.in_(seeded_tool_kinds))
+                )
         await _cleanup([workspace_id, other_workspace_id], category_ids)

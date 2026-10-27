@@ -38,7 +38,7 @@ describe('Workflow editor responsive persistence status', () => {
     expect(workflowEditorCss).toContain('.workflow-canvas-controls .mode-toggle button:last-child { width:98px; }')
     expect(workflowEditorCss).toContain('.workflow-canvas-controls .focus-button,.workflow-canvas-controls .workflow-tools__trigger { width:36px; height:34px')
     expect(workflowEditorCss).toContain('.workflow-canvas-controls .focus-button img { width:18px; height:18px')
-    expect(workflowViewSource).toContain('<WorkflowToolsMenu @import="openWorkflowImport" @export="exportWorkflow" />')
+    expect(workflowViewSource).toMatch(/<WorkflowToolsMenu\b[^>]*@import="openWorkflowImport"[^>]*@export="exportWorkflow"[^>]*\/>/)
   })
 
   it('uses text-only highlighting for the active resource category', () => {

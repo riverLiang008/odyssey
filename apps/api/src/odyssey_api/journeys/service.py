@@ -48,7 +48,10 @@ from odyssey_api.journeys.workflow_domain import (
     create_minimum_workflow,
     extract_knowledge_space_references,
 )
-from odyssey_api.knowledge.repository import get_visible_knowledge_space_ids
+from odyssey_api.knowledge.repository import (
+    get_referenceable_knowledge_space_ids,
+    get_visible_knowledge_space_ids,
+)
 
 
 def _validation_error(codes: list[str]) -> ApplicationError:
@@ -581,6 +584,18 @@ async def save_agent_workflow(
         visible_ids = await get_visible_knowledge_space_ids(session, workspace_id, referenced_ids)
         if visible_ids != referenced_ids:
             raise ApplicationError(ErrorCode.NOT_FOUND)
+        referenceable_ids = await get_referenceable_knowledge_space_ids(
+            session, workspace_id, referenced_ids
+        )
+        unavailable_ids = referenced_ids - referenceable_ids
+        if unavailable_ids:
+            raise ApplicationError(
+                ErrorCode.STATE_CONFLICT,
+                details={
+                    "reason": "KNOWLEDGE_SPACE_UNAVAILABLE",
+                    "knowledgeSpaceIds": sorted(str(item) for item in unavailable_ids),
+                },
+            )
         updated = await repository.cas_save_agent_workflow(
             session,
             journey_id=journey_id,

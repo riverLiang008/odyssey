@@ -134,3 +134,5 @@ Obsidian 工作区和插件配置。该目录不属于项目文档分类，不�
 ## 产品案例
 
 - [First Case: Moonberry Island Guide (Solo, English)](product/cases/first-case-knowledge-qa/README.md)：English case design, two Workflow DSL variants, four fictional game guides, and acceptance questions.
+
+- [Second Case: Document Curator — Knowledge Design](product/cases/second-case-document-curator/README.md): Baseline game documents, incoming changes, maintenance rules, review scenarios, and local update boundaries.

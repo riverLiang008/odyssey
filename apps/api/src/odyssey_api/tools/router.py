@@ -13,7 +13,9 @@ router = APIRouter(prefix="/tool-definitions", tags=["tool-definitions"])
 
 
 @router.get(
-    "", response_model=list[ToolDefinitionResponse], responses=documented_responses(),
+    "",
+    response_model=list[ToolDefinitionResponse],
+    responses=documented_responses(),
     operation_id="listToolDefinitions",
 )
 async def list_tool_definitions_route(

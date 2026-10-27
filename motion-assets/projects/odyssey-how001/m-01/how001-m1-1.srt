@@ -1,0 +1,23 @@
+1
+00:00:00,000 --> 00:00:10,000
+So my first idea was to organize these settings in a simple two-dimensional layout using rectangles.
+
+2
+00:00:10,000 --> 00:00:15,000
+The horizontal direction shows different Execution Modules.
+
+3
+00:00:15,000 --> 00:00:21,000
+Inside each module, a Pattern connects Agents in a certain structure.
+
+4
+00:00:21,000 --> 00:00:27,000
+The vertical direction shows Execution Behaviors, which apply across the system.
+
+5
+00:00:27,000 --> 00:00:34,000
+The key difference is simple: an Execution Module, or Pattern, moves the system forward.
+
+6
+00:00:34,000 --> 00:00:40,000
+An Execution Behavior does not move the system forward on its own.

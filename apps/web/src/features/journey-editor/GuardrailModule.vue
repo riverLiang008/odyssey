@@ -8,6 +8,7 @@ const props = defineProps<{
   projection: GuardrailProjection
   agent: AgentSummary | null
   pending?: boolean
+  readOnly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -43,7 +44,7 @@ function openMenu(event: globalThis.MouseEvent): void {
       v-if="projection.state === 'inactive'"
       class="guardrail-module__add"
       type="button"
-      :disabled="pending"
+      :disabled="readOnly || pending"
       :aria-label="`Add ${side} Guardrail`"
       @click="emit('add', side)"
     >

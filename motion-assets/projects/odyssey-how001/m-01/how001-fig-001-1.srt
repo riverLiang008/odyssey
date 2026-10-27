@@ -1,0 +1,7 @@
+1
+00:00:00,000 --> 00:00:08,800
+In this layout, I used solid color to show which part had already been configured.
+
+2
+00:00:08,800 --> 00:00:17,000
+This way we could see the parts of the system and which part were ready in one place.

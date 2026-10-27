@@ -12,6 +12,7 @@ const props = withDefaults(defineProps<{
   outputGuardrail?: GuardrailProjection
   agents?: AgentSummary[]
   guardrailPendingSide?: GuardrailSide | null
+  readOnly?: boolean
   disabled?: boolean
   overSlotId?: UUID | null
   overOrder?: number | null
@@ -73,13 +74,14 @@ function guardrailAgent(projection: GuardrailProjection): AgentSummary | null {
   <section class="system-canvas" aria-label="System configuration">
     <header><h2>System configuration</h2><p>Fixed structure · configure components in place</p></header>
     <div class="system-configuration-grid">
-      <GuardrailModule class="system-shell system-shell--input" side="input" :projection="inputGuardrail" :agent="guardrailAgent(inputGuardrail)" :pending="guardrailPendingSide === 'input'" @add="$emit('addGuardrail', $event)" @select="$emit('selectGuardrail', $event)" @menu="(side, anchor) => $emit('openGuardrailMenu', side, anchor)" />
+      <GuardrailModule :read-only="readOnly" class="system-shell system-shell--input" side="input" :projection="inputGuardrail" :agent="guardrailAgent(inputGuardrail)" :pending="guardrailPendingSide === 'input'" @add="$emit('addGuardrail', $event)" @select="$emit('selectGuardrail', $event)" @menu="(side, anchor) => $emit('openGuardrailMenu', side, anchor)" />
       <div class="system-shell system-shell--execution">
         <strong>Execution · {{ model.name }}</strong><span>AGENT SLOTS</span>
         <div ref="patternStage" class="pattern-stage">
           <PatternRouteLayer :routes="model.routes" :width="model.bounds?.width ?? 468" :height="model.bounds?.height ?? 174" />
           <AgentSlot
-            v-for="slot in model.slots" :key="slot.id" :model="slot" :disabled="disabled" :feedback="feedbackFor(slot.id, slot.order)"
+            v-for="slot in model.slots"
+            :key="slot.id" :read-only="readOnly" :model="slot" :disabled="disabled" :feedback="feedbackFor(slot.id, slot.order)"
             :style="{
               left: `${slot.position.x}px`,
               top: `${slot.position.y}px`,
@@ -92,7 +94,7 @@ function guardrailAgent(projection: GuardrailProjection): AgentSummary | null {
           />
         </div>
       </div>
-      <GuardrailModule class="system-shell system-shell--output" side="output" :projection="outputGuardrail" :agent="guardrailAgent(outputGuardrail)" :pending="guardrailPendingSide === 'output'" @add="$emit('addGuardrail', $event)" @select="$emit('selectGuardrail', $event)" @menu="(side, anchor) => $emit('openGuardrailMenu', side, anchor)" />
+      <GuardrailModule :read-only="readOnly" class="system-shell system-shell--output" side="output" :projection="outputGuardrail" :agent="guardrailAgent(outputGuardrail)" :pending="guardrailPendingSide === 'output'" @add="$emit('addGuardrail', $event)" @select="$emit('selectGuardrail', $event)" @menu="(side, anchor) => $emit('openGuardrailMenu', side, anchor)" />
       <div class="system-shell system-shell--behavior"><strong>Execution Behavior · policies and observability</strong></div>
     </div>
     <p v-if="model.diagnostics.length" class="system-canvas__diagnostic" role="status">Some canvas references are unavailable.</p>

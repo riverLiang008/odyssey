@@ -43,6 +43,7 @@ export interface WorkflowValidationReport {
 }
 
 export type WorkflowDomainError =
+  | { readonly code: 'EDITOR_READ_ONLY' }
   | { readonly code: 'INVALID_SOURCE_GRAPH'; readonly issues: readonly WorkflowValidationIssue[] }
   | { readonly code: 'NODE_NOT_FOUND'; readonly nodeId: UUID }
   | { readonly code: 'EDGE_NOT_FOUND'; readonly edgeId: UUID }

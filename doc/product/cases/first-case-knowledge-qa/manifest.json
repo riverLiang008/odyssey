@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "key": "first-case-moonberry-island",
+  "documents": [
+    {
+      "key": "getting-started",
+      "path": "01-getting-started.md",
+      "summary": "Starter items, the 100-energy limit, action costs, rest, Moonberry snacks, and a five-tile first-day plan.",
+      "guide": "Use for starting inventory and energy calculations. Consult the crop guide for harvest timing and the shop guide for fishing rod purchases.",
+      "tags": [
+        "island-basics"
+      ],
+      "status": "indexed"
+    },
+    {
+      "key": "crops-and-seasons",
+      "path": "02-crops-and-seasons.md",
+      "summary": "The 28-day seasons, seasonal crops and seed prices, watering rules, and Turnip harvest timing including the Spring Day 24 planting cutoff.",
+      "guide": "Use for crop eligibility, growth, and season-end questions. Combine with shop hours for purchase-and-plant questions.",
+      "tags": [
+        "farming"
+      ],
+      "status": "indexed"
+    },
+    {
+      "key": "fishing-guide",
+      "path": "03-fishing-guide.md",
+      "summary": "Fishing rod requirements, casting energy, and fish availability by location, season, weather, and time, with exclusive end times.",
+      "guide": "Use for fishing conditions. Availability is not a catch guarantee. Combine with the shop guide to explain buying a rod.",
+      "tags": [
+        "fishing"
+      ],
+      "status": "indexed"
+    },
+    {
+      "key": "village-and-shops",
+      "path": "04-village-and-shops.md",
+      "summary": "Daily shop hours with exclusive closing times, seasonal seed stock, the 50-coin fishing rod, and the 8-coin Moonberry.",
+      "guide": "Use for purchases, prices, and opening times. Current player wallet, inventory, weather, and time are not provided.",
+      "tags": [
+        "village"
+      ],
+      "status": "indexed"
+    }
+  ],
+  "tags": [
+    {
+      "key": "island-basics",
+      "name": "Island Basics",
+      "colorToken": "blue"
+    },
+    {
+      "key": "farming",
+      "name": "Farming",
+      "colorToken": "green"
+    },
+    {
+      "key": "fishing",
+      "name": "Fishing",
+      "colorToken": "cyan"
+    },
+    {
+      "key": "village",
+      "name": "Village & Shops",
+      "colorToken": "purple"
+    }
+  ],
+  "relations": [
+    {
+      "key": "getting-started-references-crops-and-seasons",
+      "source": "getting-started",
+      "target": "crops-and-seasons",
+      "kind": "references",
+      "status": "active",
+      "description": "The first-day plan refers readers to crop growth and harvest timing."
+    },
+    {
+      "key": "getting-started-references-village-and-shops",
+      "source": "getting-started",
+      "target": "village-and-shops",
+      "kind": "references",
+      "status": "active",
+      "description": "The starter guide directs players to the workshop for a fishing rod and its price and hours."
+    },
+    {
+      "key": "crops-and-seasons-references-village-and-shops",
+      "source": "crops-and-seasons",
+      "target": "village-and-shops",
+      "kind": "references",
+      "status": "active",
+      "description": "The crop guide refers readers to Pip's opening hours for seed purchases."
+    },
+    {
+      "key": "fishing-guide-references-village-and-shops",
+      "source": "fishing-guide",
+      "target": "village-and-shops",
+      "kind": "references",
+      "status": "active",
+      "description": "The fishing guide refers readers to the workshop price and opening hours for a rod."
+    },
+    {
+      "key": "village-and-shops-references-crops-and-seasons",
+      "source": "village-and-shops",
+      "target": "crops-and-seasons",
+      "kind": "references",
+      "status": "active",
+      "description": "The seed section refers readers to crop growth and watering rules."
+    },
+    {
+      "key": "village-and-shops-references-getting-started",
+      "source": "village-and-shops",
+      "target": "getting-started",
+      "kind": "references",
+      "status": "active",
+      "description": "The snack section refers readers to the starter guide for Moonberry energy restoration."
+    }
+  ],
+  "issues": [],
+  "graph": {
+    "status": "healthy"
+  }
+}

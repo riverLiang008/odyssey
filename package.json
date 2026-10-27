@@ -14,6 +14,12 @@
     "lint": "pnpm --filter @odyssey/web lint",
     "test": "pnpm --filter @odyssey/schemas test && pnpm --filter @odyssey/web test",
     "typecheck": "pnpm --filter @odyssey/schemas typecheck && pnpm --filter @odyssey/web typecheck",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "demo:build": "node scripts/build-demo.mjs",
+    "demo:preview": "pnpm --filter @odyssey/web exec vite preview --outDir dist-demo --host 127.0.0.1 --port 4188 --strictPort",
+    "demo:smoke": "node scripts/smoke-demo.mjs",
+    "demo:package": "pnpm demo:sync && pnpm check && pnpm demo:build && pnpm demo:smoke && node scripts/package-demo.mjs",
+    "demo:sync": "node scripts/sync-demo.mjs",
+    "demo:verify-data": "node scripts/sync-demo.mjs --check"
   }
 }

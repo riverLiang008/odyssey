@@ -1,0 +1,23 @@
+1
+00:00:00,000 --> 00:00:06,160
+So I tried dividing Workflow Nodes into two groups.
+
+2
+00:00:06,160 --> 00:00:11,040
+The first group is Logic Nodes, like Branch and Loop.
+
+3
+00:00:11,040 --> 00:00:12,960
+They control the flow.
+
+4
+00:00:12,960 --> 00:00:15,960
+The second group is Action Nodes.
+
+5
+00:00:15,960 --> 00:00:18,360
+They do the actual work.
+
+6
+00:00:18,360 --> 00:00:22,800
+Action Nodes can then be divided into Agent Nodes and Task Nodes.

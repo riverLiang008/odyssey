@@ -6,7 +6,9 @@ import { useEditorRepository } from '@/app/editorRepository'
 import AppSelect, { type AppSelectOption } from '@/components/AppSelect.vue'
 import MarkdownPreview from '@/features/knowledge-space/MarkdownPreview.vue'
 import KnowledgeManifestImportDialog from '@/features/knowledge-space/KnowledgeManifestImportDialog.vue'
+import KnowledgeGraphCanvas from '@/features/knowledge-space/KnowledgeGraphCanvas.vue'
 import { evaluateKnowledgeResourceMove } from '@/domain/knowledge'
+import type { KnowledgeGraphViewport } from '@/canvas/knowledge'
 import { parseKnowledgeResourceRoute, parseKnowledgeSpaceRoute, routeLocations } from '@/router/routeContracts'
 import type { KnowledgeResourceInspection } from '@/repositories/editorRepository'
 
@@ -38,12 +40,15 @@ type KnowledgeTreeRow =
   | { type: 'resource'; resource: KnowledgeResourceSummary; depth: number }
 
 const repository = useEditorRepository()
+const readOnly = repository.readOnly === true
 const route = useRoute()
 const router = useRouter()
 const state = ref<DetailState>({ type: 'loading' })
 const categories = ref<KnowledgeSpaceCategorySummary[]>([])
 const fileTree = ref<KnowledgeFileTree | null>(null)
 const graphState = ref<GraphState>({ type: 'loading' })
+const graphSelectedNodeId = ref<UUID | null>(null)
+const graphViewport = ref<KnowledgeGraphViewport>({ x: 0, y: 0, zoom: 1 })
 const dialog = ref<DialogState>({ type: 'closed' })
 const mutation = ref<MutationState>({ type: 'idle' })
 const form = reactive({ name: '', description: '', categoryId: '' })
@@ -103,6 +108,8 @@ async function load() {
   controller = new globalThis.AbortController()
   state.value = { type: 'loading' }
   graphState.value = { type: 'loading' }
+  graphSelectedNodeId.value = null
+  graphViewport.value = { x: 0, y: 0, zoom: 1 }
   const [detailResult, categoriesResult, treeResult, graphResult] = await Promise.all([repository.loadKnowledgeSpace(knowledgeSpaceId, { signal: controller.signal }), repository.listKnowledgeSpaceCategories({ signal: controller.signal }), repository.loadKnowledgeFileTree(knowledgeSpaceId, { signal: controller.signal }), repository.loadKnowledgeGraph(knowledgeSpaceId, { signal: controller.signal })])
   if (controller.signal.aborted) return
   if (!detailResult.ok) { state.value = { type: 'failed', error: detailResult.error }; return }
@@ -134,6 +141,7 @@ async function finishManifestImport() {
 }
 
 function openFolderDialog() {
+  if (readOnly) return
   if (!selectedFolder.value) return
   folderContextMenu.value = { type: 'closed' }
   folderName.value = ''
@@ -142,6 +150,7 @@ function openFolderDialog() {
 }
 
 async function createFolder() {
+  if (readOnly) return
   if (state.value.type !== 'ready' || !fileTree.value || mutation.value.type === 'saving') return
   mutation.value = { type: 'saving' }
   const parentFolderId = selectedFolderId.value
@@ -174,6 +183,7 @@ function toggleFolder(folderId: UUID) {
 }
 
 function startResourceDrag(event: globalThis.DragEvent, resourceId: UUID) {
+  if (readOnly) return
   if (resourceMoveState.value.type === 'moving') {
     event.preventDefault()
     return
@@ -202,6 +212,7 @@ function leaveResourceDropTarget(targetFolderId: UUID) {
 }
 
 async function dropResourceIntoFolder(event: globalThis.DragEvent, targetFolderId: UUID) {
+  if (readOnly) return
   event.preventDefault()
   if (state.value.type !== 'ready' || !fileTree.value) return
   const evaluation = evaluateResourceDrop(targetFolderId)
@@ -270,6 +281,7 @@ function isEditableMarkdown() {
 }
 
 function setDocumentMode(mode: 'preview' | 'edit') {
+  if (readOnly && mode === 'edit') return
   if (mode === 'preview') {
     if (documentEditor.value.type === 'editing') documentEditor.value = { ...documentEditor.value, mode: 'preview' }
     return
@@ -280,6 +292,7 @@ function setDocumentMode(mode: 'preview' | 'edit') {
 }
 
 async function saveDocumentContent() {
+  if (readOnly) return
   if (state.value.type !== 'ready' || documentState.value.type !== 'ready' || documentEditor.value.type !== 'editing' || documentEditor.value.save.type === 'saving') return
   const resourceId = documentState.value.resourceId
   const content = documentEditor.value.draft
@@ -323,6 +336,7 @@ function formatTimestamp(value: string) {
 }
 
 function openFolderContextMenu(event: globalThis.MouseEvent | globalThis.KeyboardEvent, folderId: UUID | undefined) {
+  if (readOnly) return
   if (!folderId) return
   event.preventDefault()
   const target = event.currentTarget instanceof globalThis.HTMLElement ? event.currentTarget : null
@@ -334,6 +348,7 @@ function openFolderContextMenu(event: globalThis.MouseEvent | globalThis.Keyboar
 }
 
 function openResourceContextMenu(event: globalThis.MouseEvent | globalThis.KeyboardEvent, resource: KnowledgeResourceSummary) {
+  if (readOnly) return
   event.preventDefault()
   folderContextMenu.value = { type: 'closed' }
   const target = event.currentTarget instanceof globalThis.HTMLElement ? event.currentTarget : null
@@ -358,6 +373,7 @@ function openDeleteResource(resourceId: UUID, resourceName: string) {
 }
 
 async function confirmDeleteResource() {
+  if (readOnly) return
   if (state.value.type !== 'ready' || !fileTree.value || dialog.value.type !== 'delete-resource' || mutation.value.type === 'saving') return
   const { resourceId } = dialog.value
   mutation.value = { type: 'saving' }
@@ -395,6 +411,7 @@ function chooseUploadFile() {
 }
 
 async function uploadFile(event: globalThis.Event) {
+  if (readOnly) return
   if (state.value.type !== 'ready' || !fileTree.value || !selectedFolder.value) return
   const input = event.currentTarget instanceof globalThis.HTMLInputElement ? event.currentTarget : null
   const file = input?.files?.[0]
@@ -416,6 +433,7 @@ function handleGlobalKeydown(event: globalThis.KeyboardEvent) {
 }
 
 function openEdit() {
+  if (readOnly) return
   if (state.value.type !== 'ready') return
   form.name = state.value.detail.name
   form.description = state.value.detail.description ?? ''
@@ -425,6 +443,7 @@ function openEdit() {
 }
 
 async function saveMetadata() {
+  if (readOnly) return
   if (state.value.type !== 'ready' || mutation.value.type === 'saving') return
   const categoryId = uuidSchema.safeParse(form.categoryId)
   if (!categoryId.success) return
@@ -437,6 +456,7 @@ async function saveMetadata() {
 }
 
 async function toggleArchived() {
+  if (readOnly) return
   if (state.value.type !== 'ready' || mutation.value.type === 'saving') return
   mutation.value = { type: 'saving' }
   const detail = state.value.detail
@@ -448,6 +468,7 @@ async function toggleArchived() {
 }
 
 async function confirmDelete() {
+  if (readOnly) return
   if (state.value.type !== 'ready' || mutation.value.type === 'saving') return
   mutation.value = { type: 'saving' }
   const result = await repository.deleteKnowledgeSpace({ knowledgeSpaceId: state.value.detail.id, expectedRevision: state.value.detail.revision })
@@ -485,7 +506,7 @@ onBeforeUnmount(() => {
       <h1 id="knowledge-detail-title" class="knowledge-visually-hidden">{{ state.detail.name }}</h1>
       <div class="knowledge-folder-heading">
         <span>FILES</span>
-        <button type="button" class="knowledge-icon-button" aria-label="Create folder in selected folder" title="Create folder in selected folder" :disabled="!selectedFolder" @click="openFolderDialog">
+        <button type="button" class="knowledge-icon-button" aria-label="Create folder in selected folder" title="Create folder in selected folder" :disabled="readOnly || !selectedFolder" @click="openFolderDialog">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
         </button>
       </div>
@@ -503,7 +524,7 @@ onBeforeUnmount(() => {
           </div>
           <template v-else>
             <span class="knowledge-tree-indent" aria-hidden="true" />
-            <button type="button" class="knowledge-resource-button" :class="{ 'is-selected': documentState.type !== 'closed' && documentState.resourceId === row.resource.id }" draggable="true" :aria-label="`Open ${row.resource.name}; drag to move it to a folder`" :title="`Open ${row.resource.name} or drag it to move`" @click="navigateToDocument(row.resource.id)" @contextmenu="openResourceContextMenu($event, row.resource)" @keydown.shift.f10="openResourceContextMenu($event, row.resource)" @dragstart="startResourceDrag($event, row.resource.id)" @dragend="endResourceDrag">
+            <button type="button" class="knowledge-resource-button" :class="{ 'is-selected': documentState.type !== 'closed' && documentState.resourceId === row.resource.id }" :draggable="!readOnly" :aria-label="`Open ${row.resource.name}; drag to move it to a folder`" :title="`Open ${row.resource.name} or drag it to move`" @click="navigateToDocument(row.resource.id)" @contextmenu="openResourceContextMenu($event, row.resource)" @keydown.shift.f10="openResourceContextMenu($event, row.resource)" @dragstart="startResourceDrag($event, row.resource.id)" @dragend="endResourceDrag">
               <svg class="knowledge-file-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 2.75h6l4 4v10.5H5V2.75Z" /><path d="M11 2.75v4h4" /></svg>
               <span class="knowledge-folder-name">{{ row.resource.name }}</span>
               <small>{{ row.resource.status.replace('_', ' ') }}</small>
@@ -518,7 +539,7 @@ onBeforeUnmount(() => {
       <footer>
         <span>{{ selectedFolderLabel ? `Selected: ${selectedFolderLabel}` : 'Select a folder' }}</span>
         <input ref="fileInput" class="knowledge-file-input" type="file" accept=".md,.markdown,.txt,.pdf,.json" @change="uploadFile" />
-        <button type="button" :disabled="!selectedFolder || uploadState.type === 'uploading'" @click="chooseUploadFile">
+        <button type="button" :disabled="readOnly || !selectedFolder || uploadState.type === 'uploading'" @click="chooseUploadFile">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 13.75V3.5m0 0L6.25 7.25M10 3.5l3.75 3.75M3.5 13.75v1.5A1.75 1.75 0 0 0 5.25 17h9.5a1.75 1.75 0 0 0 1.75-1.75v-1.5" /></svg>
           {{ uploadState.type === 'uploading' ? `Uploading ${uploadState.fileName}…` : `Upload to ${selectedFolderLabel ?? 'folder'}` }}
         </button>
@@ -529,18 +550,26 @@ onBeforeUnmount(() => {
       <template v-if="documentState.type === 'closed'">
         <article class="knowledge-overview-card">
           <div><p>{{ state.detail.description || 'No description yet.' }}</p><span class="knowledge-category-chip">{{ state.detail.category.name }}</span></div>
-          <div class="knowledge-detail-actions"><button type="button" @click="openEdit">Edit details</button><button type="button" @click="toggleArchived">{{ state.detail.lifecycleStatus === 'archived' ? 'Restore' : 'Archive' }}</button><button v-if="state.detail.lifecycleStatus === 'archived'" type="button" class="is-danger" @click="dialog = { type: 'delete' }; mutation = { type: 'idle' }">Delete</button></div>
+          <div class="knowledge-detail-actions"><button type="button" :disabled="readOnly" @click="openEdit">Edit details</button><button type="button" :disabled="readOnly" @click="toggleArchived">{{ state.detail.lifecycleStatus === 'archived' ? 'Restore' : 'Archive' }}</button><button v-if="state.detail.lifecycleStatus === 'archived'" type="button" class="is-danger" @click="dialog = { type: 'delete' }; mutation = { type: 'idle' }">Delete</button></div>
           <span class="knowledge-status" :data-status="state.detail.graphStatus"><i />{{ state.detail.graphStatus.replace('_', ' ') }}</span>
           <dl><div><dt>{{ state.detail.fileCount }}</dt><dd>Files</dd></div><div><dt>{{ state.detail.knowledgeFamilyCount }}</dt><dd>Knowledge Families</dd></div><div><dt>Last document indexed</dt><dd>{{ state.detail.lastDocumentIndexedAt || 'Not indexed' }}</dd></div><div><dt>Last Steward run</dt><dd>{{ state.detail.lastStewardRunAt || 'Not run' }}</dd></div></dl>
           <p v-if="mutation.type === 'failed'" class="knowledge-form-error knowledge-mutation-error" role="alert">Operation failed: {{ mutation.error.code }}</p>
         </article>
         <article class="knowledge-graph-placeholder">
-          <header><span>KNOWLEDGE GRAPH</span><div><small>Read-only</small><button type="button" class="knowledge-graph-action" @click="isManifestImportOpen = true">Import manifest</button></div></header>
+          <header><span>KNOWLEDGE GRAPH</span><div><small>Read-only</small><button type="button" class="knowledge-graph-action" :disabled="readOnly" @click="isManifestImportOpen = true">Import manifest</button></div></header>
           <div v-if="graphState.type === 'loading'" role="status"><strong>Loading graph…</strong><p>Reading the persisted Knowledge Space projection.</p></div>
           <div v-else-if="graphState.type === 'failed'" role="alert"><strong>Knowledge graph could not be loaded.</strong><p>{{ graphState.error.code }}</p></div>
-          <div v-else-if="graphState.graph.status === 'not_indexed'"><strong>This Knowledge Space is not indexed yet.</strong><p>Automatic analysis is not enabled in this demo. Import a reviewed manifest to generate the graph.</p><button type="button" class="knowledge-primary-action" @click="isManifestImportOpen = true">Import graph manifest</button></div>
+          <div v-else-if="graphState.graph.status === 'not_indexed'"><strong>This Knowledge Space is not indexed yet.</strong><p>Automatic analysis is not enabled in this demo. Import a reviewed manifest to generate the graph.</p><button type="button" class="knowledge-primary-action" :disabled="readOnly" @click="isManifestImportOpen = true">Import graph manifest</button></div>
           <div v-else-if="graphState.graph.nodes.length === 0"><strong>No indexed documents are available.</strong><p>The persisted graph snapshot is valid but currently empty.</p></div>
-          <div v-else><strong>{{ graphState.graph.nodes.length }} documents · {{ graphState.graph.edges.length }} relationships</strong><p>The persisted graph is ready for the read-only canvas adapter.</p></div>
+          <KnowledgeGraphCanvas
+            v-else
+            :graph="graphState.graph"
+            :selected-node-id="graphSelectedNodeId"
+            :viewport="graphViewport"
+            @selected-node-change="graphSelectedNodeId = $event"
+            @viewport-change="graphViewport = $event"
+            @open-document="navigateToDocument"
+          />
         </article>
       </template>
       <article v-else class="knowledge-document-detail" aria-labelledby="knowledge-document-title">
@@ -551,7 +580,7 @@ onBeforeUnmount(() => {
             <h2 id="knowledge-document-title">{{ documentState.type === 'ready' ? documentState.inspection.detail.name : 'Document details' }}</h2>
           </div>
           <div v-if="documentState.type === 'ready'" class="knowledge-document-actions">
-            <button type="button" class="knowledge-secondary-action is-danger" @click="openDeleteResource(documentState.resourceId, documentState.inspection.detail.name)">Delete file</button>
+            <button type="button" class="knowledge-secondary-action is-danger" :disabled="readOnly" @click="openDeleteResource(documentState.resourceId, documentState.inspection.detail.name)">Delete file</button>
           </div>
         </header>
         <div v-if="documentState.type === 'loading'" class="knowledge-document-state" role="status">Loading document…</div>
@@ -574,7 +603,7 @@ onBeforeUnmount(() => {
               <h3>{{ documentEditor.type === 'editing' && documentEditor.mode === 'edit' ? 'Markdown editor' : 'Preview' }}</h3>
               <div v-if="isEditableMarkdown()" class="knowledge-document-mode-switch" role="group" aria-label="Markdown view mode">
                 <button type="button" :class="{ 'is-active': documentEditor.type === 'preview' || documentEditor.mode === 'preview' }" :aria-pressed="documentEditor.type === 'preview' || documentEditor.mode === 'preview'" @click="setDocumentMode('preview')">Preview</button>
-                <button type="button" :class="{ 'is-active': documentEditor.type === 'editing' && documentEditor.mode === 'edit' }" :aria-pressed="documentEditor.type === 'editing' && documentEditor.mode === 'edit'" @click="setDocumentMode('edit')">Edit</button>
+                <button type="button" :class="{ 'is-active': documentEditor.type === 'editing' && documentEditor.mode === 'edit' }" :aria-pressed="documentEditor.type === 'editing' && documentEditor.mode === 'edit'" :disabled="readOnly" @click="setDocumentMode('edit')">Edit</button>
               </div>
             </header>
             <template v-if="documentState.inspection.preview.type === 'text'">
@@ -633,7 +662,7 @@ onBeforeUnmount(() => {
   <div v-if="manifestToast" class="knowledge-toast" role="status">{{ manifestToast }}</div>
 
   <div v-if="folderContextMenu.type === 'open'" class="knowledge-folder-context-menu" role="menu" aria-label="Folder actions" :style="{ left: `${folderContextMenu.x}px`, top: `${folderContextMenu.y}px` }" @pointerdown.stop>
-    <button type="button" role="menuitem" @click="openFolderDialog">
+    <button type="button" role="menuitem" :disabled="readOnly" @click="openFolderDialog">
       <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.75 6A1.75 1.75 0 0 1 4.5 4.25h3.1L9.15 6h6.35a1.75 1.75 0 0 1 1.75 1.75v6.5A1.75 1.75 0 0 1 15.5 16H4.5a1.75 1.75 0 0 1-1.75-1.75V6Z" /><path d="M10 9v4M8 11h4" /></svg>
       New folder inside
     </button>

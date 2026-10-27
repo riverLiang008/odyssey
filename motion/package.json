@@ -1,0 +1,33 @@
+{
+  "name": "@odyssey/motion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare:m2": "node scripts/prepare-m2-assets.mjs",
+    "render:m2": "pnpm prepare:m2 && remotion render src/index.ts Motion002 out/motion-002.mp4 --codec=h264 --pixel-format=yuv420p --muted --concurrency=2",
+    "review:m2": "pnpm prepare:m2 && remotion render src/index.ts Motion002Review out/motion-002-review.mp4 --codec=h264 --pixel-format=yuv420p --concurrency=2",
+    "prepare:m1": "node scripts/prepare-m1-assets.mjs",
+    "render:m1": "pnpm prepare:m1 && remotion render src/index.ts Motion001V2 out/motion-001-v2.mp4 --codec=h264 --pixel-format=yuv420p --muted --concurrency=2",
+    "review:m1": "pnpm prepare:m1 && remotion render src/index.ts Motion001V2Review out/motion-001-v2-review.mp4 --codec=h264 --pixel-format=yuv420p --concurrency=2",
+    "studio": "remotion studio src/index.ts --port=3100",
+    "typecheck": "tsc --noEmit",
+    "build": "pnpm typecheck && remotion bundle src/index.ts build",
+    "render": "remotion render src/index.ts Motion001 out/motion-001.mp4 --codec=h264 --pixel-format=yuv420p --muted --concurrency=2",
+    "preview": "remotion still src/index.ts Motion001 out/motion-001-preview.png --frame=240",
+    "still": "remotion still src/index.ts Motion001"
+  },
+  "dependencies": {
+    "@odyssey/design-tokens": "workspace:*",
+    "remotion": "4.0.502",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@remotion/cli": "4.0.502",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^5.9.2"
+  }
+}

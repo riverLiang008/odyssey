@@ -53,7 +53,7 @@ Figma 尚未完整画出的状态，以 `knowledge-space-specification.md` 为�
 - [ ] Object storage upload/download/delete workflow。
 - [x] Graph Overview projection、node、edge、tag/family、reference 和 issue read API 已落地；development seed command 待续。
 - [x] Knowledge Space List、Create modal 和 Detail shell 已落地；Inspector/Document Detail 属于 KS-C。
-- [ ] 使用真实 Knowledge Space 数据的 Canvas 与 Knowledge Retrieval 浏览器验收。
+- [x] 使用真实 Knowledge Space 数据的 Canvas 与 Knowledge Retrieval 浏览器验收。
 
 ## 2. 总体依赖关系
 
@@ -352,14 +352,94 @@ Demo graph 的前端 Manifest Import、辅助 seed 与未来 Graph Producer 边�
 
 ### KS-C-FE 前端
 
-- [ ] 为 Knowledge graph 建立独立 read-only domain adapter，不复用 Workflow editor nodes/edges。
-- [ ] 实现 pan、zoom、fit、hover、keyboard focus 和 selection。
-- [ ] 单击 graph node 打开 Document Inspector；folder file 不触发 Inspector。
-- [ ] 双击/Open document 导航到 nested Document Detail route。
-- [ ] 点击空白关闭 Inspector。
+#### KS-C2 — Read-only Knowledge Graph Canvas 算法与实现决策
+
+目标：把正式 Graph Overview API 返回的 document、relation、family 与 issue projection 转换为可浏览、可选择、不可修改的 Knowledge Graph Canvas。该 Canvas 只负责呈现和导航，不成为第二份 graph source of truth，也不复用 Workflow editor 的 node/edge view model。
+
+##### 架构边界
+
+```text
+KnowledgeGraphOverview (validated API/domain projection)
+                    ↓
+       knowledgeGraphCanvasAdapter (pure)
+                    ↓
+KnowledgeGraphCanvasModel (nodes/edges/family metadata)
+                    ↓
+       deterministic layout (pure)
+                    ↓
+Vue Flow read-only nodes/edges + temporary viewport/selection
+```
+
+- `KnowledgeGraphOverview` 保持唯一领域事实来源；前端不保存派生 graph 副本，也不向 API 回写 Canvas 坐标。
+- adapter 与 layout 必须是纯函数，不读取 Vue component、Pinia、DOM、router 或 repository。
+- Vue Flow 类型只存在于 Canvas adapter/component 边界，不进入 shared schema、repository contract 或 Knowledge Space domain state。
+- `selectedNodeId`、hover、viewport、Inspector open/closed 和 keyboard focus 均为 route-local UI session；不得写入 Knowledge Space aggregate。
+- read-only 必须由 Vue Flow 配置与 adapter capability 同时保证：禁用 node drag、connect、delete、edge update 和 mutation keyboard shortcut，不能仅靠隐藏控件。
+- Knowledge Graph 使用独立 node/edge ID namespace；不复用 Workflow Canvas selection、drag session、layout 或 autosave。
+
+##### 确定性布局算法 V1
+
+输入：`KnowledgeGraphOverview.nodes` 与 `KnowledgeGraphOverview.edges`。输出：仅供当前页面渲染的稳定 node positions、edge routes 和 graph bounds。
+
+1. **Normalize/index**：按稳定 UUID 建立 node/edge index；忽略任何不存在端点的 relation 并返回结构化 adapter diagnostic。正常 API contract 下该分支不可达，但不得通过 non-null assertion 掩盖。
+2. **Stable ordering**：所有会影响顺序的集合统一按 `normalized name → UUID` 排序；不得依赖 API 数组顺序、Manifest 原始顺序或对象遍历顺序。
+3. **Strongly connected components**：使用 Tarjan 算法识别有向环。单节点或强连通分量被视为一个 layout component，从而允许 `references`、`related_to` 等合法关系形成环，而不会让分层算法失败。
+4. **Condensation DAG**：把强连通分量压缩成 DAG；component 间重复关系在计算 rank 时合并，但渲染时保留每条真实 relation identity。
+5. **Rank assignment**：对 condensation DAG 做稳定拓扑排序。无入边 component 为 rank 0；其余 component 的 rank 为所有前驱 rank 最大值加一。完全孤立节点进入独立的最后区域，不制造虚假 relation。
+6. **Within-rank ordering**：V1 使用 stable ordering，确保小图结果可预测；大图基准完成后再决定是否增加固定次数的 barycenter sweep 来降低交叉，且相同 barycenter 必须回落到 stable ordering。
+7. **Component expansion**：单节点直接放置；包含多个节点的 SCC 在 component bounds 内按稳定圆形排列，并为双向/环内边保留可辨识曲线。
+8. **Family hint**：Family 是由 tag membership 派生的多对多 metadata，不作为可嵌套父节点，也不改变 graph identity。V1 用 node chip/color 与可选 filter 表达 membership；同一 document 可属于多个 families。
+9. **Issue hint**：open issue 映射为 node/edge marker；severity 决定视觉层级，但颜色不是唯一提示。resolved/dismissed issue 不提升警示层级。
+10. **Bounds/fit**：根据 node positions 计算 bounds；首次成功加载执行一次 `fitView`。用户 pan/zoom 后，selection、Inspector 打开或普通响应式重排不得反复强制 fit。
+
+确定性不变量：相同 graph 输入必须产生相同位置；新增孤立节点不能移动已有连通分量；数组顺序变化不能改变布局；所有输出 placement 只引用存在的 node；任何 Canvas 临时字段不得进入 API/domain model。
+
+##### 交互与状态
+
+- 单击 document node：设置 `selectedNodeId` 并打开 Document Inspector。
+- 单击空白或按 `Escape`：关闭 Inspector 并清除 selection；关闭后不得自动打开其他 panel。
+- 双击 node 或 Inspector 中执行 `Open document`：导航到 nested Document Detail route。
+- 返回 Graph：在同一 Knowledge Space route session 内恢复 viewport 与 selection；跨 Knowledge Space route 必须清空旧 session，旧异步响应不得覆盖新 route。
+- hover/focus 展示直接 relation 与方向；keyboard focus 后可用 Enter 打开 Inspector，并提供可见 focus ring 和 accessible label。
+- edge 默认不可选择修改；hover/focus 可显示 kind、description、confidence 与 review status。
+- family/filter 仅改变可见性或强调状态，不修改领域 graph；过滤后必须提供 visible/total count 和清除入口。
+- 大图降级：达到性能阈值时减少动画、阴影和非必要 label，布局仍保持相同语义与确定性；阈值以基准测试结果落档，不凭经验硬编码。
+
+##### 实施 Todo
+
+- [x] 新建 Knowledge Graph Canvas domain view types；与 `KnowledgeGraphOverview`、Workflow graph 和 Vue Flow types 明确隔离。
+- [x] 实现 graph normalize/index 与结构化 adapter diagnostics。
+- [x] 实现并测试 Tarjan SCC、condensation DAG、rank assignment、stable ordering、SCC expansion 与 bounds 计算；barycenter crossing reduction 留给大图基准后的增量优化。
+- [x] 实现 `knowledgeGraphCanvasAdapter`，输出 read-only Vue Flow nodes/edges，保留 document/relation UUID identity。
+- [x] 实现 Knowledge document node、relation edge、family chips 和 issue markers；文案、颜色与图标使用现有 Knowledge Space 视觉语义与 design-token fallback。
+- [x] 用真实 Canvas 替换 Detail page 当前的 document/relationship count placeholder，同时保留 count 作为辅助信息。
+- [x] 实现 pan、zoom、fit controls；首次 load 自动 fit，后续交互不抢夺用户 viewport。
+- [x] 建立 route-local Canvas session：selection、viewport、Inspector 与 focus；不得写入 repository 或 KS aggregate。
+- [x] 实现 node click/keyboard selection、空白/Escape 关闭、double-click/Open document 导航。
+- [x] 实现只读 Document Inspector，展示 summary、guide、tags、families、incoming/outgoing relations 和 open issues。
+- [x] 接通 loading、not-indexed、empty、graph-error 与 invalid-adapter-data states；不得以空白 Canvas 代替错误说明。
+- [ ] 增加大图基准 fixture，并根据测量结果确定动画/label 降级阈值。
+
+##### 测试与验收 Todo
+
+- [ ] 纯函数测试：空图、单节点、线性 DAG、diamond、多 root、多 component、孤立节点、自环防御、双向关系和多节点 SCC。
+- [x] 确定性测试：交换 nodes/edges 输入顺序后 positions 与 routes 不变。
+- [ ] 稳定性测试：新增孤立 component 不移动原有 connected components；所有 placement/edge endpoint 引用有效。
+- [x] adapter 测试：不暴露 mutation capability，Vue Flow 临时字段不反向污染 domain projection。
+- [ ] component 测试：node click、keyboard Enter、空白/Escape、Inspector close、edge hover、family filter 和 error/empty states。
+- [ ] route/async 测试：切换 Knowledge Space 时 abort/ignore stale response；Back to graph 恢复正确 session 且不串用上一 KS。
+- [ ] 真实浏览器验收：pan、zoom、fit、focus、selection、Inspector、Document Detail round trip 与 responsive resize。
+- [ ] 真实浏览器确认 Canvas 全程无法拖动节点、连线、删除或通过快捷键修改 graph。
+- [ ] 质量门禁：`pnpm lint`、`pnpm typecheck`、相关 unit/component tests、production build 与 console clean。
+
+- [x] 为 Knowledge graph 建立独立 read-only domain adapter，不复用 Workflow editor nodes/edges。
+- [x] 实现 pan、zoom、fit、hover、keyboard focus 和 selection。
+- [x] 单击 graph node 打开 Document Inspector；folder file 不触发 Inspector。
+- [x] 双击/Open document 导航到 nested Document Detail route。
+- [x] 点击空白关闭 Inspector。
 - [ ] Back to graph 恢复 pan、zoom 和 selection；该状态不写入 KS aggregate。
 - [ ] 实现 tags、summary、guide、references 编辑和保存反馈。
-- [ ] 实现 needs-review 与 issue marker；Graph Overview 已接 loading、not-indexed、empty 和 graph-error boundary states。
+- [x] 实现 needs-review 与 issue marker；Graph Overview 已接 loading、not-indexed、empty、graph-error 和 invalid-adapter-data boundary states。
 
 ### KS-C 验收门
 
@@ -373,19 +453,19 @@ Demo graph 的前端 Manifest Import、辅助 seed 与未来 Graph Producer 边�
 
 目标：完成此前 System Tools 第二批 B 留下的真实 Knowledge Space happy path。
 
-- [ ] Canvas 顶部 `Knowledge Spaces` 资源面板读取同一正式 inventory repository。
-- [ ] 可用性规则保持：ready/syncing 且 healthy/needs-review 可选；其他可见但 disabled。
-- [ ] Knowledge Space 拖入 Agent Action 只建立 UUID 引用。
-- [ ] Knowledge Retrieval 配置从真实 inventory 选择 Knowledge Space。
-- [ ] 已 archive/failed/deleted/referenced 的状态在保存时由后端权威校验。
-- [ ] Canvas resource panel 与 Tool config panel 保持互斥替换关系。
-- [ ] root、Loop child、Task ToolStep 和 Agent Reusable Tool round trip 均覆盖。
-- [ ] 保存、刷新、revision conflict、cross-Workspace rejection 和 deletion protection 浏览器验收。
+- [x] Canvas 顶部 `Knowledge Spaces` 资源面板读取同一正式 inventory repository。
+- [x] 可用性规则保持：ready/syncing 且 healthy/needs-review 可选；其他可见但 disabled；规则集中于纯函数并由所有配置入口复用。
+- [x] Knowledge Space 拖入 Agent Action 只建立 UUID 引用。
+- [x] Knowledge Retrieval 配置从真实 inventory 选择 Knowledge Space。
+- [x] 已 archive/failed/deleted/referenced 的状态在保存时由后端权威校验；不可用状态返回 `STATE_CONFLICT / KNOWLEDGE_SPACE_UNAVAILABLE`，跨 Workspace 或不存在仍返回 `NOT_FOUND`。
+- [x] Canvas resource panel 与 Tool config panel 保持互斥替换关系。
+- [x] root、Loop child、Task ToolStep 和 Agent Reusable Tool round trip 均覆盖；PostgreSQL 测试同时验证 reference rows 同步与失败回滚。
+- [x] 真实浏览器完成 Knowledge Retrieval 选择、显式保存与整页刷新回显；revision conflict、cross-Workspace rejection、deletion protection 与引用回滚由 PostgreSQL 集成测试覆盖。
 
 ### KS-D 完成后回写
 
-- [ ] 在 `system-tools-second-batch-frontend-backend-todo.md` 勾选“Knowledge Retrieval 使用真实 Knowledge Space 数据完成浏览器 happy path”。
-- [ ] 更新 M6/Knowledge Space completion report。
+- [x] 在 `system-tools-second-batch-frontend-backend-todo.md` 勾选“Knowledge Retrieval 使用真实 Knowledge Space 数据完成浏览器 happy path”。
+- [x] 更新 M6/Knowledge Space completion report。
 - [ ] 重新评估 Canvas 剩余视觉校准、model inventory 和 system variable inventory 的顺序。
 
 ## 8. 明确非目标
@@ -426,7 +506,7 @@ Demo graph 的前端 Manifest Import、辅助 seed 与未来 Graph Producer 边�
 ### Definition of Done
 
 - [ ] 用户可从正常 UI 创建 Knowledge Space、建立目录、上传文件、浏览 metadata 和只读 graph。
-- [ ] 用户可从 Canvas 选择同一真实 Knowledge Space，并配置 Knowledge Retrieval。
+- [x] 用户可从 Canvas 选择同一真实 Knowledge Space，并配置 Knowledge Retrieval。
 - [ ] 刷新、重进页面和服务重启后数据一致。
 - [ ] Workspace 隔离、revision、引用保护和错误 envelope 均成立。
 - [ ] UI-only state、Vue Flow object、storage secret 和 ORM object 不进入 API contract。

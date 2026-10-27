@@ -1,0 +1,10 @@
+import {copyFile, mkdir} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+const source = new URL('../../motion-assets/projects/odyssey-how001/m-02/', import.meta.url);
+const target = new URL('../public/m2/', import.meta.url);
+const out = new URL('../out/', import.meta.url);
+await mkdir(target, {recursive: true});
+await mkdir(out, {recursive: true});
+await copyFile(new URL('how001-m2-3.m4a', source), new URL('narration.m4a', target));
+await copyFile(new URL('how001-m2-3.srt', source), new URL('motion-002.srt', out));
+console.log(`M-02 prepared: ${fileURLToPath(target)}`);

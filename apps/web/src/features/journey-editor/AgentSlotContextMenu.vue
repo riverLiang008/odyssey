@@ -5,6 +5,7 @@ const props = defineProps<{
   hubDirection?: HubSpokeDirection
   slotId: UUID
   configured?: boolean
+  readOnly?: boolean
   canReorder?: boolean
   canMoveEarlier?: boolean
   canMoveLater?: boolean
@@ -68,23 +69,23 @@ onBeforeUnmount(() => {
   <div ref="root" class="agent-menu" role="menu">
     <div class="agent-menu__group">
       <button role="menuitem" @click="$emit('action', 'open', props.slotId)">Open workflow</button>
-      <button role="menuitem" :disabled="!configured" @click="$emit('action', 'replace', props.slotId)">Replace agent</button>
-      <button role="menuitem" :disabled="!configured" @click="$emit('action', 'duplicate', props.slotId)">Duplicate</button>
-      <button class="is-danger" role="menuitem" :disabled="!configured" @click="$emit('action', 'remove', props.slotId)">Remove agent</button>
+      <button role="menuitem" :disabled="readOnly || !configured" @click="$emit('action', 'replace', props.slotId)">Replace agent</button>
+      <button role="menuitem" :disabled="readOnly || !configured" @click="$emit('action', 'duplicate', props.slotId)">Duplicate</button>
+      <button class="is-danger" role="menuitem" :disabled="readOnly || !configured" @click="$emit('action', 'remove', props.slotId)">Remove agent</button>
     </div>
     <div class="agent-menu__divider" role="separator" />
     <div v-if="hubDirection" class="agent-menu__group" role="group" aria-label="Hub connection direction">
-      <button role="menuitemradio" :aria-checked="hubDirection === 'hub_to_spoke'" @click="emit('direction', slotId, 'hub_to_spoke')">Hub → Spoke</button>
-      <button role="menuitemradio" :aria-checked="hubDirection === 'spoke_to_hub'" @click="emit('direction', slotId, 'spoke_to_hub')">Spoke → Hub</button>
-      <button role="menuitemradio" :aria-checked="hubDirection === 'bidirectional'" @click="emit('direction', slotId, 'bidirectional')">Hub ↔ Spoke</button>
+      <button :disabled="readOnly" role="menuitemradio" :aria-checked="hubDirection === 'hub_to_spoke'" @click="emit('direction', slotId, 'hub_to_spoke')">Hub → Spoke</button>
+      <button :disabled="readOnly" role="menuitemradio" :aria-checked="hubDirection === 'spoke_to_hub'" @click="emit('direction', slotId, 'spoke_to_hub')">Spoke → Hub</button>
+      <button :disabled="readOnly" role="menuitemradio" :aria-checked="hubDirection === 'bidirectional'" @click="emit('direction', slotId, 'bidirectional')">Hub ↔ Spoke</button>
     </div>
     <div class="agent-menu__group agent-menu__group--slot">
-      <button role="menuitem" :disabled="!configured" @click="$emit('action', 'save-template', props.slotId)">Save as template</button>
-      <button v-if="canAddSibling" role="menuitem" @click="$emit('action', 'add-before', props.slotId)">Add slot before</button>
-      <button v-if="canAddSibling" role="menuitem" @click="$emit('action', 'add-after', props.slotId)">Add slot after</button>
-      <button v-if="canReorder" role="menuitem" :disabled="!canMoveEarlier" @click="$emit('action', 'move-earlier', props.slotId)">Move earlier</button>
-      <button v-if="canReorder" role="menuitem" :disabled="!canMoveLater" @click="$emit('action', 'move-later', props.slotId)">Move later</button>
-      <button v-if="canRemoveSlot" class="is-danger" role="menuitem" @click="$emit('action', 'remove-slot', props.slotId)">Remove slot</button>
+      <button role="menuitem" :disabled="readOnly || !configured" @click="$emit('action', 'save-template', props.slotId)">Save as template</button>
+      <button v-if="canAddSibling" :disabled="readOnly" role="menuitem" @click="$emit('action', 'add-before', props.slotId)">Add slot before</button>
+      <button v-if="canAddSibling" :disabled="readOnly" role="menuitem" @click="$emit('action', 'add-after', props.slotId)">Add slot after</button>
+      <button v-if="canReorder" role="menuitem" :disabled="readOnly || !canMoveEarlier" @click="$emit('action', 'move-earlier', props.slotId)">Move earlier</button>
+      <button v-if="canReorder" role="menuitem" :disabled="readOnly || !canMoveLater" @click="$emit('action', 'move-later', props.slotId)">Move later</button>
+      <button v-if="canRemoveSlot" :disabled="readOnly" class="is-danger" role="menuitem" @click="$emit('action', 'remove-slot', props.slotId)">Remove slot</button>
     </div>
   </div>
 </template>

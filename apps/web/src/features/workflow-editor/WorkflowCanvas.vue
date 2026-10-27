@@ -41,6 +41,7 @@ const props = defineProps<{
   layout: CanvasLayout | LoopNode['config']['body']['layout']
   mode: WorkflowMode
   canvasId: string
+  readOnly?: boolean
   selectedNodeId?: UUID | null
   variables?: readonly AgentVariable[]
   systemTools?: readonly SystemToolDefinition[]
@@ -74,7 +75,12 @@ const root = ref<globalThis.HTMLElement | null>(null)
 const measuredSizes = shallowRef<readonly LoopChildSize[]>([])
 const projection = computed(() => {
   const result = projectWorkflowCanvas(props.graph, props.layout, props.mode, props.routingJourney)
-  return { ...result, nodes: expandMeasuredLoopFrames(result.nodes, measuredSizes.value) }
+  const nodes = expandMeasuredLoopFrames(result.nodes, measuredSizes.value)
+  return props.readOnly ? {
+    ...result,
+    nodes: nodes.map(node => ({ ...node, draggable: false, connectable: false, deletable: false })),
+    edges: result.edges.map(edge => ({ ...edge, updatable: false, deletable: false })),
+  } : { ...result, nodes }
 })
 const { onInit, onNodesInitialized, fitView, project: projectPoint, setCenter, setViewport: setCanvasViewport, viewport } = useVueFlow(props.canvasId)
 let modeProjection = projection.value
@@ -109,7 +115,7 @@ function scheduleBounds() {
         return card && card.offsetWidth && card.offsetHeight ? [{ nodeId: node.id, width: card.offsetWidth, height: card.offsetHeight }] : []
       })
       allSizes.push(...sizes)
-      if (sizes.length && props.mode === 'configure') emit('loopBounds', loop.id, sizes)
+      if (sizes.length && props.mode === 'configure' && !props.readOnly) emit('loopBounds', loop.id, sizes)
     }
     if (JSON.stringify(allSizes) !== JSON.stringify(measuredSizes.value)) measuredSizes.value = allSizes
   })
@@ -187,7 +193,7 @@ function nodeClick(event: NodeMouseEvent) {
 }
 function nodeContextMenu(event: NodeMouseEvent) {
   event.event.preventDefault()
-  if (props.mode !== 'configure') return
+  if (props.readOnly || props.mode !== 'configure') return
   if (!(event.event instanceof globalThis.MouseEvent)) return
   const node = event.node.data.node
   if (!node || ['start', 'end', 'loop_start', 'loop_end'].includes(node.type)) return
@@ -198,12 +204,12 @@ function edgeClick(event: EdgeMouseEvent) {
 }
 function edgeContextMenu(event: EdgeMouseEvent) {
   event.event.preventDefault()
-  if (props.mode !== 'configure') return
+  if (props.readOnly || props.mode !== 'configure') return
   if (!(event.event instanceof globalThis.MouseEvent)) return
   emit('edgeContextMenu', contextForNodeId(event.edge.source as UUID), event.edge.id as UUID, { x: event.event.clientX, y: event.event.clientY })
 }
 function dragStop(event: NodeDragEvent) {
-  if (props.mode !== 'configure') return
+  if (props.readOnly || props.mode !== 'configure') return
   const context = (event.node.data.context ?? { kind: 'root' }) as CanvasTargetContext
   const position = context.kind === 'root' ? fromWorkflowCanvasPosition(event.node.position, props.layout, props.mode) : event.node.position
   emit('intent', context, { type: 'move-node', nodeId: event.node.id as UUID, x: position.x, y: position.y })
@@ -211,6 +217,7 @@ function dragStop(event: NodeDragEvent) {
 function moveEnd({ flowTransform: viewport }: { event: unknown; flowTransform: ViewportTransform }) {
   if (isApplyingInitialCenter) return
   modeAnchorId = null
+  if (props.readOnly) return
   const saved = props.mode === 'configure' ? viewport : mapModeViewport(
     projection.value, projectWorkflowCanvas(props.graph, props.layout, 'configure', props.routingJourney), viewport,
     { width: root.value?.clientWidth ?? 0, height: root.value?.clientHeight ?? 0 }, props.selectedNodeId,
@@ -245,6 +252,7 @@ function creationTarget(nodeType: WorkflowPaletteNodeType, position: { x: number
 function drop(event: globalThis.DragEvent) {
   event.preventDefault()
   event.stopPropagation()
+  if (props.readOnly) return
   const transfer = event.dataTransfer
   const resourcePayload = parseWorkflowResourceDragPayload(
     transfer?.getData(WORKFLOW_RESOURCE_DRAG_MIME)
@@ -281,7 +289,7 @@ function resourceTargetFromEvent(event: globalThis.DragEvent): WorkflowResourceD
   return { kind, nodeId: nodeId as UUID }
 }
 function createFromClientPoint(nodeType: WorkflowPaletteNodeType, clientX: number, clientY: number): boolean {
-  if (props.mode !== 'configure') return false
+  if (props.readOnly || props.mode !== 'configure') return false
   const bounds = root.value?.getBoundingClientRect()
   if (!bounds || clientX < bounds.left || clientX > bounds.right || clientY < bounds.top || clientY > bounds.bottom) {
     emit('reject', 'INVALID_DROP_PAYLOAD')
@@ -300,6 +308,7 @@ function dragOver(event: globalThis.DragEvent) {
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
 }
 function handleResourceDrop(payload: WorkflowResourceDragPayload, target: WorkflowResourceDropTarget) {
+  if (props.readOnly) return
   if (target.kind === 'canvas-pane') { emit('reject', 'INVALID_RESOURCE_TARGET'); return }
   const node = projection.value.nodes.find(candidate => candidate.id === target.nodeId)?.data?.node
   const evaluation = evaluateWorkflowResourceDrop(payload, target, {
@@ -342,7 +351,7 @@ function connectStart() {
   emit('clearError')
 }
 function connect(connection: Connection) {
-  if (props.mode !== 'configure') return
+  if (props.readOnly || props.mode !== 'configure') return
   if (!connectionToIntent(connection, globalThis.crypto.randomUUID() as UUID)) {
     emit('reject', 'INVALID_CONNECTION')
     return
@@ -371,8 +380,8 @@ function connectEnd() {
       :default-viewport="initialViewport"
       :min-zoom="0.35"
       :max-zoom="1.8"
-      :nodes-draggable="mode === 'configure'"
-      :nodes-connectable="mode === 'configure'"
+      :nodes-draggable="!readOnly && mode === 'configure'"
+      :nodes-connectable="!readOnly && mode === 'configure'"
       @node-click="nodeClick"
       @node-context-menu="nodeContextMenu"
       @edge-click="edgeClick"
@@ -385,30 +394,32 @@ function connectEnd() {
       @connect-end="connectEnd"
     >
       <template #node-workflow="nodeProps">
-        <WorkflowNodeRenderer
-          v-bind="nodeProps"
-          :configure-expanded="mode === 'configure' && ((nodeProps.data.context?.kind ?? 'root') === 'root' || nodeProps.data.node.type === 'branch')"
-          :read-only="nodeProps.data.node.type === 'branch' ? mode !== 'configure' : undefined"
-          :tools="reusableTools ?? []"
-          :knowledge-spaces="knowledgeSpaces ?? []"
-          :variables="variables" :active-resource-drag="activeResourceDrag"
-          :resource-drop-state="resourceDropFeedback.status"
-          :resource-drop-node-id="resourceDropFeedback.nodeId"
-          :resource-drop-target-kind="resourceDropFeedback.targetKind"
-          @edit-tool="(nodeId, stepId) => emit('editTool', nodeId, stepId)"
-          @edit-reusable-tool="(nodeId, reusableToolId) => emit('editReusableTool', nodeId, reusableToolId)"
-          @change-tool="(nodeId, stepId, operation) => emit('changeTool', nodeId, stepId, operation)"
-          @reorder-tool="(nodeId, stepId, targetIndex) => emit('reorderTool', nodeId, stepId, targetIndex)"
-          @tool-step-context-menu="(nodeId, stepId, point) => emit('toolStepContextMenu', nodeId, stepId, point)"
-          @resource-enter="resourceEnter"
-          @resource-leave="resourceLeave"
-          @resource-drop="handleResourceDrop"
-          @unbind-tool="unbindTool"
-          @unbind-knowledge-space="unbindKnowledgeSpace"
-          @update-agent-action="(nodeId, details) => emit('updateAgentAction', nodeId, details)"
-          @update-node-name="(nodeId, name) => emit('updateNodeName', nodeId, name)"
-          @resize-node="(nodeId, size) => emit('resize', nodeId, size)"
-        />
+        <div :inert="readOnly || undefined">
+          <WorkflowNodeRenderer
+            v-bind="nodeProps"
+            :configure-expanded="mode === 'configure' && ((nodeProps.data.context?.kind ?? 'root') === 'root' || nodeProps.data.node.type === 'branch')"
+            :read-only="readOnly || (nodeProps.data.node.type === 'branch' ? mode !== 'configure' : undefined)"
+            :tools="reusableTools ?? []"
+            :knowledge-spaces="knowledgeSpaces ?? []"
+            :variables="variables" :active-resource-drag="activeResourceDrag"
+            :resource-drop-state="resourceDropFeedback.status"
+            :resource-drop-node-id="resourceDropFeedback.nodeId"
+            :resource-drop-target-kind="resourceDropFeedback.targetKind"
+            @edit-tool="(nodeId, stepId) => emit('editTool', nodeId, stepId)"
+            @edit-reusable-tool="(nodeId, reusableToolId) => emit('editReusableTool', nodeId, reusableToolId)"
+            @change-tool="(nodeId, stepId, operation) => emit('changeTool', nodeId, stepId, operation)"
+            @reorder-tool="(nodeId, stepId, targetIndex) => emit('reorderTool', nodeId, stepId, targetIndex)"
+            @tool-step-context-menu="(nodeId, stepId, point) => emit('toolStepContextMenu', nodeId, stepId, point)"
+            @resource-enter="resourceEnter"
+            @resource-leave="resourceLeave"
+            @resource-drop="handleResourceDrop"
+            @unbind-tool="unbindTool"
+            @unbind-knowledge-space="unbindKnowledgeSpace"
+            @update-agent-action="(nodeId, details) => emit('updateAgentAction', nodeId, details)"
+            @update-node-name="(nodeId, name) => emit('updateNodeName', nodeId, name)"
+            @resize-node="(nodeId, size) => emit('resize', nodeId, size)"
+          />
+        </div>
       </template>
     </VueFlow>
     <p v-if="projection.diagnostics.length" class="canvas-diagnostic" role="status">Some nodes use temporary fallback positions. Move and save them to repair layout.</p>

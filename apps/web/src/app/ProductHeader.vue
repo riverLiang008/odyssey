@@ -12,6 +12,19 @@ const isKnowledge = computed(() => String(route.name ?? '').startsWith('knowledg
     <nav class="product-header__resources" aria-label="Project resources">
       <a
         class="product-header__resource-link"
+        href="https://github.com/riverLiang008/odyssey"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Open Odyssey GitHub repository"
+        data-tooltip="GitHub repository"
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="M15.5 21v-3.5a3.6 3.6 0 0 0-1-2.7c3.3-.4 6.8-1.6 6.8-7.2a5.6 5.6 0 0 0-1.5-3.9 5.2 5.2 0 0 0-.1-3.9S18.5-.6 15.5 1.3a13.4 13.4 0 0 0-7 0C5.5-.6 4.3-.2 4.3-.2a5.2 5.2 0 0 0-.1 3.9 5.6 5.6 0 0 0-1.5 3.9c0 5.6 3.5 6.8 6.8 7.2a3.6 3.6 0 0 0-1 2.7V21" />
+          <path d="M8.5 18.5c-3 .9-3-1.5-4.2-2" />
+        </svg>
+      </a>
+      <a
+        class="product-header__resource-link"
         href="https://riverliang008.github.io/odyssey-architecture/"
         target="_blank"
         rel="noopener noreferrer"

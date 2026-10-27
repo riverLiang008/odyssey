@@ -143,12 +143,14 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   }
 
   function scheduleAutosave(delay = JOURNEY_AUTOSAVE_DELAY_MS) {
+    if (activeRepository?.readOnly) return
     clearAutosaveTimer()
     if (!activeRepository || persistenceState.value?.type !== 'dirty') return
     autosaveCoordinator.schedule(() => save(), delay)
   }
 
   function markDirty() {
+    if (activeRepository?.readOnly) return
     const state = persistenceState.value
     if (!state) return
     persistenceState.value = markPersistenceDirty(state, Date.now() + JOURNEY_AUTOSAVE_DELAY_MS)
@@ -343,6 +345,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   }
 
   async function addGuardrail(side: GuardrailSide, repository: GuardrailLifecycleRepository): Promise<UUID | false> {
+    if (activeRepository?.readOnly) return false
     if (!(await flushLocalChanges())) return false
     const current = document.value
     const projection = side === 'input' ? current?.inputGuardrail : current?.outputGuardrail
@@ -371,6 +374,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   }
 
   async function removeGuardrail(side: GuardrailSide, expectedAgentId: UUID, repository: GuardrailLifecycleRepository): Promise<boolean> {
+    if (activeRepository?.readOnly) return false
     if (!(await flushLocalChanges())) return false
     const current = document.value
     const projection = side === 'input' ? current?.inputGuardrail : current?.outputGuardrail
@@ -417,6 +421,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   }
 
   function beginDrag(payload: PatternDragPayload) {
+    if (activeRepository?.readOnly) return
     if (lifecycle.operationStatus === 'loading') return
     session.lastDropError = null
     session.lastDragBoundaryError = null
@@ -469,6 +474,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   }
 
   function applyPatternCommand(command: (pattern: JourneyEditorDocument['pattern']) => PatternCommandResult): PatternCommandResult | null {
+    if (activeRepository?.readOnly) return null
     const current = document.value
     if (!current || templateExitMapping.value || routingImpact.value.length || lifecycle.operationStatus === 'loading' || guardrailOperation.value.type === 'adding' || guardrailOperation.value.type === 'removing') return null
     const result = command(structuredClone(toRaw(current.pattern)))
@@ -555,6 +561,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   }
 
   async function createAgent(slotId: UUID, repository: AgentLifecycleRepository): Promise<UUID | false> {
+    if (activeRepository?.readOnly) return false
     if (!(await flushLocalChanges())) return false
     const current = document.value
     if (!current || lifecycle.operationStatus === 'loading') return false
@@ -580,6 +587,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   }
 
   async function instantiateTemplate(templateId: UUID, slotId: UUID, repository: AgentLifecycleRepository, endAssignments?: TemplateEndAssignment[]) {
+    if (activeRepository?.readOnly) return false
     if (!(await flushLocalChanges())) return false
     const current = document.value
     if (!current || lifecycle.operationStatus === 'loading') return false
@@ -661,6 +669,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   }
 
   async function saveAsTemplate(agentId: UUID, name: string, description: string | null, repository: AgentLifecycleRepository) {
+    if (activeRepository?.readOnly) return false
     const current = document.value
     if (!current || lifecycle.operationStatus === 'loading') return false
     const controller = new AbortController()
@@ -696,6 +705,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
     repository: AgentLifecycleRepository,
     confirmation?: RoutingConfirmation,
   ) {
+    if (activeRepository?.readOnly) return false
     if (!(await flushLocalChanges())) return false
     const current = document.value
     if (!current || lifecycle.operationStatus === 'loading') return false
@@ -775,6 +785,7 @@ export const useJourneyEditorStore = defineStore('journeyEditor', () => {
   }
 
   async function save(repository?: JourneyEditorRepository, confirmation?: RoutingConfirmation): Promise<boolean> {
+    if (activeRepository?.readOnly) return false
     if (repository) activeRepository = repository
     return autosaveCoordinator.run(async () => {
       const current = document.value

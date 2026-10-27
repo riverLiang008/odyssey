@@ -53,6 +53,9 @@ export interface RepositoryOperationOptions {
   signal?: AbortSignal
 }
 
+/** Frontend access capability; never serialized into an API or domain document. */
+export interface RepositoryCapabilities { readonly readOnly?: boolean }
+
 export interface UploadKnowledgeFileInput {
   knowledgeSpaceId: UUID
   folderId: UUID
@@ -70,7 +73,7 @@ export interface KnowledgeResourceInspection {
   preview: KnowledgeResourcePreview
 }
 
-export interface KnowledgeSpaceInventoryRepository {
+export interface KnowledgeSpaceInventoryRepository extends RepositoryCapabilities {
   listKnowledgeSpaces(
     input?: { query?: string; page?: number; pageSize?: number; includeArchived?: boolean },
     options?: RepositoryOperationOptions,
@@ -106,7 +109,7 @@ export interface KnowledgeSpaceInventoryRepository {
   uploadKnowledgeFile(input: UploadKnowledgeFileInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<CompleteKnowledgeUploadSuccess>>
 }
 
-export interface JourneyEditorRepository {
+export interface JourneyEditorRepository extends RepositoryCapabilities {
   loadJourney(
     journeyId: UUID,
     options?: RepositoryOperationOptions,
@@ -122,7 +125,7 @@ export interface JourneyEditorRepository {
   ): Promise<RepositoryResult<AgentWorkflowEditorDocument>>
 }
 
-export interface WorkflowEditorRepository extends Pick<KnowledgeSpaceInventoryRepository, 'listKnowledgeSpaces'> {
+export interface WorkflowEditorRepository extends Pick<KnowledgeSpaceInventoryRepository, 'listKnowledgeSpaces'>, RepositoryCapabilities {
   listSystemToolDefinitions(options?: RepositoryOperationOptions): Promise<RepositoryResult<SystemToolDefinition[]>>
   loadJourney(
     journeyId: UUID,
@@ -141,13 +144,13 @@ export interface WorkflowEditorRepository extends Pick<KnowledgeSpaceInventoryRe
 
 export type EditorRepository = JourneyEditorRepository & WorkflowEditorRepository
 
-export interface JourneyLifecycleRepository {
+export interface JourneyLifecycleRepository extends RepositoryCapabilities {
   listJourneys(options?: RepositoryOperationOptions): Promise<RepositoryResult<JourneySummary[]>>
   createJourney(input: CreateJourneyInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<JourneyEditorDocument>>
   deleteJourney(input: DeleteJourneyInput, options?: RepositoryOperationOptions): Promise<RepositoryResult<DeleteJourneySuccess>>
 }
 
-export interface AgentLifecycleRepository {
+export interface AgentLifecycleRepository extends RepositoryCapabilities {
   listAgentTemplates(options?: RepositoryOperationOptions): Promise<RepositoryResult<AgentTemplate[]>>
   loadAgentTemplate(
     templateId: UUID,
@@ -171,7 +174,7 @@ export interface AgentLifecycleRepository {
   ): Promise<RepositoryResult<RemoveOccupiedSlotSuccess>>
 }
 
-export interface GuardrailLifecycleRepository {
+export interface GuardrailLifecycleRepository extends RepositoryCapabilities {
   addGuardrail(
     input: AddGuardrailInput,
     options?: RepositoryOperationOptions,

@@ -1,9 +1,11 @@
 import { createRouter, createWebHistory, type RouterHistory } from 'vue-router'
 import HomeView from '@/views/HomeView.vue'
 import AppShell from '@/app/AppShell.vue'
+import { isPublicDemo } from '@/app/appMode'
+
 
 export function createAppRouter(history: RouterHistory = createWebHistory()) {
-  return createRouter({
+  const router = createRouter({
   history,
   routes: [
     { path: '/', name: 'home', component: HomeView },
@@ -24,6 +26,11 @@ export function createAppRouter(history: RouterHistory = createWebHistory()) {
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue') },
   ],
   })
+  if (isPublicDemo) router.beforeEach(to => {
+    if (to.name === 'journey-create') return { name: 'journeys' }
+    if (to.name === 'knowledge-space-create') return { name: 'knowledge-spaces' }
+  })
+  return router
 }
 
 export const router = createAppRouter()

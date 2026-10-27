@@ -134,7 +134,7 @@ export type WorkflowImportApplyResult =
   | {
       readonly ok: false
       readonly error: {
-        readonly code: 'IMPORT_NOT_READY' | 'IMPORT_BLOCKED_BY_SAVE' | 'IMPORT_BLOCKED_BY_CONFLICT' | 'IMPORT_DOCUMENT_INVALID' | 'IMPORT_END_MAPPING_REQUIRED'
+        readonly code: 'EDITOR_READ_ONLY' | 'IMPORT_NOT_READY' | 'IMPORT_BLOCKED_BY_SAVE' | 'IMPORT_BLOCKED_BY_CONFLICT' | 'IMPORT_DOCUMENT_INVALID' | 'IMPORT_END_MAPPING_REQUIRED'
       }
     }
 
@@ -217,6 +217,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
 
   function scheduleAutosave(delay = WORKFLOW_AUTOSAVE_DELAY_MS) {
+    if (activeRepository?.readOnly) return
     clearAutosaveTimer()
     const state = persistenceState.value
     if (!activeRepository || !state || state.type !== 'dirty') return
@@ -401,6 +402,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
   function setInteraction(interaction: WorkflowInteractionState) { session.interaction = interaction }
   function stageCreationDraft(nodeType: 'agent_action' | 'loop', point: WorkflowPoint) {
+    if (activeRepository?.readOnly) return
     if (session.mode !== 'configure') return false
     if (nodeType === 'loop') {
       if (session.context.kind !== 'root' || !document.value?.variables.length) return false
@@ -428,6 +430,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     return document.value ? agentVariableReferenceCount(document.value, variableId) : 0
   }
   function saveAgentVariable(variable: AgentVariable) {
+    if (activeRepository?.readOnly) return false
     const current = document.value
     if (!current) return false
     const intent = current.variables.some((candidate) => candidate.id === variable.id)
@@ -441,6 +444,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     return true
   }
   function deleteAgentVariable(variableId: UUID) {
+    if (activeRepository?.readOnly) return false
     const current = document.value
     if (!current) return false
     const result = changeAgentVariableCommand(current, { type: 'delete', variableId }, session.mode)
@@ -486,6 +490,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
 
   function markDirty() {
+    if (activeRepository?.readOnly) return
     const current = document.value
     if (current && current.workflow.schemaVersion !== '1.2.0' && (nodesHaveRuntimeBinding(current.workflow.nodes) || current.reusableTools.some(toolHasRuntimeBinding))) {
       document.value = { ...current, workflow: { ...current.workflow, schemaVersion: '1.2.0' } }
@@ -513,6 +518,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
 
   function replaceWorkflowFromImport(candidate: AgentWorkflowExportDocument, mapping?: readonly ImportEndMapping[]): WorkflowImportApplyResult {
+    if (activeRepository?.readOnly) return { ok: false, error: { code: 'EDITOR_READ_ONLY' } }
     const current = document.value
     const state = persistenceState.value
     if (!current || !state || loadState.status !== 'ready') return { ok: false, error: { code: 'IMPORT_NOT_READY' } }
@@ -544,6 +550,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
 
   /** Same-document DSL transaction: retain identity and editor UI, never use import remapping. */
   function applyCompiledWorkflow(candidate: AgentWorkflowExportDocument, expectedMutationSeq: number): { ok: true } | { ok: false; error: { code: string } } {
+    if (activeRepository?.readOnly) return { ok: false, error: { code: 'EDITOR_READ_ONLY' } }
     const current = document.value
     if (!current || !isReady.value) return { ok: false, error: { code: 'DSL_NOT_READY' } }
     if (session.mode !== 'configure') return { ok: false, error: { code: 'DSL_READ_ONLY' } }
@@ -579,6 +586,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
 
   function applyGraphResult(result: WorkflowCommandResult<AgentWorkflowEditorDocument['workflow']>) {
+    if (activeRepository?.readOnly) return { ok: false as const, error: { code: 'EDITOR_READ_ONLY' as const } }
     if (!result.ok) {
       lastDomainError.value = result.error
       lastCanvasError.value = null
@@ -633,6 +641,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
 
   function applyWorkflowBranchEdit(context: WorkflowCanvasContext, intent: BranchEditIntent) {
+    if (activeRepository?.readOnly) return false
     const current = document.value
     if (!current || session.mode !== 'configure' || persistenceState.value?.type === 'conflict') return false
     const loop = context.kind === 'loop-body' ? findLoop(context.loopNodeId) : null
@@ -694,6 +703,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
 
   function applyApplicationResult(result: WorkflowApplicationResult) {
+    if (activeRepository?.readOnly) return { ok: false as const, error: { kind: 'graph' as const, error: { code: 'EDITOR_READ_ONLY' as const } } }
     if (!result.ok) {
       if (result.error.kind === 'graph') lastDomainError.value = result.error.error
       lastCanvasError.value = null
@@ -709,6 +719,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
 
   function applyLoopApplicationResult(loopNodeId: UUID, result: LoopBodyApplicationResult) {
+    if (activeRepository?.readOnly) return { ok: false as const, error: { code: 'EDITOR_READ_ONLY' as const } }
     if (!result.ok) {
       if (result.error.kind === 'graph') lastDomainError.value = result.error.error
       lastCanvasError.value = null
@@ -821,6 +832,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
   function cancelSystemTool() { systemToolDraft.value = null; toolError.value = null }
   function changeSystemTool(context: WorkflowCanvasContext, nodeId: UUID, intent: ToolEditIntent) {
+    if (activeRepository?.readOnly) return false
     const task = toolTask(context, nodeId)
     if (!task || !document.value) return false
     const result = changeTaskTool(task, intent, {
@@ -839,6 +851,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
     return applyLoopApplicationResult(loop.id, { ok: true, value: { graph: graph.value, layout: loop.config.body.layout } })?.ok ?? false
   }
   function saveSystemTool(input: TaskToolSaveDraft) {
+    if (activeRepository?.readOnly) return false
     const { step, newVariable } = input
     const draft = systemToolDraft.value
     if (!draft || draft.host !== 'task' || draft.kind !== step.kind || (draft.step && draft.step.id !== step.id)) return false
@@ -848,6 +861,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
 
   function saveAgentReusableTool(tool: AgentReusableTool) {
+    if (activeRepository?.readOnly) return false
     const draft = systemToolDraft.value
     const current = document.value
     if (!draft || (draft.host !== 'agent-action' && draft.host !== 'reusable-tool-library') || !current || draft.kind !== tool.kind || (draft.tool && draft.tool.id !== tool.id)) return false
@@ -919,6 +933,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
 
   function deleteLibraryReusableTool(reusableToolId: UUID) {
+    if (activeRepository?.readOnly) return false
     const current = document.value
     if (!current || session.mode !== 'configure') return false
     const result = deleteAgentReusableTool(current, reusableToolId)
@@ -974,6 +989,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
 
   function saveTaskToolStepToReusableTools(context: WorkflowCanvasContext, nodeId: UUID, stepId: UUID) {
+    if (activeRepository?.readOnly) return false
     const current = document.value
     if (!current || session.mode !== 'configure') return false
     const task = toolTask(context, nodeId)
@@ -1087,6 +1103,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
 
   function moveWorkflowNode(nodeId: UUID, point: WorkflowPoint) {
+    if (activeRepository?.readOnly) return null
     const current = document.value
     if (!current) return null
     const result = moveNodePlacement(current.layout, nodeId, point)
@@ -1099,6 +1116,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
 
   const loopMeasurements = new Map<UUID, readonly LoopChildSize[]>()
   function reconcileLoopBounds(loopId: UUID, sizes: readonly LoopChildSize[]) {
+    if (activeRepository?.readOnly) return
     const current = document.value
     if (!current || session.mode !== 'configure' || persistenceState.value?.type === 'conflict') return
     loopMeasurements.set(loopId, sizes)
@@ -1107,6 +1125,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
 
   function resizeWorkflowNode(nodeId: UUID, size: { width: number; height: number }) {
+    if (activeRepository?.readOnly) return null
     const current = document.value
     if (!current) return null
     if (!Number.isFinite(size.width) || !Number.isFinite(size.height) || size.width < 420 || size.height < 300 || size.width > 1600 || size.height > 1200) {
@@ -1127,6 +1146,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
 
   function setViewport(viewport: AgentWorkflowEditorDocument['layout']['viewport']) {
+    if (activeRepository?.readOnly) return null
     const current = document.value
     if (!current) return null
     const result = updateCanvasViewport(current.layout, viewport)
@@ -1138,6 +1158,7 @@ export const useWorkflowEditorStore = defineStore('workflowEditor', () => {
   }
 
   async function save(repository?: WorkflowEditorRepository): Promise<boolean> {
+    if (activeRepository?.readOnly) return false
     if (repository) activeRepository = repository
     return autosaveCoordinator.run(async () => {
       const current = document.value

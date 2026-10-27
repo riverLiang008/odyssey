@@ -13,11 +13,15 @@ describe('ProductHeader', () => {
     await router.isReady()
 
     const wrapper = mount(ProductHeader, { global: { plugins: [router] } })
+    const repository = wrapper.get('a[aria-label="Open Odyssey GitHub repository"]')
     const resource = wrapper.get('a[aria-label="Open Odyssey design documentation"]')
 
+    expect(repository.attributes('href')).toBe('https://github.com/riverLiang008/odyssey')
+    expect(repository.attributes('target')).toBe('_blank')
+    expect(repository.attributes('rel')).toBe('noopener noreferrer')
     expect(resource.attributes('href')).toBe('https://riverliang008.github.io/odyssey-architecture/')
     expect(resource.attributes('target')).toBe('_blank')
     expect(resource.attributes('rel')).toBe('noopener noreferrer')
-    expect(wrapper.findAll('.product-header__resource-link')).toHaveLength(1)
+    expect(wrapper.findAll('.product-header__resource-link')).toHaveLength(2)
   })
 })

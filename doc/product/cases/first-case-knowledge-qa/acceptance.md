@@ -19,7 +19,7 @@ Do not upload this file to the Knowledge Space. Use only the four fictional game
 
 ## Configuration negative cases
 
-- Missing or ambiguously named First Case - Moonberry Island Knowledge Space: block Apply without selecting another space.
+- Missing or ambiguously named Moonberry Island Guide Knowledge Space: block Apply without selecting another space.
 - Unsynchronized Solo exit: synchronize it first; do not create an extra End through DSL.
 - Empty question: reject at the run entry point without retrieval.
 
@@ -33,3 +33,7 @@ These require execution integration:
 - Repeated question: initialize a fresh context; do not accumulate old passages or answers.
 
 Verify facts against the actual cited passages, not just citation formatting. Q07 requires three documents and Q08 requires two. Missing passages are a retrieval failure; the answer should acknowledge the gap instead of importing rules from other games. topK=5 is a result limit, not a recall guarantee. Verify real chunking and recall before execution acceptance.
+
+## Agent Action variant checks
+
+Canvas: Start → Answer Question → End, with Moonberry Island Guide in knowledge and Moonberry Guide Search in toolbox. During execution, verify that factual answers use an actual current-run retrieval invocation. An assigned Knowledge Space alone does not count as retrieval. Record tool calls and binding outputs; do not infer successful execution from the goal text.

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <rect width="1920" height="1080" fill="#f8faff"/>
+  <g font-family="Segoe UI, sans-serif" fill="#17202a">
+    <text x="100" y="90" font-size="25" fill="#4d72f2">ODYSSEY / HOW 001 · M-02</text>
+    <text x="100" y="185" font-size="55" font-weight="600">Two groups of Workflow Nodes</text>
+    <g fill="none" stroke="#4d72f2" stroke-width="3">
+      <path d="M960 350 V395 H500 V440 M960 395 H1420 V440"/>
+      <path d="M500 550 V655 H320 V700 M500 655 H680 V700"/>
+      <path d="M1420 550 V655 H1240 V700 M1420 655 H1600 V700"/>
+    </g>
+    <g stroke="#d9e2f2" stroke-width="3" fill="#fff">
+      <rect x="270" y="440" width="460" height="110" rx="18"/>
+      <rect x="1190" y="440" width="460" height="110" rx="18"/>
+      <rect x="170" y="700" width="300" height="100" rx="16"/>
+      <rect x="530" y="700" width="300" height="100" rx="16"/>
+      <rect x="1090" y="700" width="300" height="100" rx="16"/>
+      <rect x="1450" y="700" width="300" height="100" rx="16"/>
+      <rect x="710" y="250" width="500" height="100" rx="18" fill="#eef3ff" stroke="#4d72f2"/>
+    </g>
+    <g text-anchor="middle" font-size="34" font-weight="600">
+      <text x="960" y="312">Workflow Nodes</text>
+      <text x="500" y="508">Logic Nodes</text>
+      <text x="1420" y="508">Action Nodes</text>
+      <text x="320" y="762">Branch</text>
+      <text x="680" y="762">Loop</text>
+      <text x="1240" y="762">Agent Nodes</text>
+      <text x="1600" y="762">Task Nodes</text>
+    </g>
+    <g text-anchor="middle" font-size="27" fill="#667085">
+      <text x="500" y="600">Controls the flow</text>
+      <text x="1420" y="600">Does the actual work</text>
+      <text x="500" y="850">Examples</text>
+    </g>
+  </g>
+</svg>

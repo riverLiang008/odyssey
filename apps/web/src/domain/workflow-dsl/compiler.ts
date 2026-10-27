@@ -266,7 +266,12 @@ export function compileDsl(source: string, context: DslContext): DslCompileResul
     return parts
   }
   const toolAliases = new Map<string, UUID>()
-  for (const item of sections.has('tools') ? children(sections.get('tools') as DslSyntax) : []) {
+  const toolDeclarations = sections.has('tools') ? children(sections.get('tools') as DslSyntax) : []
+  const claimedToolIds = new Set(toolDeclarations.flatMap(item => {
+    const existing = identitySymbols.get(`root/tool/${text(item, 1)}`)
+    return existing ? [existing] : []
+  }))
+  for (const item of toolDeclarations) {
     const key = alias(item)
     if (text(item) !== 'reusable_tool' || text(item, 2) !== 'using' || text(item, 3) !== 'system_tool' || item.head.length !== 5) report('ODSL102', item.span)
     const path = `root/tool/${key}`
@@ -277,6 +282,24 @@ export function compileDsl(source: string, context: DslContext): DslCompileResul
     const outputValue = output && text(output, 1) !== 'none' ? read(output.head.slice(1), 'config', true) : null
     const outputBinding = outputValue && typeof outputValue === 'object' && 'sourceKey' in outputValue && 'targetVariable' in outputValue
       ? { sourceKey: outputValue.sourceKey, targetVariableId: outputValue.targetVariable } : null
+    // A pasted case may use different local aliases from the current printer.
+    // Reconcile by the unique business name only when no declaration already
+    // claims that tool's identity. Duplicate declarations still fail validation.
+    if (!identitySymbols.has(path)) {
+      const name = normalizeDslName(stringField(map.get('name'), key))
+      const matches = context.baseline.document.reusableTools.filter(tool => normalizeDslName(tool.name) === name && tool.kind === text(item, 4))
+      const match = matches.length === 1 ? matches[0] : undefined
+      if (match && !claimedToolIds.has(match.id)) {
+        identitySymbols.set(path, match.id)
+        claimedToolIds.add(match.id)
+        for (const [oldPath, oldId] of context.baseline.symbols) {
+          if (oldId !== match.id || !oldPath.startsWith('root/tool/')) continue
+          for (const [childPath, childId] of context.baseline.symbols) {
+            if (childPath.startsWith(`${oldPath}/`)) identitySymbols.set(`${path}${childPath.slice(oldPath.length)}`, childId)
+          }
+        }
+      }
+    }
     const toolId = id(path)
     const previous = context.baseline.document.reusableTools.find((tool) => tool.id === toolId)
     const candidate = agentReusableToolSchema.safeParse({ id: toolId, name: previous && stringField(map.get('name'), key) === previous.name ? previous.name : normalizeDslName(stringField(map.get('name'), key)), kind: text(item, 4), sourceTemplateId: previous?.sourceTemplateId ?? null, configuration: configBlock ? config(configBlock, path) : {}, inputBindings: bindings ? sourceList(bindings.head.slice(1)) : [], outputBinding })

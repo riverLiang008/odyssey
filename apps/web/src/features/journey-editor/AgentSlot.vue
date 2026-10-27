@@ -2,7 +2,7 @@
 import type { SystemCanvasSlotViewModel } from '@/canvas/system'
 import type { DropFeedback } from '@/canvas/interaction'
 import { ODYSSEY_DRAG_MIME, parseOdysseyDragPayload, serializeOdysseyDragPayload, type DragPayloadParseErrorCode, type MenuAnchor, type PatternDragPayload } from '@/canvas/interaction'
-const props = defineProps<{ model: SystemCanvasSlotViewModel; feedback?: DropFeedback | null; disabled?: boolean }>()
+const props = defineProps<{ model: SystemCanvasSlotViewModel; feedback?: DropFeedback | null; disabled?: boolean; readOnly?: boolean }>()
 const emit = defineEmits<{
   select: [slotId: SystemCanvasSlotViewModel['id']]
   menu: [slotId: SystemCanvasSlotViewModel['id'], anchor: MenuAnchor]
@@ -33,6 +33,7 @@ function openMenu(event: globalThis.MouseEvent): void {
 }
 
 function startAgentDrag(event: globalThis.DragEvent): void {
+  if (props.readOnly) return
   if (props.disabled || props.model.assignment !== 'configured' || !props.model.agent) return
   const payload = { version: 1, kind: 'assigned-agent', agentId: props.model.agent.id, sourceSlotId: props.model.id } as const
   event.dataTransfer?.setData(ODYSSEY_DRAG_MIME, serializeOdysseyDragPayload(payload))
@@ -40,6 +41,7 @@ function startAgentDrag(event: globalThis.DragEvent): void {
 }
 
 function startReorderDrag(event: globalThis.DragEvent): void {
+  if (props.readOnly) return
   if (props.disabled || !props.model.canReorder) return
   const payload = { version: 1, kind: 'pattern-slot', slotId: props.model.id } as const
   event.dataTransfer?.setData(ODYSSEY_DRAG_MIME, serializeOdysseyDragPayload(payload))
@@ -47,6 +49,7 @@ function startReorderDrag(event: globalThis.DragEvent): void {
 }
 
 function drop(event: globalThis.DragEvent): void {
+  if (props.readOnly) return
   if (props.disabled) return
   const parsed = parseOdysseyDragPayload(event.dataTransfer?.getData(ODYSSEY_DRAG_MIME) ?? '')
   if (!parsed.ok) { emit('dropRejected', parsed.error.code); return }
@@ -57,6 +60,7 @@ function drop(event: globalThis.DragEvent): void {
 }
 
 function dropOrder(event: globalThis.DragEvent): void {
+  if (props.readOnly) return
   if (props.disabled || !props.model.canReorder || props.model.order === null) return
   const parsed = parseOdysseyDragPayload(event.dataTransfer?.getData(ODYSSEY_DRAG_MIME) ?? '')
   if (!parsed.ok) { emit('dropRejected', parsed.error.code); return }
@@ -84,7 +88,7 @@ function accessibleLabel(model: SystemCanvasSlotViewModel, disabled = false): st
       class="agent-slot__select"
       :disabled="disabled"
       :aria-label="accessibleLabel(model, disabled)"
-      :draggable="!disabled && model.assignment === 'configured'"
+      :draggable="!readOnly && !disabled && model.assignment === 'configured'"
       @click="select"
       @contextmenu.prevent="openMenu"
       @dragstart="startAgentDrag"
@@ -102,7 +106,7 @@ function accessibleLabel(model: SystemCanvasSlotViewModel, disabled = false): st
       class="agent-slot__reorder"
       role="button"
       tabindex="0"
-      draggable="true"
+      :draggable="!readOnly" :aria-disabled="readOnly || undefined"
       :aria-label="`Drag ${model.label} to reorder`"
       @dragstart.stop="startReorderDrag"
       @dragend="emit('dragEnd')"

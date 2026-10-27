@@ -11,7 +11,7 @@ workflow "Moonberry Island Guide" version "0.1" {
       steps {
         step retrieve using system_tool knowledge_retrieval {
           config {
-            knowledgeSpaceId = "First Case - Moonberry Island";
+            knowledgeSpaceId = "Moonberry Island Guide";
             query = agent.question;
             topK = 5;
           }

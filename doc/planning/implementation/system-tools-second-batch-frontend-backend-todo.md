@@ -191,7 +191,7 @@ P2 Task Variable / Reusable Tools 管理面
 - [x] Agent Variables 管理面：分组、搜索、create/edit/delete、引用保护与 aggregate autosave。
 - [x] Reusable Tools 顶部栏目：inventory、search、create/edit/delete 和引用影响提示。
 - [x] Task ToolStep 完整排序体验（拖拽插入反馈，并保留上下移动按钮作为键盘等价路径）。
-- [ ] Knowledge Retrieval 使用真实 Knowledge Space 数据完成浏览器 happy path。
+- [x] Knowledge Retrieval 使用真实 Knowledge Space 数据完成浏览器 happy path。
 - [ ] 模型 inventory 后端合同；在此之前保留 model identifier，不伪造模型列表。
 - [ ] System Variable inventory；在正式 API 前不创建生产 mock 特例。
 - [ ] 对照 Figma 完成间距、卡片密度、浮动 panel、响应式与 1024/1440 视觉校准。
@@ -270,7 +270,7 @@ P2 Task Variable / Reusable Tools 管理面
 - Reusable Tool → Task 语义已冻结为独立快照：拖入时复制当前 kind/configuration 并生成新的 Task ToolStep ID；之后可保持或本地修改，双方不再同步，来源删除不影响既有步骤。
 - Reusable Tool → Agent Action 继续保持 canonical ID 引用；Figma 中的 `Linked / Detach / Update source` 不属于 V1，除非未来先新增明确 provenance/synchronization 合同。
 - Reusable Tools 管理面已实现 Agent-owned inventory、搜索、引用次数、编辑、受引用保护的删除，以及面向 Agent Action / Task 的拖拽入口。
-- 当前本地 Journey 列表返回 `NETWORK_FAILED`，因此本轮真实浏览器验收暂记为待后端恢复后复验；类型检查、领域测试与组件测试作为当前门禁证据。
+- 2026-10-24 已恢复本地 API，并用 `Knowledge QA` Journey 完成真实 Knowledge Retrieval happy path：选择 `Moonberry Island Guide`、保存 workflow、整页刷新并重新打开配置后，Knowledge Space 与 query 均保持。
 - 决策修正：Task Tool step 的右键复用操作命名为 `Save to Reusable Tools`，目标是当前 Agent aggregate 内的 `AgentReusableTool`，不是 Workspace `ToolTemplate`。
 - [x] Task Tool step 右键菜单支持 `Save to Reusable Tools`；保存生成新 ID 的独立快照，原 step 不变，并通过现有 Agent aggregate autosave 持久化。
   - 快照仅复制 Tool kind/configuration；Task-local output mapping 等宿主绑定不进入 Agent-level reusable definition。

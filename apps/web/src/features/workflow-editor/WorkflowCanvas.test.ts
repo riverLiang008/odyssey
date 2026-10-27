@@ -22,6 +22,28 @@ vi.mock('@vue-flow/core', async importOriginal => ({
 }))
 
 describe('WorkflowCanvas initial viewport', () => {
+  it('keeps Configure read-only at the canvas boundary while allowing selection', async () => {
+    const document = createAgentWorkflowEditorDocumentFixture('research')
+    const before = structuredClone(document)
+    const wrapper = mount(WorkflowCanvas, {
+      props: { graph: markRaw(document.workflow), layout: markRaw(document.layout), mode: 'configure', canvasId: 'read-only-test', readOnly: true },
+      global: { stubs: { VueFlow: { name: 'ReadOnlyFlowStub', props: ['nodes', 'edges', 'nodesDraggable', 'nodesConnectable'], template: '<div />' } } },
+    })
+    const flowComponent = wrapper.findComponent({ name: 'ReadOnlyFlowStub' })
+    expect(flowComponent.props('nodesDraggable')).toBe(false)
+    expect(flowComponent.props('nodesConnectable')).toBe(false)
+    expect(flowComponent.props('nodes').every((node: { draggable: boolean; connectable: boolean; deletable: boolean }) => !node.draggable && !node.connectable && !node.deletable)).toBe(true)
+    expect(wrapper.vm.createFromClientPoint('task', 100, 100)).toBe(false)
+    const first = document.workflow.nodes[0]
+    if (!first) throw new Error('Missing start')
+    flowComponent.vm.$emit('node-drag-stop', { node: { id: first.id, position: { x: 999, y: 999 }, data: {} } })
+    flowComponent.vm.$emit('move-end', { flowTransform: { x: 80, y: 90, zoom: 1 } })
+    expect(wrapper.emitted('intent')).toBeUndefined()
+    flowComponent.vm.$emit('node-click', { event: { target: null }, node: { id: first.id, data: {} } })
+    expect(wrapper.emitted('intent')).toEqual([[{ kind: 'root' }, { type: 'select-node', nodeId: first.id }]])
+    expect(document).toEqual(before)
+    wrapper.unmount()
+  })
   beforeEach(() => { flow.fitView.mockClear(); flow.setViewport.mockClear(); flow.initialized = null })
 
   it.each(['branch', 'task', 'agent_action', 'loop'] as const)('routes dropped %s through the Loop creation boundary', nodeType => {

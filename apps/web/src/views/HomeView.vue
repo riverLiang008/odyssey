@@ -2,13 +2,14 @@
 import { NButton, NIcon } from 'naive-ui'
 import { useRouter } from 'vue-router'
 import odysseyLogoUrl from '../../../../doc/assets/brand/odyssey-logo.png'
+import { isPublicDemo } from '@/app/appMode'
 
 const router = useRouter()
 
 const foundations = [
   { mark: '01', title: 'Journey canvas', detail: 'Compose capabilities without coupling domain logic to a renderer.' },
-  { mark: '02', title: 'Knowledge spaces', detail: 'Keep durable metadata in PostgreSQL and files in object storage.' },
-  { mark: '03', title: 'Versioned workflows', detail: 'Edit a working draft, then save intentional immutable versions.' },
+  { mark: '02', title: 'Knowledge spaces', detail: isPublicDemo ? 'Explore reviewed guides, document summaries, and their relationships.' : 'Keep durable metadata in PostgreSQL and files in object storage.' },
+  { mark: '03', title: isPublicDemo ? 'Inspectable workflows' : 'Versioned workflows', detail: isPublicDemo ? 'Browse branching logic, bounded loops, tools, variables, and generated DSL.' : 'Edit a working draft, then save intentional immutable versions.' },
 ]
 </script>
 
@@ -21,7 +22,7 @@ const foundations = [
         </span>
         <span>odyssey</span>
       </a>
-      <span class="status"><i /> Foundation preview</span>
+      <span class="status"><i /> {{ isPublicDemo ? 'Public demo · Read only' : 'Foundation preview' }}</span>
     </nav>
 
     <section class="hero">
@@ -31,10 +32,10 @@ const foundations = [
         Odyssey is a visual environment for shaping agent journeys, knowledge, and tools into reusable capabilities.
       </p>
       <NButton type="primary" size="large" round @click="router.push('/journeys')">
-        Open workspace
+        {{ isPublicDemo ? 'Explore the demos' : 'Open workspace' }}
         <template #icon><NIcon><span>→</span></NIcon></template>
       </NButton>
-      <p class="note">Enter the Odyssey workspace.</p>
+      <p class="note">{{ isPublicDemo ? 'Static examples. No account, uploads or workflow execution.' : 'Enter the Odyssey workspace.' }}</p>
     </section>
 
     <section class="foundation" aria-labelledby="foundation-title">

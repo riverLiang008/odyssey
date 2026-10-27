@@ -12,6 +12,7 @@ type ListState =
   | { type: 'failed'; error: RepositoryError }
 
 const repository = useEditorRepository()
+const readOnly = repository.readOnly === true
 const route = useRoute()
 const router = useRouter()
 const state = ref<ListState>({ type: 'loading' })
@@ -21,6 +22,9 @@ const categoryFilter = ref('all')
 const graphFilter = ref('all')
 const lifecycleFilter = ref<'active' | 'archived' | 'all'>('active')
 const sort = ref<'updated' | 'name' | 'created'>('updated')
+const formCategoryOptions = computed<readonly AppSelectOption[]>(() =>
+  categories.value.map((category) => ({ value: category.id, label: category.name })),
+)
 const categoryOptions = computed<readonly AppSelectOption[]>(() => [
   { value: 'all', label: 'Category' },
   ...categories.value.map((category) => ({ value: category.id, label: category.name })),
@@ -143,7 +147,7 @@ onBeforeUnmount(() => loadController?.abort())
   <section class="knowledge-list-page collection-list-page" aria-labelledby="knowledge-list-title" :inert="isCreateOpen || undefined">
     <header class="knowledge-page-heading collection-page-heading">
       <div><h1 id="knowledge-list-title">Knowledge Spaces</h1><p>Your file workspaces, organized by category and maintained as knowledge graphs.</p></div>
-      <RouterLink class="knowledge-primary-action collection-primary-action" :to="routeLocations.newKnowledgeSpace()">＋ New Knowledge Space</RouterLink>
+      <button v-if="readOnly" class="knowledge-primary-action collection-primary-action" type="button" disabled title="Read-only public demo">＋ New Knowledge Space</button><RouterLink v-else class="knowledge-primary-action collection-primary-action" :to="routeLocations.newKnowledgeSpace()">＋ New Knowledge Space</RouterLink>
     </header>
 
     <form class="knowledge-toolbar collection-toolbar" aria-label="Knowledge Space list controls" @submit.prevent="load">
@@ -178,7 +182,7 @@ onBeforeUnmount(() => loadController?.abort())
       <header><div><span>NEW ASSET</span><h2 id="new-knowledge-space-title">Create Knowledge Space</h2><p>Create the file workspace first. Uploads will be added in the next step.</p></div><button type="button" aria-label="Close" :disabled="creating" @click="closeCreate">×</button></header>
       <label>Name *<input v-model="form.name" required maxlength="255" autofocus placeholder="Research knowledge" /></label>
       <label>Description · optional<textarea v-model="form.description" maxlength="4000" rows="3" placeholder="What belongs in this Knowledge Space?" /></label>
-      <label v-if="!isCreatingCategory && categories.length">Category *<select v-model="form.categoryId" required><option v-for="category in categories" :key="category.id" :value="category.id">{{ category.name }}</option></select></label>
+      <label v-if="!isCreatingCategory && categories.length">Category *<AppSelect v-model="form.categoryId" control-label="Knowledge Space category" :options="formCategoryOptions" /></label>
       <label v-else>New category *<input v-model="form.newCategoryName" required maxlength="255" placeholder="Research" /></label>
       <button v-if="categories.length" class="knowledge-text-button" type="button" @click="isCreatingCategory = !isCreatingCategory">{{ isCreatingCategory ? 'Choose an existing category' : '+ Create a new category' }}</button>
       <p v-if="createError" class="knowledge-form-error" role="alert">Could not create Knowledge Space: {{ createError.code }}</p>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { JourneySummary } from '@odyssey/schemas'
 import { routeLocations } from '@/router/routeContracts'
-defineProps<{ journey: JourneySummary }>()
+defineProps<{ journey: JourneySummary; readOnly?: boolean }>()
 defineEmits<{ delete: [journey: JourneySummary] }>()
 </script>
 
@@ -12,6 +12,6 @@ defineEmits<{ delete: [journey: JourneySummary] }>()
     <div class="journey-card__divider" />
     <span>{{ journey.agentCount }} agents · {{ journey.patternKind }}</span>
     <small>Updated {{ new Date(journey.updatedAt).toLocaleDateString() }}</small>
-    <div class="journey-card__actions"><RouterLink :to="routeLocations.journey(journey.id)">Open Journey →</RouterLink><button type="button" :aria-label="`Delete ${journey.name}`" @click="$emit('delete', journey)">Delete</button></div>
+    <div class="journey-card__actions"><RouterLink :to="routeLocations.journey(journey.id)">Open Journey →</RouterLink><button type="button" :disabled="readOnly" :aria-label="`Delete ${journey.name}`" @click="$emit('delete', journey)">Delete</button></div>
   </article>
 </template>
