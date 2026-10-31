@@ -143,7 +143,7 @@ But the overall system structure was only my first question.
 
 Next, I started thinking about the Workflow itself.
 
-**▶ 镜头 091｜【R+M】现有工具节点示例或草图，保持画面简单**  `素材：R-014 + GFX-004（待审校）`
+**▶ 镜头 091｜【R+M】现有工具节点示例或草图，保持画面简单**  `素材：R-014 ✔（已覆盖） + GFX-004 ✔`
 
 Some existing Agent platforms have many different types of Nodes. These nodes can do a lot, but users also have to learn many more concepts.
 
@@ -445,7 +445,7 @@ The goal of this example is to help manage documents and knowledge links in a Kn
 
 For example, when a document changes, the system needs to understand the new content, check related documents, and decide whether summaries, tags, or document links may need updating.
 
-**▶ 镜头 318｜【R】解释为何不能让 AI 自行决定所有修改**  `素材：R-036`
+**▶ 镜头 318｜【R】解释为何不能让 AI 自行决定所有修改**  `素材：R-036 ✔`
 
 But there is a problem.
 
@@ -513,7 +513,7 @@ Branch controls which path the Workflow takes.
 
 And Knowledge Space, ToolBox, and the variable system provide the information and data connections these steps need.
 
-**▶ 镜头 372｜【R】案例设计的意义**  `素材：R-039`
+**▶ 镜头 372｜【R】案例设计的意义**  `素材：R-039 ✔`
 
 For me, the most interesting part was seeing ideas from different design documents come together in one Workflow.
 
@@ -529,7 +529,7 @@ This means the same Workflow can be set up through a visual interface, or descri
 
 The two forms can be converted into each other. Users can choose between a visual way of working and more precise text settings.
 
-**▶ 镜头 384｜【R】明确案例是设计与配置验证，不是实际执行**  `素材：R-040`
+**▶ 镜头 384｜【R】明确案例是设计与配置验证，不是实际执行**  `素材：R-040 ✔`
 
 But for now, Document Curator is still an example of design and configuration.
 
@@ -537,7 +537,7 @@ I can build the Workflow in the editor and check how its settings are represente
 
 So this example does not prove that Odyssey can run the whole process from start to finish.
 
-**▶ 镜头 390｜【R+M｜录屏】回看 Canvas 或设计细节，收束案例**  `素材：R-041 + SCR-014`
+**▶ 镜头 390｜【R+M｜录屏】回看 Canvas 或设计细节，收束案例**  `素材：R-041 ✔ + SCR-014 ✔（已覆盖）`
 
 It's more like an early test of the design.
 
@@ -549,7 +549,7 @@ And those questions may help guide what I explore next in Odyssey.
 
 # 05 / What's Next — An Ongoing Odyssey
 
-**▶ 镜头 400｜【R】Section 05 开场，回望项目变化**  `素材：R-042`
+**▶ 镜头 400｜【R】Section 05 开场，回望项目变化**  `素材：R-042 ✔`
 
 Looking back, Odyssey is already a little different from what I first imagined.
 
@@ -557,11 +557,11 @@ At the beginning, I just had a few ideas about AI Agent systems.
 
 I wanted to know if there was a clearer, more flexible way to organize Agents, their tools, and their knowledge.
 
-**▶ 镜头 406｜【R+M｜蒙太奇】草图 → Figma → 代码 → Canvas；已有素材剪辑**  `素材：R-043 + EDIT-001`
+**▶ 镜头 406｜【R+M｜蒙太奇】草图 → Figma → 代码 → Canvas；已有素材剪辑**  `素材：R-043 ✔ + EDIT-001 ✔（已覆盖）`
 
 So I started drawing sketches, building concepts, learning Figma, and using AI-assisted coding to bring those ideas to life, step by step.
 
-**▶ 镜头 408｜【R】设计演化与取舍**  `素材：R-044`
+**▶ 镜头 408｜【R】设计演化与取舍**  `素材：R-044 ✔`
 
 Along the way, many designs that seemed right at first began to change.
 
@@ -597,7 +597,7 @@ And this journey isn't over yet.
 
 # 附录｜素材制作登记表
 
-> 2026-10-31 更新：[素材登记 CSV](./Odyssey_HOW002_Asset_Tracker.csv)。按新规则，完成及覆盖 **73 / 97 项（75.3%）**：实际交付已完成 **59 项**，同镜头已覆盖免制作 **14 项**，待审校 **1 项**，未开始 **23 项**。
+> 2026-10-31 更新：[素材登记 CSV](./Odyssey_HOW002_Asset_Tracker.csv)。按新规则，完成及覆盖 **84 / 97 项（86.6%）**：实际交付已完成 **67 项**，同镜头已覆盖免制作 **17 项**，待审校 **0 项**，未开始 **13 项**。
 
 ## 组合素材制作规则
 
@@ -633,8 +633,8 @@ And this journey isn't over yet.
 | M-01 | 02 | 071 / 073 / 081 | 新制作 Motion | SK-01 → Execution Module × Execution Behavior → 配置状态与 UI-05 全景收束 | ☑ 已完成 |
 | FIG-001 | 02 | 081 | Figma 素材 | UI-05 System Canvas Draft（已整合至 M-01 后半段） | ☑ 已完成 |
 | R-013 | 02 | 085 | 真人拍摄 | Pattern 概念小结、转向 Workflow | ☑ 已完成 |
-| R-014 | 02 | 091 | 真人拍摄 | 现有工具节点示例或草图，保持画面简单 | ☐ 未开始 |
-| GFX-004 | 02 | 091 | 图标/静态图 | 现有工具节点示例或草图，保持画面简单 | ☐ 待审校 |
+| R-014 | 02 | 091 | 真人拍摄 | 现有工具节点示例或草图，保持画面简单 | ☑ 已覆盖（免单独制作） |
+| GFX-004 | 02 | 091 | 图标/静态图 | 现有工具节点示例或草图，保持画面简单 | ☑ 已完成 |
 | SK-001 | 02 | 095 | 已有草图 | SK-05 | ☐ 未开始 |
 | M-02 | 02 | 097 | 新制作 Motion | M-02 Workflow Node Taxonomy | ☑ 已完成 |
 | R-015 | 02 | 107 | 真人拍摄 | M-03 Thinking Ownership: Agent vs Task，真人可小窗 | ☑ 已覆盖（免单独制作） |
@@ -681,7 +681,7 @@ And this journey isn't over yet.
 | R-035 | 04 | 310 | 真人拍摄 | 引出 Document Curator，切换到完整 Canvas | ☑ 已完成 |
 | SCR-005 | 04 | 310 | 软件录屏 | 引出 Document Curator，切换到完整 Canvas | ☑ 已覆盖（免单独制作） |
 | SCR-006 | 04 | 314 | 软件录屏 | Document Curator 业务场景和整体 Workflow；可添加简单标注 | ☑ 已完成 |
-| R-036 | 04 | 318 | 真人拍摄 | 解释为何不能让 AI 自行决定所有修改 | ☐ 未开始 |
+| R-036 | 04 | 318 | 真人拍摄 | 解释为何不能让 AI 自行决定所有修改 | ☑ 已完成 |
 | SCR-007 | 04 | 326 | 软件录屏 | 展示 Solo Pattern 和完整 Workflow | ☑ 已完成 |
 | SCR-008 | 04 | 332 | 软件录屏 | 依次聚焦 Read Document Context → Agent Action → Proposal | ☑ 已完成 |
 | SCR-009 | 04 | 346 | 软件录屏 | 聚焦 Validate Proposal Task 和校验配置 | ☑ 已完成 |
@@ -690,16 +690,16 @@ And this journey isn't over yet.
 | SCR-011 | 04 | 356 | 软件录屏 | 聚焦 Branch 与 Apply / Review 两条路径；静态高亮即可 | ☑ 已完成 |
 | R-038 | 04 | 362 | 真人拍摄 | 回看完整 Canvas，归纳各节点职责 | ☑ 已覆盖（免单独制作） |
 | SCR-012 | 04 | 362 | 软件录屏 | 回看完整 Canvas，归纳各节点职责 | ☑ 已完成 |
-| R-039 | 04 | 372 | 真人拍摄 | 案例设计的意义 | ☐ 未开始 |
+| R-039 | 04 | 372 | 真人拍摄 | 案例设计的意义 | ☑ 已完成 |
 | SCR-013 | 04 | 378 | 软件录屏 | Canvas ↔ DSL 双向表达展示；只演示已验证功能 | ☑ 已完成 |
-| R-040 | 04 | 384 | 真人拍摄 | 明确案例是设计与配置验证，不是实际执行 | ☐ 未开始 |
-| R-041 | 04 | 390 | 真人拍摄 | 回看 Canvas 或设计细节，收束案例 | ☐ 未开始 |
-| SCR-014 | 04 | 390 | 软件录屏 | 回看 Canvas 或设计细节，收束案例 | ☐ 未开始 |
+| R-040 | 04 | 384 | 真人拍摄 | 明确案例是设计与配置验证，不是实际执行 | ☑ 已完成 |
+| R-041 | 04 | 390 | 真人拍摄 | 回看 Canvas 或设计细节，收束案例 | ☑ 已完成 |
+| SCR-014 | 04 | 390 | 软件录屏 | 回看 Canvas 或设计细节，收束案例 | ☑ 已覆盖（免单独制作） |
 | TXT-007 | 05 | 章节05开场（400前） | 文字/章节卡 | 章节05标题卡：What's Next | ☑ 已完成 |
-| R-042 | 05 | 400 | 真人拍摄 | Section 05 开场，回望项目变化 | ☐ 未开始 |
-| R-043 | 05 | 406 | 真人拍摄 | 草图 → Figma → 代码 → Canvas；已有素材剪辑 | ☐ 未开始 |
-| EDIT-001 | 05 | 406 | 剪辑蒙太奇 | 草图 → Figma → 代码 → Canvas；已有素材剪辑 | ☐ 未开始 |
-| R-044 | 05 | 408 | 真人拍摄 | 设计演化与取舍 | ☐ 未开始 |
+| R-042 | 05 | 400 | 真人拍摄 | Section 05 开场，回望项目变化 | ☑ 已完成 |
+| R-043 | 05 | 406 | 真人拍摄 | 草图 → Figma → 代码 → Canvas；已有素材剪辑 | ☑ 已完成 |
+| EDIT-001 | 05 | 406 | 剪辑蒙太奇 | 草图 → Figma → 代码 → Canvas；已有素材剪辑 | ☑ 已覆盖（免单独制作） |
+| R-044 | 05 | 408 | 真人拍摄 | 设计演化与取舍 | ☑ 已完成 |
 | SCR-015 | 05 | 412 | 软件录屏 | Odyssey 界面和 Document Curator 静态镜头 | ☐ 未开始 |
 | R-045 | 05 | 414 | 真人拍摄 | 项目边界与创作定位 | ☑ 已完成 |
 | R-046 | 05 | 418 | 真人拍摄 | 开放式探索与个人感受 | ☑ 已完成 |
@@ -712,14 +712,14 @@ And this journey isn't over yet.
 | 类型 | 总项 | 实际交付 | 覆盖免制作 | 完成及覆盖 | 待审校 | 未开始 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 文字/章节卡 | 7 | 6 | 0 | 6 | 0 | 1 |
-| 真人拍摄 | 47 | 32 | 6 | 38 | 0 | 9 |
-| 图标/静态图 | 4 | 0 | 3 | 3 | 1 | 0 |
+| 真人拍摄 | 47 | 39 | 7 | 46 | 0 | 1 |
+| 图标/静态图 | 4 | 1 | 3 | 4 | 0 | 0 |
 | 新制作 Motion | 10 | 7 | 1 | 8 | 0 | 2 |
-| 软件录屏 | 15 | 10 | 3 | 13 | 0 | 2 |
+| 软件录屏 | 15 | 10 | 4 | 14 | 0 | 1 |
 | Figma 素材 | 9 | 4 | 1 | 5 | 0 | 4 |
 | 已有草图 | 3 | 0 | 0 | 0 | 0 | 3 |
-| 剪辑蒙太奇 | 2 | 0 | 0 | 0 | 0 | 2 |
-| 合计 | 97 | 59 | 14 | 73 | 1 | 23 |
+| 剪辑蒙太奇 | 2 | 0 | 1 | 1 | 0 | 1 |
+| 合计 | 97 | 67 | 17 | 84 | 0 | 13 |
 
 ## 同镜头覆盖索引
 
@@ -729,6 +729,7 @@ And this journey isn't over yet.
 | M-08 | 011 | R-003 |
 | GFX-002 | 019 | R-005 |
 | GFX-003 | 067 | R-012 |
+| R-014 | 091 | GFX-004 |
 | R-015 | 107 | M-03 |
 | R-019 | 163 | M-06 |
 | R-023 | 224 | FIG-005 |
@@ -739,17 +740,19 @@ And this journey isn't over yet.
 | SCR-005 | 310 | R-035 |
 | R-037 | 352 | SCR-010 |
 | R-038 | 362 | SCR-012 |
+| SCR-014 | 390 | R-041 |
+| EDIT-001 | 406 | R-043 |
 
 ## 实物交付索引
 
-本次共159个文件：主目录48个，章节卡目录5个，temp 106个。下表时长为实际容器读取结果。已完成为文件到位口径，保留既有验收记录；本轮未重新进行内容验收。
+本次共194个文件：主目录58个，章节卡目录5个，temp 128个，development-icons透明图标3个。下表时长为实际容器读取结果。已完成为文件到位口径，保留既有验收记录；本轮未重新进行内容验收。
 
 | 交付文件 | 实际交付登记项 | 时长（秒） |
 | --- | --- | --- |
 | [HOW001_FIG004.mp4](./materials/HOW001_FIG004.mp4) | FIG-004 | 26.238 |
 | [HOW001_FIG005.mp4](./materials/HOW001_FIG005.mp4) | FIG-005 | 23.545 |
 | [HOW001_FIG006.mp4](./materials/HOW001_FIG006.mp4) | FIG-006 | 20.619 |
-| [HOW001_GFX004.mp4](./materials/HOW001_GFX004.mp4) | GFX-004（待审校） | 20.387 |
+| [HOW001_GFX004.mp4](./materials/HOW001_GFX004.mp4) | GFX-004 | 20.387 |
 | [HOW001_M1.mp4](./materials/HOW001_M1.mp4) | M-01 / FIG-001 | 57.446 |
 | [HOW001_M2.mp4](./materials/HOW001_M2.mp4) | M-02 | 24.149 |
 | [HOW001_M3.mp4](./materials/HOW001_M3.mp4) | M-03 | 20.503 |
@@ -773,7 +776,14 @@ And this journey isn't over yet.
 | [HOW001_R30.mp4](./materials/HOW001_R30.mp4) | R-030 | 8.847 |
 | [HOW001_R31_R32_R33.mp4](./materials/HOW001_R31_R32_R33.mp4) | R-031 / R-032 / R-033 | 57.423 |
 | [HOW001_R34_R35.mp4](./materials/HOW001_R34_R35.mp4) | R-034 / R-035 | 28.073 |
+| [HOW001_R36.mp4](./materials/HOW001_R36.mp4) | R-036 | 22.779 |
+| [HOW001_R39.mp4](./materials/HOW001_R39.mp4) | R-039 | 22.988 |
 | [HOW001_R3_R4.mp4](./materials/HOW001_R3_R4.mp4) | R-003 / R-004 | 32.508 |
+| [HOW001_R40.mp4](./materials/HOW001_R40.mp4) | R-040 | 25.286 |
+| [HOW001_R41.mp4](./materials/HOW001_R41.mp4) | R-041 | 41.610 |
+| [HOW001_R42.mp4](./materials/HOW001_R42.mp4) | R-042 | 26.308 |
+| [HOW001_R43.mp4](./materials/HOW001_R43.mp4) | R-043 | 12.422 |
+| [HOW001_R44.mp4](./materials/HOW001_R44.mp4) | R-044 | 19.087 |
 | [HOW001_R45_R46.mp4](./materials/HOW001_R45_R46.mp4) | R-045 / R-046 | 29.884 |
 | [HOW001_R48.mp4](./materials/HOW001_R48.mp4) | R-048 | 17.600 |
 | [HOW001_R5.mp4](./materials/HOW001_R5.mp4) | R-005 | 9.334 |
@@ -807,17 +817,26 @@ And this journey isn't over yet.
 | --- | --- |
 | [HOW001_Design_Concept_Notice_v01.png](./materials/HOW001_Design_Concept_Notice_v01.png) | 执行引擎尚未实现的设计说明牌 |
 | [HOW001_Document_Curator_Simulated_Proposal_v01.png](./materials/HOW001_Document_Curator_Simulated_Proposal_v01.png) | metadata、文档链接与证据的模拟建议界面 |
+| [HOW001_Early_Ideas_Exploration_v01.png](./materials/HOW001_Early_Ideas_Exploration_v01.png) | 补充图片 |
+| [HOW001_Early_Ideas_Ordered_v01.png](./materials/HOW001_Early_Ideas_Ordered_v01.png) | 补充图片 |
+| [HOW001_Early_Ideas_Reflection_v01.png](./materials/HOW001_Early_Ideas_Reflection_v01.png) | 补充图片 |
 | [HOW001_Proposal_Approval_Separation_v01.png](./materials/HOW001_Proposal_Approval_Separation_v01.png) | 提案与独立校验分离的概念图 |
 
 ## 待补与临时素材
 
-GFX-004保留待审校。SCR-012和SCR-013已交付；镜头362由SCR-012覆盖，R-038免单独制作。
+GFX-004已由用户确认完成，镜头091的R-014由其覆盖，免单独制作。SCR-012和SCR-013已交付；镜头362由SCR-012覆盖，R-038免单独制作。
 
 跨镜头的独立条目仍需准备，例如FIG-002、FIG-003、M-07、M-09。原图或录音存在于制作目录不自动等于最终交付。
 
 | 扩展名 | 临时文件数 | 文件 |
 | --- | --- | --- |
-| .m4a | 41 | `HOW001-FIG004.m4a`、`HOW001-FIG005.m4a`、`HOW001-FIG006.m4a`、`HOW001-GFX004.m4a`、`HOW001-R024.m4a`、`HOW001-R034.m4a`、`HOW001-R1.m4a`、`HOW001-R10.m4a`、`HOW001-R13.m4a`、`HOW001-R16.m4a`、`HOW001-R17.m4a`、`HOW001-R18.m4a`、`HOW001-R2.m4a`、`HOW001-R20.m4a`、`HOW001-R21.m4a`、`HOW001-R22.m4a`、`HOW001-R26.m4a`、`HOW001-R27.m4a`、`HOW001-R28-R29.m4a`、`HOW001-R30.m4a`、`HOW001-R31-R32-R33.m4a`、`HOW001-R35.m4a`、`HOW001-R45-R46.m4a`、`HOW001-R48.m4a`、`HOW001-R5.m4a`、`HOW001-R6.m4a`、`HOW001-R7-1.m4a`、`HOW001-R7-2.m4a`、`HOW001-R7.m4a`、`HOW001-R8.m4a`、`HOW001-R9.m4a`、`how001-scr-001-2.m4a`、`HOW001-SCR004.m4a`、`HOW001-SCR006.m4a`、`HOW001-SCR007.m4a`、`HOW001-SCR008.m4a`、`HOW001-SCR009.m4a`、`HOW001-SCR010.m4a`、`HOW001-SCR011.m4a`、`HOW001-SCR012.m4a`、`HOW001-SCR013.m4a` |
-| .mp4 | 56 | `FIG004-2.mp4`、`FIG004.mp4`、`FIG005.mp4`、`FIG006.mp4`、`GFX-004.mp4`、`GFX004-2.mp4`、`HOW001-R7-motion.mp4`、`motion-001-v2-review.mp4`、`MVI_6979.MP4`、`MVI_6980.MP4`、`MVI_6981.MP4`、`MVI_6983.MP4`、`R10.MP4`、`R13.MP4`、`R16.MP4`、`R17.MP4`、`R18.MP4`、`R20.MP4`、`R21.MP4`、`R22-1.MP4`、`R22-2.mp4`、`R24.MP4`、`R26.MP4`、`R27.MP4`、`R28.MP4`、`R29.MP4`、`R30.MP4`、`R31-1.mp4`、`R31-2.mp4`、`R31-3.mp4`、`R31-4.mp4`、`R31-5.mp4`、`R31-6.mp4`、`R31-7.mp4`、`R31.MP4`、`R34.mp4`、`R35-2.mp4`、`R35.MP4`、`R45-R46.MP4`、`R48.MP4`、`R7.MP4`、`R8.MP4`、`R9.MP4`、`SCR004.mp4`、`SCR005.mp4`、`SCR006-1.mp4`、`SCR006-2.mp4`、`SCR007-1.mp4`、`SCR007-2.mp4`、`SCR008-1.mp4`、`SCR008-2.mp4`、`SCR009.mp4`、`SCR011.mp4`、`SCR012.mp4`、`SCR013.mp4`、`TXT-002.mp4` |
-| .png | 6 | `FIGMA_FINISH.png`、`odyssey.png`、`R013-Create Modal.png`、`SCR008-1.png`、`SCR008-2.png`、`SCR010.png` |
+| .m4a | 49 | `HOW001-FIG004.m4a`、`HOW001-FIG005.m4a`、`HOW001-FIG006.m4a`、`HOW001-GFX004.m4a`、`HOW001-R024.m4a`、`HOW001-R034.m4a`、`HOW001-R043.m4a`、`HOW001-R1.m4a`、`HOW001-R10.m4a`、`HOW001-R13.m4a`、`HOW001-R16.m4a`、`HOW001-R17.m4a`、`HOW001-R18.m4a`、`HOW001-R2.m4a`、`HOW001-R20.m4a`、`HOW001-R21.m4a`、`HOW001-R22.m4a`、`HOW001-R26.m4a`、`HOW001-R27.m4a`、`HOW001-R28-R29.m4a`、`HOW001-R30.m4a`、`HOW001-R31-R32-R33.m4a`、`HOW001-R35.m4a`、`HOW001-R36.m4a`、`HOW001-R39.m4a`、`HOW001-R40-1.m4a`、`HOW001-R40.m4a`、`HOW001-R41.m4a`、`HOW001-R42.m4a`、`HOW001-R44.m4a`、`HOW001-R45-R46.m4a`、`HOW001-R48.m4a`、`HOW001-R5.m4a`、`HOW001-R6.m4a`、`HOW001-R7-1.m4a`、`HOW001-R7-2.m4a`、`HOW001-R7.m4a`、`HOW001-R8.m4a`、`HOW001-R9.m4a`、`how001-scr-001-2.m4a`、`HOW001-SCR004.m4a`、`HOW001-SCR006.m4a`、`HOW001-SCR007.m4a`、`HOW001-SCR008.m4a`、`HOW001-SCR009.m4a`、`HOW001-SCR010.m4a`、`HOW001-SCR011.m4a`、`HOW001-SCR012.m4a`、`HOW001-SCR013.m4a` |
+| .mp4 | 64 | `FIG004-2.mp4`、`FIG004.mp4`、`FIG005.mp4`、`FIG006.mp4`、`GFX-004.mp4`、`GFX004-2.mp4`、`HOW001-R7-motion.mp4`、`motion-001-v2-review.mp4`、`MVI_6979.MP4`、`MVI_6980.MP4`、`MVI_6981.MP4`、`MVI_6983.MP4`、`R10.MP4`、`R13.MP4`、`R16.MP4`、`R17.MP4`、`R18.MP4`、`R20.MP4`、`R21.MP4`、`R22-1.MP4`、`R22-2.mp4`、`R24.MP4`、`R26.MP4`、`R27.MP4`、`R28.MP4`、`R29.MP4`、`R30.MP4`、`R31-1.mp4`、`R31-2.mp4`、`R31-3.mp4`、`R31-4.mp4`、`R31-5.mp4`、`R31-6.mp4`、`R31-7.mp4`、`R31.MP4`、`R34.mp4`、`R35-2.mp4`、`R35.MP4`、`R36.MP4`、`R39.MP4`、`R40-1.mp4`、`R40.MP4`、`R41.MP4`、`R42.MP4`、`R43.mp4`、`R44.MP4`、`R45-R46.MP4`、`R48.MP4`、`R7.MP4`、`R8.MP4`、`R9.MP4`、`SCR004.mp4`、`SCR005.mp4`、`SCR006-1.mp4`、`SCR006-2.mp4`、`SCR007-1.mp4`、`SCR007-2.mp4`、`SCR008-1.mp4`、`SCR008-2.mp4`、`SCR009.mp4`、`SCR011.mp4`、`SCR012.mp4`、`SCR013.mp4`、`TXT-002.mp4` |
+| .png | 12 | `FIGMA_FINISH.png`、`odyssey.png`、`R013-Create Modal.png`、`R40-1 (1).png`、`R40-1 (2).png`、`R40-1 (3).png`、`R42-1.png`、`R42-2.png`、`R42.png`、`SCR008-1.png`、`SCR008-2.png`、`SCR010.png` |
 | .srt | 3 | `HOW001-R1.srt`、`HOW001-R7-2.srt`、`how001-scr-001-2.srt` |
+
+## 剩余制作项
+
+TXT-001、SK-001、FIG-002、SK-002、SK-003、FIG-003、M-07、M-09、FIG-007、FIG-008、SCR-015、R-047、EDIT-002。
+
+以上13项尚无正式交付或同镜头覆盖依据；如剪辑中已删除、合并或用其他画面替代，应明确登记替代关系。

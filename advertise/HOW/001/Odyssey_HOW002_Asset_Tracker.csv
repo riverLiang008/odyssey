@@ -18,13 +18,13 @@ TXT-005,02,章节02开场（059前）,文字/章节卡,章节02标题卡：Start
 R-011,02,059,真人拍摄,章节开场,已完成,advertise/HOW/001/materials/HOW001_R10_R11.mp4,2026-10-30 素材盘点：materials 主目录成片已提供；按文件到位登记，未新增画面或音画验收结论；合并交付文件，同文件对应的两个登记项勿重复整段剪入
 TXT-001,02,061,文字/章节卡,原稿已有黑底白字提示,未开始,,
 TXT-002,02,063,文字/章节卡,第一个核心问题，延续前一文字卡,已完成,advertise/HOW/001/materials/HOW001_TXT-002_word_reveal.mp4,2026-10-28 用户确认已完成；文件存在已核对；2026-10-30 素材盘点：materials 主目录成片已提供；按文件到位登记，未新增画面或音画验收结论
-R-012,02,067,新制作 Motion,Workflow步骤 → 系统配置与协作 → 信息分散的全局视图问题（保留R-012编号）,已完成,advertise/HOW/001/materials/HOW001_R012.mp4,2026-10-31 用户验收通过；原真人项改为Motion，编号保留R-012；1920×1080 / 30 FPS / 843帧；制作记录：motion-assets/projects/odyssey-how001/r-012/制作记录_v01.md；2026-10-31 更新盘点：正式成片已提供；合并文件对应多项时勿重复剪入
+R-012,02,067,新制作 Motion,Workflow步骤 → 系统配置与协作 → 信息分散的全局视图问题（保留R-012编号）,已完成,advertise/HOW/001/materials/HOW001_R012.mp4,2026-10-31 用户验收通过；原真人项改为Motion，编号保留R-012；1920×1080 / 30 FPS / 843帧；制作记录：motion-assets/projects/odyssey-how001/r-012/制作记录_v01.md
 GFX-003,02,067,图标/静态图,简化的配置分散示意；可用草图，不强制新 Motion,已覆盖（免单独制作）,advertise/HOW/001/materials/HOW001_R012.mp4,2026-10-31 用户确认组合素材任选其一：镜头067由R-012交付覆盖；本项不代表独立文件已制作，文件路径复用覆盖来源
 M-01,02,071 / 073 / 081,新制作 Motion,SK-01 → Execution Module × Execution Behavior → 配置状态与 UI-05 全景收束,已完成,advertise/HOW/001/materials/HOW001_M1.mp4,2026-10-28 用户验收通过；1920×1080 / 30 FPS / 1723 帧 / 约57.43秒；含 FIG-001 段落无需重复剪入；带声审阅版：motion/out/motion-001-v2-review.mp4；合并字幕：motion/out/motion-001-v2.srt；制作记录：motion-assets/projects/odyssey-how001/m-01/制作记录_v02.md；媒体输出被 Git 忽略须另行共享；2026-10-30 素材盘点：materials 主目录成片已提供；按文件到位登记，未新增画面或音画验收结论
 FIG-001,02,081,Figma 素材,UI-05 System Canvas Draft（已整合至 M-01 后半段）,已完成,advertise/HOW/001/materials/HOW001_M1.mp4,2026-10-28 随 M-01 用户验收通过；本地40.4秒起展示配置状态并拉回全景；源图：motion-assets/projects/odyssey-how001/m-01/​UI-05_v01.png；后期复用 M-01 对应段落无需独立重复剪入；2026-10-30 素材盘点：materials 主目录成片已提供；按文件到位登记，未新增画面或音画验收结论；复用 M-01 后半段，无独立成片文件
 R-013,02,085,真人拍摄,Pattern 概念小结、转向 Workflow,已完成,advertise/HOW/001/materials/HOW001_R13.mp4,2026-10-30 素材盘点：materials 主目录成片已提供；按文件到位登记，未新增画面或音画验收结论
-R-014,02,091,真人拍摄,现有工具节点示例或草图，保持画面简单,未开始,,
-GFX-004,02,091,图标/静态图,现有工具节点示例或草图，保持画面简单,待审校,advertise/HOW/001/materials/HOW001_GFX004.mp4,2026-10-31 路径复查：正式目录为HOW001_GFX004.mp4，旧版GFX-004.mp4位于temp；保留待审校状态
+R-014,02,091,真人拍摄,现有工具节点示例或草图，保持画面简单,已覆盖（免单独制作）,advertise/HOW/001/materials/HOW001_GFX004.mp4,2026-10-31 用户确认组合素材任选其一：镜头091由GFX-004交付覆盖；本项不代表独立文件已制作，文件路径复用覆盖来源
+GFX-004,02,091,图标/静态图,现有工具节点示例或草图，保持画面简单,已完成,advertise/HOW/001/materials/HOW001_GFX004.mp4,2026-10-31 用户确认GFX-004制作完成；正式交付HOW001_GFX004.mp4，旧版位于temp
 SK-001,02,095,已有草图,SK-05,未开始,,
 M-02,02,097,新制作 Motion,M-02 Workflow Node Taxonomy,已完成,advertise/HOW/001/materials/HOW001_M2.mp4,2026-10-28 用户验收通过；1920×1080 / 30 FPS / 724 帧 / 约24.13秒；带声审阅版：motion/out/motion-002-review.mp4；字幕：motion/out/motion-002.srt；制作记录：motion-assets/projects/odyssey-how001/m-02/制作记录_v01.md；媒体输出被 Git 忽略须另行共享；2026-10-30 素材盘点：materials 主目录成片已提供；按文件到位登记，未新增画面或音画验收结论
 R-015,02,107,真人拍摄,M-03 Thinking Ownership: Agent vs Task，真人可小窗,已覆盖（免单独制作）,advertise/HOW/001/materials/HOW001_M3.mp4,2026-10-31 用户确认组合素材任选其一：镜头107由M-03交付覆盖；本项不代表独立文件已制作，文件路径复用覆盖来源
@@ -71,7 +71,7 @@ R-034,04,306,真人拍摄,设计与实现相互修正的反思,已完成,adverti
 R-035,04,310,真人拍摄,引出 Document Curator，切换到完整 Canvas,已完成,advertise/HOW/001/materials/HOW001_R34_R35.mp4,2026-10-31 更新盘点：正式成片已提供；合并文件对应多项时勿重复剪入
 SCR-005,04,310,软件录屏,引出 Document Curator，切换到完整 Canvas,已覆盖（免单独制作）,advertise/HOW/001/materials/HOW001_R34_R35.mp4,2026-10-31 用户确认组合素材任选其一：镜头310由R-035交付覆盖；本项不代表独立文件已制作，文件路径复用覆盖来源
 SCR-006,04,314,软件录屏,Document Curator 业务场景和整体 Workflow；可添加简单标注,已完成,advertise/HOW/001/materials/HOW001_SCR006.mp4,2026-10-31 更新盘点：正式成片已提供；合并文件对应多项时勿重复剪入
-R-036,04,318,真人拍摄,解释为何不能让 AI 自行决定所有修改,未开始,,
+R-036,04,318,真人拍摄,解释为何不能让 AI 自行决定所有修改,已完成,advertise/HOW/001/materials/HOW001_R36.mp4,2026-10-31 更新盘点：正式成片已提供；合并文件对应多项时勿重复剪入
 SCR-007,04,326,软件录屏,展示 Solo Pattern 和完整 Workflow,已完成,advertise/HOW/001/materials/HOW001_SCR007.mp4,2026-10-31 更新盘点：正式成片已提供；合并文件对应多项时勿重复剪入
 SCR-008,04,332,软件录屏,依次聚焦 Read Document Context → Agent Action → Proposal,已完成,advertise/HOW/001/materials/HOW001_SCR008.mp4,2026-10-31 更新盘点：正式成片已提供；合并文件对应多项时勿重复剪入
 SCR-009,04,346,软件录屏,聚焦 Validate Proposal Task 和校验配置,已完成,advertise/HOW/001/materials/HOW001_SCR009.mp4,2026-10-31 更新盘点：正式成片已提供；合并文件对应多项时勿重复剪入
@@ -80,16 +80,16 @@ SCR-010,04,352,软件录屏,强调 Agent 提案与独立验证的权限边界,�
 SCR-011,04,356,软件录屏,聚焦 Branch 与 Apply / Review 两条路径；静态高亮即可,已完成,advertise/HOW/001/materials/HOW001_SCR10_SCR11.mp4,2026-10-31 更新盘点：正式成片已提供；合并文件对应多项时勿重复剪入
 R-038,04,362,真人拍摄,回看完整 Canvas，归纳各节点职责,已覆盖（免单独制作）,advertise/HOW/001/materials/HOW001_SCR012.mp4,2026-10-31 用户确认组合素材任选其一：镜头362由SCR-012交付覆盖；本项不代表独立文件已制作，文件路径复用覆盖来源
 SCR-012,04,362,软件录屏,回看完整 Canvas，归纳各节点职责,已完成,advertise/HOW/001/materials/HOW001_SCR012.mp4,2026-10-31 更新盘点：正式成片已提供；合并文件对应多项时勿重复剪入
-R-039,04,372,真人拍摄,案例设计的意义,未开始,,
+R-039,04,372,真人拍摄,案例设计的意义,已完成,advertise/HOW/001/materials/HOW001_R39.mp4,2026-10-31 更新盘点：正式成片已提供；合并文件对应多项时勿重复剪入
 SCR-013,04,378,软件录屏,Canvas ↔ DSL 双向表达展示；只演示已验证功能,已完成,advertise/HOW/001/materials/HOW001_SCR013.mp4,2026-10-31 更新盘点：正式成片已提供；合并文件对应多项时勿重复剪入
-R-040,04,384,真人拍摄,明确案例是设计与配置验证，不是实际执行,未开始,,
-R-041,04,390,真人拍摄,回看 Canvas 或设计细节，收束案例,未开始,,
-SCR-014,04,390,软件录屏,回看 Canvas 或设计细节，收束案例,未开始,,
+R-040,04,384,真人拍摄,明确案例是设计与配置验证，不是实际执行,已完成,advertise/HOW/001/materials/HOW001_R40.mp4,2026-10-31 更新盘点：正式成片已提供；合并文件对应多项时勿重复剪入
+R-041,04,390,真人拍摄,回看 Canvas 或设计细节，收束案例,已完成,advertise/HOW/001/materials/HOW001_R41.mp4,2026-10-31 更新盘点：正式成片已提供；合并文件对应多项时勿重复剪入
+SCR-014,04,390,软件录屏,回看 Canvas 或设计细节，收束案例,已覆盖（免单独制作）,advertise/HOW/001/materials/HOW001_R41.mp4,2026-10-31 用户确认组合素材任选其一：镜头390由R-041交付覆盖；本项不代表独立文件已制作，文件路径复用覆盖来源
 TXT-007,05,章节05开场（400前）,文字/章节卡,章节05标题卡：What's Next,已完成,advertise/HOW/001/materials/Odyssey_Chapter_Transitions/05_whats_next.mp4,2026-10-30 补登记已有章节卡；已抽帧核对章节编号及标题；容器时长2.2秒；章节开场位置供剪辑使用，不改原镜头编号
-R-042,05,400,真人拍摄,Section 05 开场，回望项目变化,未开始,,
-R-043,05,406,真人拍摄,草图 → Figma → 代码 → Canvas；已有素材剪辑,未开始,,
-EDIT-001,05,406,剪辑蒙太奇,草图 → Figma → 代码 → Canvas；已有素材剪辑,未开始,,
-R-044,05,408,真人拍摄,设计演化与取舍,未开始,,
+R-042,05,400,真人拍摄,Section 05 开场，回望项目变化,已完成,advertise/HOW/001/materials/HOW001_R42.mp4,2026-10-31 更新盘点：正式成片已提供；合并文件对应多项时勿重复剪入
+R-043,05,406,真人拍摄,草图 → Figma → 代码 → Canvas；已有素材剪辑,已完成,advertise/HOW/001/materials/HOW001_R43.mp4,2026-10-31 更新盘点：正式成片已提供；合并文件对应多项时勿重复剪入
+EDIT-001,05,406,剪辑蒙太奇,草图 → Figma → 代码 → Canvas；已有素材剪辑,已覆盖（免单独制作）,advertise/HOW/001/materials/HOW001_R43.mp4,2026-10-31 用户确认组合素材任选其一：镜头406由R-043交付覆盖；本项不代表独立文件已制作，文件路径复用覆盖来源
+R-044,05,408,真人拍摄,设计演化与取舍,已完成,advertise/HOW/001/materials/HOW001_R44.mp4,2026-10-31 更新盘点：正式成片已提供；合并文件对应多项时勿重复剪入
 SCR-015,05,412,软件录屏,Odyssey 界面和 Document Curator 静态镜头,未开始,,
 R-045,05,414,真人拍摄,项目边界与创作定位,已完成,advertise/HOW/001/materials/HOW001_R45_R46.mp4,2026-10-31 素材盘点：正式目录成片已到位；按文件登记，未新增内容验收结论；多个登记项共用合并成片，勿重复整段剪入；此前所谓R45单独版为R48误命名，已更正，不存在该独立R45交付
 R-046,05,418,真人拍摄,开放式探索与个人感受,已完成,advertise/HOW/001/materials/HOW001_R45_R46.mp4,2026-10-31 素材盘点：正式目录成片已到位；按文件登记，未新增内容验收结论；多个登记项共用合并成片，勿重复整段剪入
