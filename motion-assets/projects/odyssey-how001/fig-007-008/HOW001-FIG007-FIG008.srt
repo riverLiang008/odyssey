@@ -1,0 +1,28 @@
+1
+00:00:00,000 --> 00:00:05,560
+I find similar problems in other parts of their interface.
+
+2
+00:00:05,560 --> 00:00:12,160
+For example, walkflows needs more than a canvas that shows its depth.
+
+3
+00:00:12,160 --> 00:00:20,120
+Users also need to move to a different level, check node settings and note what they are
+
+4
+00:00:20,120 --> 00:00:21,360
+editing.
+
+5
+00:00:21,360 --> 00:00:28,160
+In the same way, knowledge space needs more than a graph of document links.
+
+6
+00:00:28,160 --> 00:00:36,840
+Users also need to manage documents and read their contents and understand how they fit
+
+7
+00:00:36,840 --> 00:00:39,760
+into the bigger knowledge structure.
+

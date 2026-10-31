@@ -1,0 +1,24 @@
+1
+00:00:00,000 --> 00:00:04,240
+So I decided to make the design simpler.
+
+2
+00:00:04,240 --> 00:00:09,860
+Instead of asking users to build any structure from sketch,
+
+3
+00:00:09,860 --> 00:00:14,180
+the system would offer a few ready-made patterns.
+
+4
+00:00:14,180 --> 00:00:18,460
+Linear, soloed, hub and spoke and circle.
+
+5
+00:00:18,460 --> 00:00:22,460
+This gives users a little less freedom,
+
+6
+00:00:22,460 --> 00:00:28,620
+but made the system much easier to understand and set up.
+

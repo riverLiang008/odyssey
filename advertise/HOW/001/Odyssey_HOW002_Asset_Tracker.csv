@@ -29,7 +29,7 @@ SK-001,02,095,已有草图,SK-05,未开始,,
 M-02,02,097,新制作 Motion,M-02 Workflow Node Taxonomy,已完成,advertise/HOW/001/materials/HOW001_M2.mp4,2026-10-28 用户验收通过；1920×1080 / 30 FPS / 724 帧 / 约24.13秒；带声审阅版：motion/out/motion-002-review.mp4；字幕：motion/out/motion-002.srt；制作记录：motion-assets/projects/odyssey-how001/m-02/制作记录_v01.md；媒体输出被 Git 忽略须另行共享；2026-10-30 素材盘点：materials 主目录成片已提供；按文件到位登记，未新增画面或音画验收结论
 R-015,02,107,真人拍摄,M-03 Thinking Ownership: Agent vs Task，真人可小窗,已覆盖（免单独制作）,advertise/HOW/001/materials/HOW001_M3.mp4,2026-10-31 用户确认组合素材任选其一：镜头107由M-03交付覆盖；本项不代表独立文件已制作，文件路径复用覆盖来源
 M-03,02,107,新制作 Motion,M-03 Thinking Ownership: Agent vs Task，真人可小窗,已完成,advertise/HOW/001/materials/HOW001_M3.mp4,2026-10-30 素材盘点：materials 主目录成片已提供；按文件到位登记，未新增画面或音画验收结论；不自动完成 R-015 真人小窗
-FIG-002,02,115,Figma 素材,UI-08 Workflow Focus Mode,未开始,,
+FIG-002,02,115,Figma 素材,UI-08 Workflow Focus Mode,已完成,advertise/HOW/001/materials/HOW001_FIG002.mp4,2026-11-01 用户确认并更新进度；Motion成片已交付，保留原素材编号
 R-016,02,121,真人拍摄,引出 Agent 的四项配置,已完成,advertise/HOW/001/materials/HOW001_R16.mp4,2026-10-30 素材盘点：materials 主目录成片已提供；按文件到位登记，未新增画面或音画验收结论
 SK-002,02,125,已有草图,SK-06,未开始,,
 M-04,02,125 / 129,新制作 Motion,Agent 四项配置 → Knowledge Space × ToolBox（125 / 129 合并 Motion）,已完成,advertise/HOW/001/materials/HOW001_M4.mp4,2026-10-30 素材盘点：materials 主目录成片已提供；按文件到位登记，未新增画面或音画验收结论；SK-06 为设计参考，不自动完成 SK-002 独立草图交付
@@ -41,7 +41,7 @@ FIG-003,02,161,Figma 素材,UI-17 Knowledge Space Graph Overview,未开始,,
 R-019,02,163,真人拍摄,M-06 Retrieval vs Graph Navigation，避免声称已实现,已覆盖（免单独制作）,advertise/HOW/001/materials/HOW001_M6.mp4,2026-10-31 用户确认组合素材任选其一：镜头163由M-06交付覆盖；本项不代表独立文件已制作，文件路径复用覆盖来源
 M-06,02,163,新制作 Motion,M-06 Retrieval vs Graph Navigation，避免声称已实现,已完成,advertise/HOW/001/materials/HOW001_M6.mp4,2026-10-31 素材盘点：正式目录成片已到位；按文件登记，未新增内容验收结论；截图高亮方案；不自动完成R-019真人或FIG-003界面交接
 R-020,02,175,真人拍摄,对独立设计想法的回望,已完成,advertise/HOW/001/materials/HOW001_R20.mp4,2026-10-31 素材盘点：正式目录成片已到位；按文件登记，未新增内容验收结论
-M-07,02,183,新制作 Motion,M-07 Four Core Concepts,未开始,,
+M-07,02,183,新制作 Motion,M-07 Four Core Concepts,已完成,advertise/HOW/001/materials/HOW001-M07.mp4,2026-11-01 用户确认并更新进度；Motion成片已交付，保留原素材编号
 R-021,02,193,真人拍摄,承认复杂性并过渡到界面设计,已完成,advertise/HOW/001/materials/HOW001_R21.mp4,2026-10-31 素材盘点：正式目录成片已到位；按文件登记，未新增内容验收结论
 TXT-003,02,201,文字/章节卡,Transition → 03 / Figma,已完成,advertise/HOW/001/materials/Odyssey_Chapter_Transitions/03_figma.mp4,2026-10-30 补登记已有章节卡；已抽帧核对章节编号及标题；容器时长2.2秒；章节开场位置供剪辑使用，不改原镜头编号
 R-022,03,206,真人拍摄,Section 03 开场，讲学习经历,已完成,advertise/HOW/001/materials/HOW001_R22.mp4,2026-10-31 素材盘点：正式目录成片已到位；按文件登记，未新增内容验收结论
@@ -51,10 +51,10 @@ FIG-005,03,224,Figma 素材,展示 UI 层级、配置面板和页面导航；不
 R-024,03,234,真人拍摄,界面设计反过来影响概念设计,已完成,advertise/HOW/001/materials/HOW001_R024.mp4,2026-10-31 素材盘点：正式目录成片已到位；按文件登记，未新增内容验收结论
 R-025,03,238,真人拍摄,Pattern 原方案与收敛方案对比；可用静态卡片,已覆盖（免单独制作）,advertise/HOW/001/materials/HOW001_FIG006.mp4,2026-10-31 用户确认组合素材任选其一：镜头238由FIG-006交付覆盖；本项不代表独立文件已制作，文件路径复用覆盖来源
 FIG-006,03,238,Figma 素材,Pattern 原方案与收敛方案对比；可用静态卡片,已完成,advertise/HOW/001/materials/HOW001_FIG006.mp4,2026-10-31 素材盘点：正式目录成片已到位；按文件登记，未新增内容验收结论
-M-09,03,244,新制作 Motion,Pattern 从任意拓扑收敛为 Linear / Solo / Hub and Spoke / Circle（新增 M-09，推荐）,未开始,,
+M-09,03,244,新制作 Motion,Pattern 从任意拓扑收敛为 Linear / Solo / Hub and Spoke / Circle（新增 M-09，推荐）,已完成,advertise/HOW/001/materials/HOW001_M9.mp4,2026-11-01 用户确认并更新进度；Motion成片已交付，保留原素材编号
 R-026,03,250,真人拍摄,总结设计取舍,已完成,advertise/HOW/001/materials/HOW001_R26.mp4,2026-10-31 素材盘点：正式目录成片已到位；按文件登记，未新增内容验收结论
-FIG-007,03,254,Figma 素材,Workflow Canvas / 配置面板展示,未开始,,
-FIG-008,03,260,Figma 素材,Knowledge Space 文档管理与图谱页面,未开始,,
+FIG-007,03,254,Figma 素材,Workflow Canvas / 配置面板展示,已完成,advertise/HOW/001/materials/HOW001_FIG007_FIG008.mp4,2026-11-01 用户确认并更新进度；Motion成片已交付，保留原素材编号；FIG-007/008共用合并成片，勿重复整段剪入
+FIG-008,03,260,Figma 素材,Knowledge Space 文档管理与图谱页面,已完成,advertise/HOW/001/materials/HOW001_FIG007_FIG008.mp4,2026-11-01 用户确认并更新进度；Motion成片已交付，保留原素材编号；FIG-007/008共用合并成片，勿重复整段剪入
 R-027,03,264,真人拍摄,Figma 是思考工具，不仅是绘图工具,已完成,advertise/HOW/001/materials/HOW001_R27.mp4,2026-10-31 素材盘点：正式目录成片已到位；按文件登记，未新增内容验收结论
 R-028,03,270,真人拍摄,迭代过程可用界面前后对比,已完成,advertise/HOW/001/materials/HOW001_R28_R29.mp4,2026-10-31 素材盘点：正式目录成片已到位；按文件登记，未新增内容验收结论；多个登记项共用合并成片，勿重复整段剪入
 FIG-009,03,270,Figma 素材,迭代过程可用界面前后对比,已覆盖（免单独制作）,advertise/HOW/001/materials/HOW001_R28_R29.mp4,2026-10-31 用户确认组合素材任选其一：镜头270由R-028交付覆盖；本项不代表独立文件已制作，文件路径复用覆盖来源

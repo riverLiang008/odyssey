@@ -1,0 +1,8 @@
+1
+00:00:00,000 --> 00:00:07,000
+Partons describe how agents work together, who flows, organise the steps and logic.
+
+2
+00:00:07,000 --> 00:00:16,000
+Not just space, manage, knowledge, resources, toolbox, organise the action, agents can take.
+

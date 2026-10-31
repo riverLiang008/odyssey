@@ -175,7 +175,7 @@ A Task Node is more like a clear tool call. It follows an operation defined in a
 
 **[M-03 · Thinking Ownership: Agent vs Task]**
 
-**▶ 镜头 115｜【M｜Figma】UI-08 Workflow Focus Mode**  `素材：FIG-002`
+**▶ 镜头 115｜【M｜Figma】UI-08 Workflow Focus Mode**  `素材：FIG-002 ✔`
 
 This also means an LLM doesn't always need to be a separate top-level Node.
 
@@ -265,7 +265,7 @@ But over time, I realized they were all moving toward the same goal.
 
 I wanted a complex Agent system to have more than just more and more features. I wanted a clear set of ideas to help organize those features.
 
-**▶ 镜头 183｜【M｜新 Motion】M-07 Four Core Concepts**  `素材：M-07`
+**▶ 镜头 183｜【M｜新 Motion】M-07 Four Core Concepts**  `素材：M-07 ✔`
 
 Patterns describe how Agents work together.
 
@@ -341,7 +341,7 @@ At first, I wanted users to define any structure they liked for connecting diffe
 
 But as I worked on the interface, I realized this freedom could make setup very complicated.
 
-**▶ 镜头 244｜【M｜新 Motion】Pattern 从任意拓扑收敛为 Linear / Solo / Hub and Spoke / Circle（新增 M-09，推荐）**  `素材：M-09`
+**▶ 镜头 244｜【M｜新 Motion】Pattern 从任意拓扑收敛为 Linear / Solo / Hub and Spoke / Circle（新增 M-09，推荐）**  `素材：M-09 ✔`
 
 So I decided to make the design simpler.
 
@@ -355,7 +355,7 @@ For me, this was an interesting lesson in design.
 
 Sometimes, good design is not about giving people as many choices as possible. It's about deciding which choices they really need.
 
-**▶ 镜头 254｜【M｜Figma】Workflow Canvas / 配置面板展示**  `素材：FIG-007`
+**▶ 镜头 254｜【M｜Figma】Workflow Canvas / 配置面板展示**  `素材：FIG-007 ✔`
 
 I found similar problems in other parts of the interface.
 
@@ -363,7 +363,7 @@ For example, a Workflow needs more than a Canvas that shows its steps.
 
 Users also need to move between different levels, check node settings, and know what they are editing.
 
-**▶ 镜头 260｜【M｜Figma】Knowledge Space 文档管理与图谱页面**  `素材：FIG-008`
+**▶ 镜头 260｜【M｜Figma】Knowledge Space 文档管理与图谱页面**  `素材：FIG-008 ✔`
 
 In the same way, Knowledge Space needs more than a graph of document links.
 
@@ -597,7 +597,7 @@ And this journey isn't over yet.
 
 # 附录｜素材制作登记表
 
-> 2026-10-31 更新：[素材登记 CSV](./Odyssey_HOW002_Asset_Tracker.csv)。按新规则，完成及覆盖 **84 / 97 项（86.6%）**：实际交付已完成 **67 项**，同镜头已覆盖免制作 **17 项**，待审校 **0 项**，未开始 **13 项**。
+> 2026-11-01 更新：[素材登记 CSV](./Odyssey_HOW002_Asset_Tracker.csv)。完成及覆盖 **89 / 97 项（91.8%）**：实际交付已完成 **72 项**，同镜头已覆盖免制作 **17 项**，待审校 **0 项**，未开始 **8 项**。
 
 ## 组合素材制作规则
 
@@ -639,7 +639,7 @@ And this journey isn't over yet.
 | M-02 | 02 | 097 | 新制作 Motion | M-02 Workflow Node Taxonomy | ☑ 已完成 |
 | R-015 | 02 | 107 | 真人拍摄 | M-03 Thinking Ownership: Agent vs Task，真人可小窗 | ☑ 已覆盖（免单独制作） |
 | M-03 | 02 | 107 | 新制作 Motion | M-03 Thinking Ownership: Agent vs Task，真人可小窗 | ☑ 已完成 |
-| FIG-002 | 02 | 115 | Figma 素材 | UI-08 Workflow Focus Mode | ☐ 未开始 |
+| FIG-002 | 02 | 115 | Figma 素材 | UI-08 Workflow Focus Mode | ☑ 已完成 |
 | R-016 | 02 | 121 | 真人拍摄 | 引出 Agent 的四项配置 | ☑ 已完成 |
 | SK-002 | 02 | 125 | 已有草图 | SK-06 | ☐ 未开始 |
 | M-04 | 02 | 125 / 129 | 新制作 Motion | Agent 四项配置 → Knowledge Space × ToolBox（125 / 129 合并 Motion） | ☑ 已完成 |
@@ -651,7 +651,7 @@ And this journey isn't over yet.
 | R-019 | 02 | 163 | 真人拍摄 | M-06 Retrieval vs Graph Navigation，避免声称已实现 | ☑ 已覆盖（免单独制作） |
 | M-06 | 02 | 163 | 新制作 Motion | M-06 Retrieval vs Graph Navigation，避免声称已实现 | ☑ 已完成 |
 | R-020 | 02 | 175 | 真人拍摄 | 对独立设计想法的回望 | ☑ 已完成 |
-| M-07 | 02 | 183 | 新制作 Motion | M-07 Four Core Concepts | ☐ 未开始 |
+| M-07 | 02 | 183 | 新制作 Motion | M-07 Four Core Concepts | ☑ 已完成 |
 | R-021 | 02 | 193 | 真人拍摄 | 承认复杂性并过渡到界面设计 | ☑ 已完成 |
 | TXT-003 | 02 | 201 | 文字/章节卡 | Transition → 03 / Figma | ☑ 已完成 |
 | R-022 | 03 | 206 | 真人拍摄 | Section 03 开场，讲学习经历 | ☑ 已完成 |
@@ -661,10 +661,10 @@ And this journey isn't over yet.
 | R-024 | 03 | 234 | 真人拍摄 | 界面设计反过来影响概念设计 | ☑ 已完成 |
 | R-025 | 03 | 238 | 真人拍摄 | Pattern 原方案与收敛方案对比；可用静态卡片 | ☑ 已覆盖（免单独制作） |
 | FIG-006 | 03 | 238 | Figma 素材 | Pattern 原方案与收敛方案对比；可用静态卡片 | ☑ 已完成 |
-| M-09 | 03 | 244 | 新制作 Motion | Pattern 从任意拓扑收敛为 Linear / Solo / Hub and Spoke / Circle（新增 M-09，推荐） | ☐ 未开始 |
+| M-09 | 03 | 244 | 新制作 Motion | Pattern 从任意拓扑收敛为 Linear / Solo / Hub and Spoke / Circle（新增 M-09，推荐） | ☑ 已完成 |
 | R-026 | 03 | 250 | 真人拍摄 | 总结设计取舍 | ☑ 已完成 |
-| FIG-007 | 03 | 254 | Figma 素材 | Workflow Canvas / 配置面板展示 | ☐ 未开始 |
-| FIG-008 | 03 | 260 | Figma 素材 | Knowledge Space 文档管理与图谱页面 | ☐ 未开始 |
+| FIG-007 | 03 | 254 | Figma 素材 | Workflow Canvas / 配置面板展示 | ☑ 已完成 |
+| FIG-008 | 03 | 260 | Figma 素材 | Knowledge Space 文档管理与图谱页面 | ☑ 已完成 |
 | R-027 | 03 | 264 | 真人拍摄 | Figma 是思考工具，不仅是绘图工具 | ☑ 已完成 |
 | R-028 | 03 | 270 | 真人拍摄 | 迭代过程可用界面前后对比 | ☑ 已完成 |
 | FIG-009 | 03 | 270 | Figma 素材 | 迭代过程可用界面前后对比 | ☑ 已覆盖（免单独制作） |
@@ -714,12 +714,12 @@ And this journey isn't over yet.
 | 文字/章节卡 | 7 | 6 | 0 | 6 | 0 | 1 |
 | 真人拍摄 | 47 | 39 | 7 | 46 | 0 | 1 |
 | 图标/静态图 | 4 | 1 | 3 | 4 | 0 | 0 |
-| 新制作 Motion | 10 | 7 | 1 | 8 | 0 | 2 |
+| 新制作 Motion | 10 | 9 | 1 | 10 | 0 | 0 |
 | 软件录屏 | 15 | 10 | 4 | 14 | 0 | 1 |
-| Figma 素材 | 9 | 4 | 1 | 5 | 0 | 4 |
+| Figma 素材 | 9 | 7 | 1 | 8 | 0 | 1 |
 | 已有草图 | 3 | 0 | 0 | 0 | 0 | 3 |
 | 剪辑蒙太奇 | 2 | 0 | 1 | 1 | 0 | 1 |
-| 合计 | 97 | 67 | 17 | 84 | 0 | 13 |
+| 合计 | 97 | 72 | 17 | 89 | 0 | 8 |
 
 ## 同镜头覆盖索引
 
@@ -809,6 +809,20 @@ And this journey isn't over yet.
 
 合并文件如R34/R35、SCR10/SCR11对应多个登记项，剪辑勿重复整段使用。R48已更正原误命名R45；R45/R46仍使用合并文件。FIG-001复用M-01后半段。TXT-001正文提示卡不能由Start章节标题卡替代。
 
+## 2026-11-01 新增 Motion 交付
+
+以下为正式目录新增成片；均已核对文件存在与媒体时长，原有目录盘点数字为上轮快照。片尾不增加97项基数。
+
+| 文件 | 登记项 | 容器时长（秒） |
+| --- | --- | --- |
+| [HOW001-M07.mp4](./materials/HOW001-M07.mp4) | M-07 | 17.067 |
+| [HOW001_M9.mp4](./materials/HOW001_M9.mp4) | M-09 | 29.350 |
+| [HOW001_FIG002.mp4](./materials/HOW001_FIG002.mp4) | FIG-002 | 17.345 |
+| [HOW001_FIG007_FIG008.mp4](./materials/HOW001_FIG007_FIG008.mp4) | FIG-007 / FIG-008 | 40.820 |
+| [HOW001_Odyssey_Outro_v01.mp4](./materials/HOW001_Odyssey_Outro_v01.mp4) | 片尾补充素材 | 5.500 |
+
+FIG-007/008剪辑时按21.36秒附近的主题切换定位，勿重复使用整段。
+
 ## 补充设计图片
 
 以下为新增设计示意素材，不额外增加97项登记基数，也不自动替代其他镜头。模拟提案和流程图均不代表实际执行结果。
@@ -826,7 +840,7 @@ And this journey isn't over yet.
 
 GFX-004已由用户确认完成，镜头091的R-014由其覆盖，免单独制作。SCR-012和SCR-013已交付；镜头362由SCR-012覆盖，R-038免单独制作。
 
-跨镜头的独立条目仍需准备，例如FIG-002、FIG-003、M-07、M-09。原图或录音存在于制作目录不自动等于最终交付。
+FIG-002、M-07、M-09、FIG-007与FIG-008已交付Motion成片；FIG-007/008共用合并文件。FIG-003仍需准备，原图或录音不自动等于最终交付。
 
 | 扩展名 | 临时文件数 | 文件 |
 | --- | --- | --- |
@@ -837,6 +851,6 @@ GFX-004已由用户确认完成，镜头091的R-014由其覆盖，免单独制�
 
 ## 剩余制作项
 
-TXT-001、SK-001、FIG-002、SK-002、SK-003、FIG-003、M-07、M-09、FIG-007、FIG-008、SCR-015、R-047、EDIT-002。
+TXT-001、SK-001、SK-002、SK-003、FIG-003、SCR-015、R-047、EDIT-002。
 
-以上13项尚无正式交付或同镜头覆盖依据；如剪辑中已删除、合并或用其他画面替代，应明确登记替代关系。
+以上8项尚无正式交付或同镜头覆盖依据；如剪辑中已删除、合并或用其他画面替代，应明确登记替代关系。
