@@ -44,6 +44,29 @@ describe('WorkflowCanvas initial viewport', () => {
     expect(document).toEqual(before)
     wrapper.unmount()
   })
+
+  it('renders the node card as the direct Vue Flow slot root so compound dimensions are preserved', () => {
+    const document = createAgentWorkflowEditorDocumentFixture('loop')
+    const wrapper = mount(WorkflowCanvas, {
+      props: { graph: markRaw(document.workflow), layout: markRaw(document.layout), mode: 'configure', canvasId: 'slot-root-test', readOnly: true },
+      global: {
+        stubs: {
+          VueFlow: {
+            props: ['nodes'],
+            template: '<div class="flow-stub"><slot v-if="nodes[0]" name="node-workflow" v-bind="nodes[0]" /></div>',
+          },
+          WorkflowNodeRenderer: {
+            inheritAttrs: true,
+            template: '<article class="workflow-node-card" />',
+          },
+        },
+      },
+    })
+
+    const card = wrapper.get('.flow-stub > .workflow-node-card')
+    expect(card.attributes('inert')).toBeDefined()
+    wrapper.unmount()
+  })
   beforeEach(() => { flow.fitView.mockClear(); flow.setViewport.mockClear(); flow.initialized = null })
 
   it.each(['branch', 'task', 'agent_action', 'loop'] as const)('routes dropped %s through the Loop creation boundary', nodeType => {

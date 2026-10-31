@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "capturedAt": "2026-10-27T05:47:51.869Z",
+  "capturedAt": "2026-10-28T06:31:47.859Z",
   "journeys": [
     {
       "journey": {
@@ -38,8 +38,8 @@
           "id": "3c65d566-fa87-48b3-9aa9-f241290cce50",
           "name": "Agent 1",
           "description": null,
-          "revision": 48,
-          "updatedAt": "2026-10-27T05:37:21.301574Z"
+          "revision": 50,
+          "updatedAt": "2026-10-28T06:25:10.132708Z"
         }
       ],
       "inputGuardrail": {
@@ -104,9 +104,9 @@
         "journeyId": "6e4780e4-ed7c-426f-be4c-890c0e91c642",
         "name": "Agent 1",
         "description": null,
-        "revision": 48,
+        "revision": 50,
         "createdAt": "2026-10-25T10:53:56.231742Z",
-        "updatedAt": "2026-10-27T05:37:21.301574Z"
+        "updatedAt": "2026-10-28T06:25:10.132708Z"
       },
       "workflow": {
         "schemaVersion": "1.2.0",
@@ -520,9 +520,9 @@
           }
         ],
         "viewport": {
-          "x": 234.25550251460334,
-          "y": 56.21195492992683,
-          "zoom": 0.35
+          "x": 186.36814911373324,
+          "y": 30.61663568759306,
+          "zoom": 0.3741415416611976
         }
       },
       "variables": [

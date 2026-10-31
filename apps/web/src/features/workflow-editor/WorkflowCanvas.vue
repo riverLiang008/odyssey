@@ -394,32 +394,31 @@ function connectEnd() {
       @connect-end="connectEnd"
     >
       <template #node-workflow="nodeProps">
-        <div :inert="readOnly || undefined">
-          <WorkflowNodeRenderer
-            v-bind="nodeProps"
-            :configure-expanded="mode === 'configure' && ((nodeProps.data.context?.kind ?? 'root') === 'root' || nodeProps.data.node.type === 'branch')"
-            :read-only="readOnly || (nodeProps.data.node.type === 'branch' ? mode !== 'configure' : undefined)"
-            :tools="reusableTools ?? []"
-            :knowledge-spaces="knowledgeSpaces ?? []"
-            :variables="variables" :active-resource-drag="activeResourceDrag"
-            :resource-drop-state="resourceDropFeedback.status"
-            :resource-drop-node-id="resourceDropFeedback.nodeId"
-            :resource-drop-target-kind="resourceDropFeedback.targetKind"
-            @edit-tool="(nodeId, stepId) => emit('editTool', nodeId, stepId)"
-            @edit-reusable-tool="(nodeId, reusableToolId) => emit('editReusableTool', nodeId, reusableToolId)"
-            @change-tool="(nodeId, stepId, operation) => emit('changeTool', nodeId, stepId, operation)"
-            @reorder-tool="(nodeId, stepId, targetIndex) => emit('reorderTool', nodeId, stepId, targetIndex)"
-            @tool-step-context-menu="(nodeId, stepId, point) => emit('toolStepContextMenu', nodeId, stepId, point)"
-            @resource-enter="resourceEnter"
-            @resource-leave="resourceLeave"
-            @resource-drop="handleResourceDrop"
-            @unbind-tool="unbindTool"
-            @unbind-knowledge-space="unbindKnowledgeSpace"
-            @update-agent-action="(nodeId, details) => emit('updateAgentAction', nodeId, details)"
-            @update-node-name="(nodeId, name) => emit('updateNodeName', nodeId, name)"
-            @resize-node="(nodeId, size) => emit('resize', nodeId, size)"
-          />
-        </div>
+        <WorkflowNodeRenderer
+          v-bind="nodeProps"
+          :inert="readOnly || undefined"
+          :configure-expanded="mode === 'configure' && ((nodeProps.data.context?.kind ?? 'root') === 'root' || nodeProps.data.node.type === 'branch')"
+          :read-only="readOnly || (nodeProps.data.node.type === 'branch' ? mode !== 'configure' : undefined)"
+          :tools="reusableTools ?? []"
+          :knowledge-spaces="knowledgeSpaces ?? []"
+          :variables="variables" :active-resource-drag="activeResourceDrag"
+          :resource-drop-state="resourceDropFeedback.status"
+          :resource-drop-node-id="resourceDropFeedback.nodeId"
+          :resource-drop-target-kind="resourceDropFeedback.targetKind"
+          @edit-tool="(nodeId, stepId) => emit('editTool', nodeId, stepId)"
+          @edit-reusable-tool="(nodeId, reusableToolId) => emit('editReusableTool', nodeId, reusableToolId)"
+          @change-tool="(nodeId, stepId, operation) => emit('changeTool', nodeId, stepId, operation)"
+          @reorder-tool="(nodeId, stepId, targetIndex) => emit('reorderTool', nodeId, stepId, targetIndex)"
+          @tool-step-context-menu="(nodeId, stepId, point) => emit('toolStepContextMenu', nodeId, stepId, point)"
+          @resource-enter="resourceEnter"
+          @resource-leave="resourceLeave"
+          @resource-drop="handleResourceDrop"
+          @unbind-tool="unbindTool"
+          @unbind-knowledge-space="unbindKnowledgeSpace"
+          @update-agent-action="(nodeId, details) => emit('updateAgentAction', nodeId, details)"
+          @update-node-name="(nodeId, name) => emit('updateNodeName', nodeId, name)"
+          @resize-node="(nodeId, size) => emit('resize', nodeId, size)"
+        />
       </template>
     </VueFlow>
     <p v-if="projection.diagnostics.length" class="canvas-diagnostic" role="status">Some nodes use temporary fallback positions. Move and save them to repair layout.</p>

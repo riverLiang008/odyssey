@@ -4,6 +4,11 @@ motion/build/
 motion/.cache/
 motion/public/m1-v2/
 motion/public/m2/
+motion/public/m3/
+motion/public/m4/
+motion/public/m5/
+motion/public/m6/
+motion/public/r012/
 motion-assets/**/*.mp3
 motion-assets/**/*.wav
 motion-assets/**/*.m4a

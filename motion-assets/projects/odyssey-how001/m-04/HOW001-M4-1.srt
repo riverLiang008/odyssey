@@ -1,0 +1,20 @@
+1
+00:00:00,000 --> 00:00:05,520
+Model, Goal, Knowledge Space, and ToolBox.
+
+2
+00:00:05,520 --> 00:00:12,480
+Of these four, I especially wanted to separate Knowledge Space from ToolBox.
+
+3
+00:00:12,480 --> 00:00:19,760
+Knowledge Space organizes the knowledge, instructions, and text resources an Agent needs.
+
+4
+00:00:19,760 --> 00:00:26,240
+ToolBox organizes the tools an Agent can use, and the actions it can take.
+
+5
+00:00:26,240 --> 00:00:31,520
+Simply put, one is for knowing, and the other is for doing.
+

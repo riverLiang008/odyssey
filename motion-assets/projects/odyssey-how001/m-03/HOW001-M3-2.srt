@@ -1,0 +1,16 @@
+1
+00:00:00,000 --> 00:00:07,000
+The biggest difference is what I call Thinking Ownership: who makes the decisions?
+
+2
+00:00:07,000 --> 00:00:12,000
+An Agent Node has some freedom to decide what to do, based on its goal.
+
+3
+00:00:12,000 --> 00:00:16,000
+A Task Node is more like a clear tool call.
+
+4
+00:00:16,000 --> 00:00:20,000
+It follows an operation defined in advance.
+

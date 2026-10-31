@@ -125,6 +125,7 @@ const toolById = computed(() => new Map((props.tools ?? []).map((tool) => [tool.
 const knowledgeSpaceById = computed(() => new Map((props.knowledgeSpaces ?? []).map((space) => [space.id, space])))
 const modelOptions = computed(() => [...new Set([node.value.type === 'agent_action' ? node.value.config.model : '', 'gpt-5', 'gpt-4.1', 'gpt-4o'].filter(Boolean))])
 function selectModel(model: string) {
+  if (props.readOnly) return
   if (node.value.type !== 'agent_action') return
   const currentGoal = node.value.config.goal.kind === 'literal' && typeof node.value.config.goal.value === 'string'
     ? node.value.config.goal.value
@@ -140,6 +141,7 @@ function closeModelMenuOnFocusOut(event: globalThis.FocusEvent) {
 function boundToolName(toolId: UUID): string { return toolById.value.get(toolId)?.name ?? 'Unavailable Tool' }
 function boundKnowledgeSpaceName(knowledgeSpaceId: UUID): string { return props.knowledgeSpaceLabels?.[knowledgeSpaceId] ?? knowledgeSpaceById.value.get(knowledgeSpaceId)?.name ?? 'Unavailable Knowledge Space' }
 async function beginNameEdit() {
+  if (props.readOnly) return
   if (!['agent_action', 'task', 'branch', 'loop'].includes(node.value.type)) return
   nameDraft.value = node.value.name
   isEditingName.value = true
@@ -148,6 +150,7 @@ async function beginNameEdit() {
   nameInput.value?.select()
 }
 function finishNameEdit(commit: boolean) {
+  if (props.readOnly) return
   if (!['agent_action', 'task', 'branch', 'loop'].includes(node.value.type)) return
   const nextName = nameDraft.value.trim()
   isEditingName.value = false
@@ -162,6 +165,7 @@ function finishNameEdit(commit: boolean) {
   emit('updateAgentAction', node.value.id, { name: nextName, model: node.value.config.model, goal: currentGoal })
 }
 function updateAgentActionField(field: 'name' | 'model' | 'goal', event: globalThis.Event) {
+  if (props.readOnly) return
   if (node.value.type !== 'agent_action' || !(event.target instanceof globalThis.HTMLInputElement || event.target instanceof globalThis.HTMLSelectElement)) return
   const currentGoal = node.value.config.goal.kind === 'literal' && typeof node.value.config.goal.value === 'string'
     ? node.value.config.goal.value
@@ -181,6 +185,7 @@ function payloadFromEvent(event: globalThis.DragEvent): WorkflowResourceDragPayl
   return parseWorkflowResourceDragPayload(event.dataTransfer?.getData(WORKFLOW_RESOURCE_DRAG_MIME) || event.dataTransfer?.getData('text/plain') || '')
 }
 function resourceEnter(event: globalThis.DragEvent, kind: NodeResourceDropTargetKind) {
+  if (props.readOnly) return
   const payload = payloadFromEvent(event)
   if (!payload) return
   event.preventDefault()
@@ -194,6 +199,7 @@ function resourceLeave(event: globalThis.DragEvent, kind: NodeResourceDropTarget
   emit('resourceLeave', target(kind))
 }
 function resourceDrop(event: globalThis.DragEvent, kind: NodeResourceDropTargetKind) {
+  if (props.readOnly) return
   const payload = payloadFromEvent(event)
   if (!payload) return
   event.preventDefault()
@@ -225,6 +231,7 @@ function openToolStepContextMenu(event: globalThis.MouseEvent, stepId: UUID) {
 }
 
 function startStepReorder(event: globalThis.DragEvent, stepId: UUID) {
+  if (props.readOnly) return
   if (node.value.type !== 'task' || !event.dataTransfer) return
   event.stopPropagation()
   event.dataTransfer.effectAllowed = 'move'
@@ -292,7 +299,7 @@ function stepReorderClass(stepId: UUID): string {
       <span class="node-accent" aria-hidden="true" />
       <strong v-if="!(configureExpanded && ['agent_action', 'task', 'branch'].includes(node.type))">{{ node.name }}</strong>
       <div v-else class="node-name-editor nodrag nopan" data-no-node-inspector="true" @pointerdown.stop @click.stop>
-        <button v-if="!isEditingName" type="button" :aria-label="`Edit ${node.type.replace('_', ' ')} name`" @click="beginNameEdit">{{ node.type.replace('_', ' ').toUpperCase() }} · {{ node.name }}</button>
+        <button v-if="!isEditingName" type="button" :disabled="readOnly" :aria-label="`Edit ${node.type.replace('_', ' ')} name`" @click="beginNameEdit">{{ node.type.replace('_', ' ').toUpperCase() }} · {{ node.name }}</button>
         <input v-else :id="`name-${node.id}`" ref="nameInput" v-model="nameDraft" :aria-label="`${node.type.replace('_', ' ')} name`" @blur="finishNameEdit(true)" @keydown.enter.prevent="finishNameEdit(true)" @keydown.escape.prevent="finishNameEdit(false)" />
       </div>
       <small>{{ subtitle }}</small>
@@ -305,6 +312,7 @@ function stepReorderClass(stepId: UUID): string {
                 :id="`model-${node.id}`"
                 type="button"
                 class="node-model-select-trigger"
+                :disabled="readOnly"
                 aria-haspopup="listbox"
                 :aria-expanded="modelMenuOpen"
                 :aria-labelledby="`model-label-${node.id} model-${node.id}`"
@@ -328,12 +336,12 @@ function stepReorderClass(stepId: UUID): string {
             </div>
           </dd>
         </div>
-        <div class="node-config-field nodrag nopan" data-no-node-inspector="true" @pointerdown.stop @click.stop><dt><label :for="`goal-${node.id}`">Goal</label></dt><dd><input :id="`goal-${node.id}`" :value="valueSourceSummary()" placeholder="Describe what this action should accomplish" @change="updateAgentActionField('goal', $event)" /></dd></div>
+        <div class="node-config-field nodrag nopan" data-no-node-inspector="true" @pointerdown.stop @click.stop><dt><label :for="`goal-${node.id}`">Goal</label></dt><dd><input :id="`goal-${node.id}`" :readonly="readOnly" :value="valueSourceSummary()" placeholder="Describe what this action should accomplish" @change="updateAgentActionField('goal', $event)" /></dd></div>
         <div class="node-config-resource is-knowledge-spaces nodrag nopan" :class="targetStateClass('agent-action-knowledge-spaces')" role="group" data-no-node-inspector="true" data-workflow-resource-drop-target="agent-action-knowledge-spaces" :data-workflow-node-id="node.id" :aria-label="`Drop a Knowledge Space into ${node.name}`" @click.stop @pointerdown.stop @dragenter="resourceEnter($event, 'agent-action-knowledge-spaces')" @dragover="resourceEnter($event, 'agent-action-knowledge-spaces')" @dragleave="resourceLeave($event, 'agent-action-knowledge-spaces')" @drop="resourceDrop($event, 'agent-action-knowledge-spaces')">
           <dt>Knowledge Spaces</dt>
           <dd class="toolbox-content">
             <span v-if="node.config.knowledgeSpaceIds.some(reference => typeof reference !== 'string')" class="tool-chip knowledge-space-chip nodrag nopan" title="Resolved from the triggering event">Event Knowledge Space</span>
-            <span v-for="knowledgeSpaceId in node.config.knowledgeSpaceIds.filter((id) => typeof id === 'string')" :key="knowledgeSpaceId" class="tool-chip knowledge-space-chip nodrag nopan"><span :title="boundKnowledgeSpaceName(knowledgeSpaceId)">{{ boundKnowledgeSpaceName(knowledgeSpaceId) }}</span><button type="button" :aria-label="`Remove ${boundKnowledgeSpaceName(knowledgeSpaceId)}`" @click.stop="emit('unbindKnowledgeSpace', node.id, knowledgeSpaceId)">×</button></span>
+            <span v-for="knowledgeSpaceId in node.config.knowledgeSpaceIds.filter((id) => typeof id === 'string')" :key="knowledgeSpaceId" class="tool-chip knowledge-space-chip nodrag nopan"><span :title="boundKnowledgeSpaceName(knowledgeSpaceId)">{{ boundKnowledgeSpaceName(knowledgeSpaceId) }}</span><button type="button" :disabled="readOnly" :aria-label="`Remove ${boundKnowledgeSpaceName(knowledgeSpaceId)}`" @click.stop="emit('unbindKnowledgeSpace', node.id, knowledgeSpaceId)">×</button></span>
             <span class="toolbox-drop-hint">+ Drop Knowledge Space</span>
             <span v-if="dropStatusText('agent-action-knowledge-spaces')" class="resource-drop-status" role="status">{{ dropStatusText('agent-action-knowledge-spaces') }}</span>
           </dd>
@@ -341,7 +349,7 @@ function stepReorderClass(stepId: UUID): string {
         <div class="node-config-resource is-toolbox nodrag nopan" :class="targetStateClass('agent-action-tools')" role="group" data-no-node-inspector="true" data-workflow-resource-drop-target="agent-action-tools" :data-workflow-node-id="node.id" :aria-label="`Drop a Tool into ${node.name} Toolbox`" @click.stop @pointerdown.stop @dragenter="resourceEnter($event, 'agent-action-tools')" @dragover="resourceEnter($event, 'agent-action-tools')" @dragleave="resourceLeave($event, 'agent-action-tools')" @drop="resourceDrop($event, 'agent-action-tools')">
           <dt>Toolbox</dt>
           <dd class="toolbox-content">
-            <span v-for="toolId in node.config.reusableToolIds" :key="toolId" class="tool-chip nodrag nopan"><button type="button" :title="`Configure ${boundToolName(toolId)}`" @click.stop="emit('editReusableTool', node.id, toolId)">{{ boundToolName(toolId) }}</button><button type="button" :aria-label="`Remove ${boundToolName(toolId)}`" @click.stop="emit('unbindTool', node.id, toolId)">×</button></span>
+            <span v-for="toolId in node.config.reusableToolIds" :key="toolId" class="tool-chip nodrag nopan"><button type="button" :title="`Configure ${boundToolName(toolId)}`" @click.stop="emit('editReusableTool', node.id, toolId)">{{ boundToolName(toolId) }}</button><button type="button" :disabled="readOnly" :aria-label="`Remove ${boundToolName(toolId)}`" @click.stop="emit('unbindTool', node.id, toolId)">×</button></span>
             <span class="toolbox-drop-hint">+ Drop Tool</span>
             <span v-if="dropStatusText('agent-action-tools')" class="resource-drop-status" role="status">{{ dropStatusText('agent-action-tools') }}</span>
           </dd>
@@ -356,10 +364,10 @@ function stepReorderClass(stepId: UUID): string {
               <small>{{ stepOutput(index) }}</small>
             </button>
             <span class="task-tool-step-actions" aria-label="Step actions">
-              <button type="button" :draggable="!readOnly" aria-label="Drag to reorder step" title="Drag to reorder" @dragstart="startStepReorder($event, step.id)" @dragend="finishStepReorder">⠿</button>
-              <button type="button" :disabled="index === 0" aria-label="Move step up" @click="emit('changeTool', node.id, step.id, 'up')">↑</button>
-              <button type="button" :disabled="index === node.config.steps.length - 1" aria-label="Move step down" @click="emit('changeTool', node.id, step.id, 'down')">↓</button>
-              <button type="button" aria-label="Delete step" @click="emit('changeTool', node.id, step.id, 'delete')">×</button>
+              <button type="button" :disabled="readOnly" :draggable="!readOnly" aria-label="Drag to reorder step" title="Drag to reorder" @dragstart="startStepReorder($event, step.id)" @dragend="finishStepReorder">⠿</button>
+              <button type="button" :disabled="readOnly || index === 0" aria-label="Move step up" @click="emit('changeTool', node.id, step.id, 'up')">↑</button>
+              <button type="button" :disabled="readOnly || index === node.config.steps.length - 1" aria-label="Move step down" @click="emit('changeTool', node.id, step.id, 'down')">↓</button>
+              <button type="button" :disabled="readOnly" aria-label="Delete step" @click="emit('changeTool', node.id, step.id, 'delete')">×</button>
             </span>
           </li>
         </ol>

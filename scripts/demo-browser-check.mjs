@@ -102,6 +102,7 @@ try {
     parity.push({label,width,status:'passed',demoMetrics,normalMetrics})
   }
   const first=data.agents[0],journeyRoute=`/journeys/${first.agent.journeyId}`,workflowRoute=`${journeyRoute}/agents/${first.agent.id}`,spaceRoute=`/assets/knowledge-spaces/${data.space.id}`
+  const inspectionValues=new Map()
   for(const width of [1440,1024]) {
     await compare('journey-list','/journeys',['.journey-list-page','.journey-list-page__heading','.journey-grid'],width)
     for(const [index,agent] of data.agents.entries()) {
@@ -111,6 +112,40 @@ try {
         if(!await p.locator('.workflow-right-panel-host').isVisible()) await p.getByRole('button',{name:'Tools',exact:true}).click()
         await p.locator('.workflow-right-panel-host').waitFor()
       })
+      const task=agent.workflow.nodes.find(node=>node.type==='task'&&node.config.steps.length)
+      const action=agent.workflow.nodes.find(node=>node.type==='agent_action'&&node.config.reusableToolIds.length)
+      for(const [kind,node] of [['task',task],['toolbox',action]]) {
+        if(!node)continue
+        await compare('inspect-'+kind+'-'+index,a,['.workflow-toolbar','.workflow-canvas-panel','.system-tool-panel'],width,async p=>{
+          await p.getByRole('button',{name:'Configure',exact:true}).click()
+          const card=p.locator('.vue-flow__node[data-id="'+node.id+'"]')
+          const trigger=kind==='task'?card.locator('.task-tool-step-open').first():card.locator('.tool-chip button[title^="Configure "]').first()
+          if(await p.locator('.workflow-right-panel-host').isVisible())await p.getByRole('button',{name:'Tools',exact:true}).click()
+          await trigger.click()
+          const panel=p.getByRole('complementary',{name:kind==='task'?'System Tool configuration':'Agent reusable Tool configuration'})
+          await panel.waitFor()
+          const actual=await panel.locator('input,textarea,select').evaluateAll(elements=>elements.map(element=>({tag:element.tagName,value:element.value})))
+          const key=agent.agent.id+'-'+kind+'-'+width
+          if(p===normal){assert.deepEqual(actual,inspectionValues.get(key))}else{inspectionValues.set(key,actual);assert(await panel.getByRole('button',{name:'Save Tool',exact:true}).isDisabled());assert.equal(await panel.locator('input:enabled,textarea:enabled,select:enabled').count(),0)}
+        })
+        for(const p of [page,normal]) {
+          await p.keyboard.press('Escape')
+          assert.equal(await p.locator('.system-tool-panel').count(),0,'Escape must close Tool configuration')
+        }
+      }
+      if(agent.reusableTools.length) {
+        await compare('inspect-library-'+index,a,['.workflow-toolbar','.workflow-canvas-panel','.system-tool-panel'],width,async p=>{
+          await p.getByRole('button',{name:'Configure',exact:true}).click()
+          await p.getByRole('button',{name:'Reusable Tools',exact:true}).click()
+          await p.locator('.reusable-tool-actions').first().getByRole('button',{name:'Edit',exact:true}).click()
+          await p.getByRole('complementary',{name:'Agent reusable Tool configuration'}).waitFor()
+          if(p===page)assert(await p.getByRole('button',{name:'Save Tool',exact:true}).isDisabled())
+        })
+        for(const p of [page,normal]) {
+          await p.getByRole('button',{name:'Close Tool configuration',exact:true}).click()
+          assert.equal(await p.locator('.system-tool-panel').count(),0)
+        }
+      }
     }
     await compare('dsl',workflowRoute,['.workflow-toolbar','.workflow-canvas-panel','.workflow-dsl-panel'],width,async p=>{await p.getByRole('button',{name:'DSL Edit',exact:true}).click();await p.getByRole('textbox',{name:'Workflow DSL source'}).waitFor()})
     await compare('knowledge-list','/assets/knowledge-spaces',['.knowledge-list-page','.knowledge-toolbar','.knowledge-card-grid'],width)

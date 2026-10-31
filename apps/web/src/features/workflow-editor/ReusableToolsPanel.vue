@@ -44,7 +44,7 @@ function startDrag(event: globalThis.DragEvent, toolId: UUID) {
       <article v-for="tool in filteredTools" :key="tool.id" :draggable="!readOnly" @dragstart="startDrag($event, tool.id)" @dragend="emit('resourceDragEnd')">
         <i aria-hidden="true" /><span class="reusable-tool-copy"><strong>{{ tool.name }}</strong><small>{{ kindLabel(tool.kind) }}</small><small>Independent snapshot when dropped into a Task</small></span>
         <span class="reusable-tool-uses">{{ referenceCount(tool.id) }} {{ referenceCount(tool.id) === 1 ? 'use' : 'uses' }}</span>
-        <div class="reusable-tool-actions"><button type="button" :disabled="readOnly" @click="emit('edit', tool.id)">Edit</button><button type="button" :disabled="readOnly || referenceCount(tool.id) > 0" :title="referenceCount(tool.id) > 0 ? 'Remove Agent Action references before deleting' : 'Delete reusable Tool'" @click="emit('delete', tool.id)">Delete</button><span aria-hidden="true">⠿</span></div>
+        <div class="reusable-tool-actions"><button type="button" @click="emit('edit', tool.id)">Edit</button><button type="button" :disabled="readOnly || referenceCount(tool.id) > 0" :title="referenceCount(tool.id) > 0 ? 'Remove Agent Action references before deleting' : 'Delete reusable Tool'" @click="emit('delete', tool.id)">Delete</button><span aria-hidden="true">⠿</span></div>
       </article>
     </div>
     <p class="resource-browser-hint">Drop into an Agent Action to reference this Tool. Drop into a Task to create an independently editable snapshot.</p>

@@ -59,6 +59,17 @@ function rendererProps(nodeInput: WorkflowNode | LoopBodyNode, configureExpanded
 }
 
 describe('WorkflowNodeRenderer', () => {
+  it('keeps Toolbox inspection clickable while disabling inline mutations in read-only mode', async () => {
+    const wrapper = shallowMount(WorkflowNodeRenderer, { props: { ...rendererProps(node, true), readOnly: true } })
+    await wrapper.get('.is-toolbox .tool-chip button[title]').trigger('click')
+    expect(wrapper.emitted('editReusableTool')).toEqual([[node.id, id(3)]])
+    expect(wrapper.get('.is-toolbox button[aria-label^="Remove"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('.node-model-select-trigger').attributes('disabled')).toBeDefined()
+    expect(wrapper.get(`#goal-${node.id}`).attributes('readonly')).toBeDefined()
+    await wrapper.get(`#goal-${node.id}`).trigger('change')
+    expect(wrapper.emitted('updateAgentAction')).toBeUndefined()
+    wrapper.unmount()
+  })
   it('shows canonical Agent Action configuration without requiring selection', () => {
     const tools = [
       { id: id(3), name: 'Web Search', kind: 'web_search', config: {} },

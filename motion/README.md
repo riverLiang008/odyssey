@@ -4,6 +4,18 @@
 
 任务与验收清单：[Motion MVP task](../motion-assets/motion-remotion-mvp-task.md)。
 
+## M-05 文件夹与知识关系图（2026-10-29）
+
+M-05：`prepare:m5` 准备录音与修订字幕，`review:m5` / `render:m5` 导出带声 / 无声版。Composition 为 `Motion005Review` / `Motion005`，1920 × 1080、30 FPS、1333 帧（约44.43秒）。输出 `motion/out/motion-005-review.mp4`、`motion-005.mp4`、`motion-005.srt`。源素材位于 `motion-assets/projects/odyssey-how001/m-05/`；`public/m5/` 为忽略的可重建媒体目录。概念图保留文件夹与同名文档关系，不是产品运行录屏。
+
+## M-04 四项配置与资源对照（2026-10-28）
+
+M-04（合并 125 / 129）：`prepare:m4` 准备媒体，`review:m4` / `render:m4` 导出带声 / 无声版。Composition 为 `Motion004Review` / `Motion004`，1920 × 1080、30 FPS、964 帧（约 32.13 秒）。输出 `motion/out/motion-004-review.mp4`、`motion-004.mp4`、`motion-004.srt`。输入在 `motion-assets/projects/odyssey-how001/m-04/`；生成目录 `public/m4/` 被 Git 忽略。S06 按确认的 SK-06 构图使用轻量 UI 区块和框外 Knowing / Doing 标签。
+
+## M-03 决策权对照（2026-10-28）
+
+M-03：使用 `prepare:m3` 准备原录音及已修正字幕，`review:m3` / `render:m3` 分别导出带声与无声版。Composition 为 `Motion003Review` / `Motion003`，1920 × 1080、30 FPS、615 帧（20.5 秒）。文件位于 `motion/out/motion-003-review.mp4`、`motion-003.mp4`、`motion-003.srt`；输入来源 `motion-assets/projects/odyssey-how001/m-03/`。`public/m3/` 为忽略的可重建媒体目录。其视觉是已通过分镜的 UI 风格概念重绘，不是实际运行录屏。
+
 ## M-02 节点分类（2026-10-28）
 
 M-02 已增加独立的 `Motion002`（无声）与 `Motion002Review`（带声）Composition，规格 1920 × 1080、30 FPS、724 帧（约 24.13 秒）。在仓库根目录执行 `pnpm --filter @odyssey/motion prepare:m2` 准备媒体，然后使用 `review:m2` / `render:m2` 导出。输出为 `motion/out/motion-002-review.mp4`、`motion-002.mp4` 和未烧录的 `motion-002.srt`。素材来自 `motion-assets/projects/odyssey-how001/m-02/`；生成的 `public/m2/` 被 Git 忽略，换机器须另行共享原音频。分镜依据为该项目的 `分镜方案_v01.md`。

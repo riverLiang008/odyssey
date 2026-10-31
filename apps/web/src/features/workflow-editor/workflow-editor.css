@@ -322,7 +322,7 @@
   .workflow-toolbar-actions { flex:0 0 auto; gap:6px; }
   .workflow-toolbar-actions .save-state { min-width:72px; }
   .workflow-toolbar-actions .save-button { padding-inline:10px; }
-  .editor-page.workflow-editor-page .workflow-editor-layout { --workflow-palette-width:148px; --workflow-side-panel-width:52px; --workflow-panel-inset:12px; --workflow-panel-top:62px; padding:12px 14px 14px; overflow:hidden; }
+  .editor-page.workflow-editor-page .workflow-editor-layout { --workflow-palette-width:148px; --workflow-panel-inset:12px; --workflow-panel-top:62px; padding:12px 14px 14px; overflow:hidden; }
   .editor-page.workflow-editor-page .workflow-editor-layout.is-palette-collapsed { --workflow-palette-width:78px; }
   .workflow-node-palette { left:calc(14px + var(--workflow-panel-inset)); bottom:calc(14px + var(--workflow-panel-inset)); }
   .workflow-right-panel-host { right:calc(14px + var(--workflow-panel-inset)); bottom:calc(14px + var(--workflow-panel-inset)); }

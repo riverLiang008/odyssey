@@ -1,0 +1,32 @@
+1
+00:00:00,000 --> 00:00:06,600
+This also made me think again about how we search for knowledge.
+
+2
+00:00:06,600 --> 00:00:12,720
+Methods like RAG can help us quickly find useful information.
+
+3
+00:00:12,720 --> 00:00:21,440
+But if we only look at small pieces of text, we may miss the bigger picture and the links between them.
+
+4
+00:00:21,440 --> 00:00:26,840
+So I wanted Odyssey to explore another approach:
+
+5
+00:00:26,840 --> 00:00:33,960
+An agent could not only search for information, but also follow the links between documents.
+
+6
+00:00:33,960 --> 00:00:37,640
+Of course, this doesn't mean giving up RAG.
+
+7
+00:00:37,640 --> 00:00:41,240
+In Odyssey's design, RAG can still be a Tool.
+
+8
+00:00:41,240 --> 00:00:46,200
+It can work together with navigation through the knowledge graph.
+

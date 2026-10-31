@@ -8,11 +8,12 @@ import { isKnowledgeSpaceReferenceable } from '@/domain/knowledge'
 import outputArrow from '@/assets/tool-output-arrow.svg'
 import ToolValueInput from './ToolValueInput.vue'
 import ToolSelect from './ToolSelect.vue'
-const props = defineProps<{ draft: Extract<NonNullable<SystemToolDraft>, { host: 'task' }>; task: TaskNode; variables: readonly AgentVariable[]; knowledgeSpaces: readonly KnowledgeSpaceSummary[]; knowledgeStatus: 'loading' | 'ready' | 'error'; error: string | null }>()
+const props = defineProps<{ readOnly?: boolean; draft: Extract<NonNullable<SystemToolDraft>, { host: 'task' }>; task: TaskNode; variables: readonly AgentVariable[]; knowledgeSpaces: readonly KnowledgeSpaceSummary[]; knowledgeStatus: 'loading' | 'ready' | 'error'; error: string | null }>()
 const emit = defineEmits<{ save: [draft: TaskToolSaveDraft]; cancel: [] }>()
 const firstInput = ref<globalThis.HTMLInputElement | null>(null)
 const returnFocus = globalThis.document.activeElement
-onMounted(() => firstInput.value?.focus())
+const closeButton = ref<globalThis.HTMLButtonElement | null>(null)
+onMounted(() => { if (props.readOnly) closeButton.value?.focus(); else firstInput.value?.focus() })
 onBeforeUnmount(() => { if (returnFocus instanceof globalThis.HTMLElement && returnFocus.isConnected) returnFocus.focus() })
 const existing = props.draft.step
 const kind = props.draft.kind
@@ -71,6 +72,7 @@ function addInput() {
   if (first) form.inputs = [...form.inputs, { alias: `input_${form.inputs.length + 1}`, variableId: first.id }]
 }
 function submit() {
+  if (props.readOnly) return
   const variableKey = newVariableKey.value.trim()
   if (createTaskVariable.value && !variableKey) { validationError.value = 'Task Variable name is required.'; return }
   const outputVariableId = createTaskVariable.value ? newVariableId : form.output
@@ -91,65 +93,68 @@ function submit() {
 </script>
 <template>
   <aside class="workflow-resource-browser system-tool-panel" :style="{ '--tool-border': colors.border, '--tool-surface': colors.surface, '--tool-muted': colors.muted, '--tool-primary': colors.primary, '--tool-soft': colors.primarySoft, '--tool-ink': colors.ink, '--tool-radius': radii.sm }" aria-label="System Tool configuration" @keydown.esc.stop="emit('cancel')">
-    <header><button type="button" aria-label="Back to System Tools" @click="emit('cancel')">‹</button><h2>{{ title }}</h2><button type="button" aria-label="Close Tool configuration" @click="emit('cancel')">×</button></header>
+    <header><button type="button" aria-label="Back to System Tools" @click="emit('cancel')">‹</button><h2>{{ title }}</h2><button ref="closeButton" type="button" aria-label="Close Tool configuration" @click="emit('cancel')">×</button></header>
     <p class="inspector-note">Built-in Tool · Task configuration</p>
     <form class="system-tool-form" @submit.prevent="submit">
-      <label>Label · optional<input ref="firstInput" v-model="form.label" /></label>
-      <h3>CONFIGURATION</h3>
-      <template v-if="kind === 'knowledge_retrieval'">
-        <label>Knowledge Space *<select v-model="form.knowledgeSpaceId" required><option value="" disabled>Choose a Knowledge Space</option><option value="sys.target_knowledge_space">From event · target_knowledge_space</option><option v-for="space in spaces" :key="space.id" :value="space.id">{{ space.name }}</option></select></label>
-        <p v-if="knowledgeStatus === 'loading'" role="status">Loading Knowledge Spaces…</p><p v-else-if="knowledgeStatus === 'error'" role="alert">Knowledge Spaces could not be loaded.</p><p v-else-if="!spaces.length">No available Knowledge Space in this Workspace.</p>
-        <ToolValueInput v-model="form.query" label="Query" :variables="variables" />
-        <label>Top K<input v-model.number="form.topK" type="number" min="1" step="1" required /></label>
-      </template>
-      <template v-else-if="kind === 'script_execution'">
-        <label>Language *<select v-model="form.language"><option value="python">Python</option><option value="javascript">JavaScript</option></select></label>
-        <h3>INPUT VARIABLES · OPTIONAL</h3>
-        <div v-for="(input, index) in form.inputs" :key="index" class="tool-entry"><input v-model="input.alias" aria-label="Input alias" required /><select v-model="input.variableId" aria-label="Input variable"><option v-for="variable in variables" :key="variable.id" :value="variable.id">{{ variable.name }}</option></select><button type="button" aria-label="Remove input" @click="form.inputs = form.inputs.filter((_, i) => i !== index)">×</button></div>
-        <button type="button" :disabled="!variables.length" @click="addInput">+ Add input variable</button>
-        <label>Script *<textarea v-model="form.script" class="tool-code" rows="7" required /></label>
-      </template>
-      <template v-else-if="kind === 'api_request'">
-        <label>Method *<select v-model="form.method"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select></label>
-        <ToolValueInput v-model="form.url" label="URL" :variables="variables" compact />
-        <h3>HEADERS · OPTIONAL</h3>
-        <div v-for="(header, index) in form.headers" :key="header.id"><input v-model="header.name" aria-label="Header name" required /><ToolValueInput v-model="header.value" label="Header value" :variables="variables" /><button type="button" @click="form.headers = form.headers.filter((_, i) => i !== index)">Remove header</button></div>
-        <button type="button" @click="form.headers = [...form.headers, { id: newId(), name: '', value: literal() }]">+ Add header</button>
-        <label>Request body<select :value="form.body.kind" @change="setBody"><option value="none">None</option><option value="json">JSON</option><option value="form_data">Form data</option></select></label>
-        <ToolValueInput v-if="form.body.kind === 'json'" v-model="form.body.value" label="JSON body" :variables="variables" />
-        <template v-if="form.body.kind === 'form_data'"><div v-for="(entry, index) in form.body.entries" :key="entry.id"><input v-model="entry.name" aria-label="Form field name" required /><ToolValueInput v-model="entry.value" label="Form field value" :variables="variables" /><button type="button" @click="form.body = { kind: 'form_data', entries: form.body.entries.filter((_, i) => i !== index) }">Remove field</button></div><button type="button" @click="form.body = { kind: 'form_data', entries: [...form.body.entries, { id: newId(), name: '', value: literal() }] }">+ Add field</button></template>
-      </template>
-      <template v-else-if="kind === 'set_variable'">
-        <label>Target Variable *<ToolSelect v-model="form.target" :options="targetOptions" control-label="Target Variable" /></label>
-        <label>Operation *<ToolSelect v-model="form.operation" :options="operationOptions" control-label="Operation" /></label>
-        <ToolValueInput v-if="form.operation !== 'toggle'" v-model="form.value" label="Value" :variables="variables" />
-      </template>
-      <template v-else>
-        <label>Model *<input v-model="form.model" placeholder="Model identifier" required /></label>
-        <ToolValueInput v-model="form.systemPrompt" label="System prompt · optional" :variables="variables" />
-        <ToolValueInput v-model="form.prompt" label="Prompt" :variables="variables" />
-      </template>
-      <template v-if="kind !== 'set_variable'">
-        <h3>OUTPUT MAPPING · OPTIONAL</h3>
-        <label v-if="!createTaskVariable" class="tool-output-mapping"><span>{{ outputKeys[kind] }}</span><img :src="outputArrow" alt="maps to" /><ToolSelect v-model="form.output" :options="outputOptions" control-label="Output variable" /></label>
-        <section v-else class="new-task-variable" aria-label="New Task Variable">
-          <div class="tool-output-mapping"><span>{{ outputKeys[kind] }}</span><img :src="outputArrow" alt="maps to" /><strong>task.{{ newVariableKey || 'variable_name' }}</strong></div>
-          <label>Name *<input v-model="newVariableKey" autocomplete="off" placeholder="api_response" required /></label>
-          <label>Data type<select v-model="newVariableType"><option value="json">JSON</option><option value="string">String</option><option value="number">Number</option><option value="boolean">Boolean</option></select></label>
-        </section>
-        <button type="button" @click="createTaskVariable = !createTaskVariable">{{ createTaskVariable ? 'Use Existing Variable' : '+ New Task Variable' }}</button>
-        <small>Task Variables are scoped to this Task and become available to later Tool steps.</small>
-      </template>
-      <details><summary>Available variables</summary><p v-for="variable in variables" :key="variable.id">{{ variable.name }} · {{ variable.dataType }} · {{ variable.writable ? 'writable' : 'read only' }}</p></details>
-      <h3>FAILURE BEHAVIOR</h3><div class="tool-failure"><label><input v-model="form.failure" type="radio" value="retry" />Retry once</label><label><input v-model="form.failure" type="radio" value="fail_task" />Fail Task</label></div>
-      <p v-if="validationError || error" role="alert" class="field-error">{{ validationError || error }}</p>
-      <footer><button type="button" @click="emit('cancel')">Cancel</button><button type="submit" class="primary-panel-button">Save Tool</button></footer>
+      <fieldset :disabled="readOnly" class="tool-config-fields">
+        <label>Label · optional<input ref="firstInput" v-model="form.label" /></label>
+        <h3>CONFIGURATION</h3>
+        <template v-if="kind === 'knowledge_retrieval'">
+          <label>Knowledge Space *<select v-model="form.knowledgeSpaceId" required><option value="" disabled>Choose a Knowledge Space</option><option value="sys.target_knowledge_space">From event · target_knowledge_space</option><option v-for="space in spaces" :key="space.id" :value="space.id">{{ space.name }}</option></select></label>
+          <p v-if="knowledgeStatus === 'loading'" role="status">Loading Knowledge Spaces…</p><p v-else-if="knowledgeStatus === 'error'" role="alert">Knowledge Spaces could not be loaded.</p><p v-else-if="!spaces.length">No available Knowledge Space in this Workspace.</p>
+          <ToolValueInput v-model="form.query" label="Query" :variables="variables" />
+          <label>Top K<input v-model.number="form.topK" type="number" min="1" step="1" required /></label>
+        </template>
+        <template v-else-if="kind === 'script_execution'">
+          <label>Language *<select v-model="form.language"><option value="python">Python</option><option value="javascript">JavaScript</option></select></label>
+          <h3>INPUT VARIABLES · OPTIONAL</h3>
+          <div v-for="(input, index) in form.inputs" :key="index" class="tool-entry"><input v-model="input.alias" aria-label="Input alias" required /><select v-model="input.variableId" aria-label="Input variable"><option v-for="variable in variables" :key="variable.id" :value="variable.id">{{ variable.name }}</option></select><button type="button" aria-label="Remove input" @click="form.inputs = form.inputs.filter((_, i) => i !== index)">×</button></div>
+          <button type="button" :disabled="!variables.length" @click="addInput">+ Add input variable</button>
+          <label>Script *<textarea v-model="form.script" class="tool-code" rows="7" required /></label>
+        </template>
+        <template v-else-if="kind === 'api_request'">
+          <label>Method *<select v-model="form.method"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select></label>
+          <ToolValueInput v-model="form.url" label="URL" :variables="variables" compact />
+          <h3>HEADERS · OPTIONAL</h3>
+          <div v-for="(header, index) in form.headers" :key="header.id"><input v-model="header.name" aria-label="Header name" required /><ToolValueInput v-model="header.value" label="Header value" :variables="variables" /><button type="button" @click="form.headers = form.headers.filter((_, i) => i !== index)">Remove header</button></div>
+          <button type="button" @click="form.headers = [...form.headers, { id: newId(), name: '', value: literal() }]">+ Add header</button>
+          <label>Request body<select :value="form.body.kind" @change="setBody"><option value="none">None</option><option value="json">JSON</option><option value="form_data">Form data</option></select></label>
+          <ToolValueInput v-if="form.body.kind === 'json'" v-model="form.body.value" label="JSON body" :variables="variables" />
+          <template v-if="form.body.kind === 'form_data'"><div v-for="(entry, index) in form.body.entries" :key="entry.id"><input v-model="entry.name" aria-label="Form field name" required /><ToolValueInput v-model="entry.value" label="Form field value" :variables="variables" /><button type="button" @click="form.body = { kind: 'form_data', entries: form.body.entries.filter((_, i) => i !== index) }">Remove field</button></div><button type="button" @click="form.body = { kind: 'form_data', entries: [...form.body.entries, { id: newId(), name: '', value: literal() }] }">+ Add field</button></template>
+        </template>
+        <template v-else-if="kind === 'set_variable'">
+          <label>Target Variable *<ToolSelect v-model="form.target" :options="targetOptions" control-label="Target Variable" /></label>
+          <label>Operation *<ToolSelect v-model="form.operation" :options="operationOptions" control-label="Operation" /></label>
+          <ToolValueInput v-if="form.operation !== 'toggle'" v-model="form.value" label="Value" :variables="variables" />
+        </template>
+        <template v-else>
+          <label>Model *<input v-model="form.model" placeholder="Model identifier" required /></label>
+          <ToolValueInput v-model="form.systemPrompt" label="System prompt · optional" :variables="variables" />
+          <ToolValueInput v-model="form.prompt" label="Prompt" :variables="variables" />
+        </template>
+        <template v-if="kind !== 'set_variable'">
+          <h3>OUTPUT MAPPING · OPTIONAL</h3>
+          <label v-if="!createTaskVariable" class="tool-output-mapping"><span>{{ outputKeys[kind] }}</span><img :src="outputArrow" alt="maps to" /><ToolSelect v-model="form.output" :options="outputOptions" control-label="Output variable" /></label>
+          <section v-else class="new-task-variable" aria-label="New Task Variable">
+            <div class="tool-output-mapping"><span>{{ outputKeys[kind] }}</span><img :src="outputArrow" alt="maps to" /><strong>task.{{ newVariableKey || 'variable_name' }}</strong></div>
+            <label>Name *<input v-model="newVariableKey" autocomplete="off" placeholder="api_response" required /></label>
+            <label>Data type<select v-model="newVariableType"><option value="json">JSON</option><option value="string">String</option><option value="number">Number</option><option value="boolean">Boolean</option></select></label>
+          </section>
+          <button type="button" @click="createTaskVariable = !createTaskVariable">{{ createTaskVariable ? 'Use Existing Variable' : '+ New Task Variable' }}</button>
+          <small>Task Variables are scoped to this Task and become available to later Tool steps.</small>
+        </template>
+        <details><summary>Available variables</summary><p v-for="variable in variables" :key="variable.id">{{ variable.name }} · {{ variable.dataType }} · {{ variable.writable ? 'writable' : 'read only' }}</p></details>
+        <h3>FAILURE BEHAVIOR</h3><div class="tool-failure"><label><input v-model="form.failure" type="radio" value="retry" />Retry once</label><label><input v-model="form.failure" type="radio" value="fail_task" />Fail Task</label></div>
+        <p v-if="validationError || error" role="alert" class="field-error">{{ validationError || error }}</p>
+      </fieldset>
+      <footer><button type="button" @click="emit('cancel')">Cancel</button><button type="submit" :disabled="readOnly" class="primary-panel-button">Save Tool</button></footer>
       <small>Configuration only. Tools are not executed in V1.</small>
     </form>
   </aside>
 </template>
 
 <style>
+.tool-config-fields { display: contents; border: 0; padding: 0; margin: 0; min-width: 0; }
 .system-tool-panel { gap: 0; overflow-y: auto; padding: 16px; color: var(--tool-ink); background: var(--tool-surface); border-color: var(--tool-border); font-family: var(--odyssey-font-sans); }
 .system-tool-panel > header { align-items: center; min-height: 24px; flex-shrink: 0; gap: 8px; }
 .system-tool-panel > header h2 { flex: 1; margin: 0; font-size: 15px; line-height: 21px; font-weight: 500; }

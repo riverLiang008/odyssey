@@ -1,0 +1,28 @@
+1
+00:00:00,000 --> 00:00:07,180
+So I tried separating how knowledge is stored from how it is organized.
+
+2
+00:00:07,180 --> 00:00:11,080
+Documents could still live in normal folders.
+
+3
+00:00:11,080 --> 00:00:17,360
+But their links and relationships could be shown as a directed graph.
+
+4
+00:00:17,360 --> 00:00:24,720
+In this graph, each Node is a document, and each Edge shows a relationship between documents.
+
+5
+00:00:25,120 --> 00:00:32,520
+We could also use Groups and Tags to organize related knowledge.
+
+6
+00:00:32,520 --> 00:00:40,080
+This way, knowledge would not be just a set of separate files in folders.
+
+7
+00:00:40,080 --> 00:00:43,920
+It could become a connected network.
+

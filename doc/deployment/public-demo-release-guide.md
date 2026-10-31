@@ -12,7 +12,7 @@
 - 可切换 Flow / Configure、平移缩放、Fit view、Focus；可浏览知识图谱、Inspector 和七篇文档。
 - 不开放 Journey / Workflow 创建、节点编辑、删除、文件上传、导入、保存或实际执行。
 - 页面明确标注 `PUBLIC DEMO · Read only`。没有登录、云端保存或真实模型调用。
-- 只读画布通过 adapter flags 禁止节点拖动、连接、删除，配置卡片使用 `inert`；展示宿主只接收选中事件，不启动编辑 store 或 autosave。Repository 的修改入口也返回拒绝，不伪造保存成功。
+- 只读画布通过 adapter flags 禁止节点拖动、连接、删除，配置卡片按控件禁用写操作，禁止对整个节点使用 `inert` 屏蔽查看入口；展示宿主只接收选中事件，不启动编辑 store 或 autosave。Repository 的修改入口也返回拒绝，不伪造保存成功。
 
 公开版直接使用正式的 JourneyListView、JourneyEditorView、AgentWorkflowView、KnowledgeSpaceListView 和 KnowledgeSpaceDetailView。只替换 Repository 数据来源，并通过只读能力禁用写操作；不得另建简化页面代替。真实 API、事务、冲突及上传验收继续使用正常开发环境。
 
@@ -23,6 +23,7 @@
 - 不得用原始 JSON、简化卡片、单独案例入口或额外工具栏替换正式面板。新增页面和 UI 更新必须由同一源文件进入两种构建。
 - 每次发布必须使用同一份数据、同一视口和同一操作状态，对普通构建与 Demo 构建进行页面对照。至少覆盖 1440/1024 两档宽度下的 Journey 列表、两个 Journey、两个 Workflow、DSL、知识库列表、图谱和文档，共 18 个状态。
 - 自动校验页面结构与主要区域的位置/尺寸，允许误差不超过 2px；保留成对截图供人工复核。该检查不宣称所有像素完全相同，禁用状态与只读文案属于预期差异。
+- 必须真实点击 Task 的 Tool step、Agent Action 的 Toolbox Tool 和 Reusable Tools 中已有条目，验证相同侧栏、配置值、关闭/返回、键盘与滚动。表单只读、保存禁用，但查看入口不能禁用；仅对照初始布局不足以通过验收。
 - 任一必要区域缺失、布局超差或发现独立替代页面时，禁止生成可发布包。
 
 首版 `odyssey-demo-20261026T163207Z-0230193` 使用独立 DemoWorkspaceView，违反本节，已弃用。后续上传必须选择完成共享页面修正后的新包，不能继续复用旧 ZIP。
