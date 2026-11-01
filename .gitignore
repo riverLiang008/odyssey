@@ -53,3 +53,7 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
+# Video production lives on the video-production branch.
+/advertise/
+/motion/
+/motion-assets/
