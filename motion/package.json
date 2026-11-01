@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prepare:edit002": "node scripts/prepare-edit002-assets.mjs",
+    "review:edit002": "pnpm prepare:edit002 && remotion render src/index.ts Edit002Review out/edit-002-review.mp4 --codec=h264 --pixel-format=yuv420p --concurrency=2",
+    "render:edit002": "pnpm prepare:edit002 && remotion render src/index.ts Edit002 out/edit-002.mp4 --codec=h264 --pixel-format=yuv420p --muted --concurrency=2",
     "prepare:sk002": "node scripts/prepare-sk002-assets.mjs",
     "render:sk002": "pnpm prepare:sk002 && remotion render src/index.ts Sk002 out/sk-002.mp4 --codec=h264 --pixel-format=yuv420p --muted --concurrency=2",
     "prepare:fig007008": "node scripts/prepare-fig007008-assets.mjs",
